@@ -45,7 +45,7 @@ export default defineConfig({
         text: "Floorplan images",
         items: [
           { text: "Choosing an image", link: "/images/choosing" },
-          { text: "Turn your sketch into a floorplan", link: "/images/sketch" },
+          { text: "Turn your sketch into a floorplan in 10 minutes", link: "/images/sketch" },
           { text: "Sample plans", link: "/images/samples" },
         ],
       },

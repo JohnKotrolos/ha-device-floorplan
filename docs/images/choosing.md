@@ -44,4 +44,4 @@ The type is asked after you pick an image and can be changed in Floor settings.
 - Your **rental or sales listing**, the builder's brochure or the architect's drawings.
 - Your **robot vacuum's map** (screenshot it from the app).
 - **Scanning apps** on phones with LiDAR, or free tools like Floorplanner or Sweet Home 3D.
-- A **pencil sketch** turned into a plan with AI: see [Turn your sketch into a floorplan](/images/sketch).
+- A **pencil sketch** turned into a plan with AI: see [Turn your sketch into a floorplan in 10 minutes](/images/sketch).

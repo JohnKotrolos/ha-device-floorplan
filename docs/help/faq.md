@@ -2,7 +2,7 @@
 
 ## I don't have a floorplan
 
-Draw one with a pencil and turn it into a clean plan: [Turn your sketch into a floorplan](/images/sketch). Or start with a [sample plan](/images/samples) and replace it later.
+Draw one with a pencil and turn it into a clean plan: [Turn your sketch into a floorplan in 10 minutes](/images/sketch). Or start with a [sample plan](/images/samples) and replace it later.
 
 ## A device is missing from the list
 

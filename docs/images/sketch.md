@@ -1,4 +1,4 @@
-# Turn your sketch into a floorplan
+# Turn your sketch into a floorplan in 10 minutes
 
 No floorplan? Draw one with a pencil and let an AI image tool turn it into a clean plan. It takes about 15 minutes.
 

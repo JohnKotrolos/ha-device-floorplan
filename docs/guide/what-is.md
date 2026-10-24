@@ -22,7 +22,7 @@ Device Floorplan is a Home Assistant integration that puts your devices on **you
 
 ## What it is not
 
-- It doesn't draw your floorplan for you. If you don't have one, see [Turn your sketch into a floorplan](/images/sketch).
+- It doesn't draw your floorplan for you. If you don't have one, see [Turn your sketch into a floorplan in 10 minutes](/images/sketch).
 - It doesn't model walls or signal strength. For that, look at [Spatial Context](https://github.com/Greminn/ha-spatial-context).
 
 ## Next

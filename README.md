@@ -37,7 +37,7 @@ Known limits today:
 - Bonds work for lights, switches and covers.
 
 No floorplan yet? See
-[Turn your sketch into a floorplan](docs/images/sketch.md).
+[Turn your sketch into a floorplan in 10 minutes](docs/images/sketch.md).
 
 ## Features
 
