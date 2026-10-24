@@ -76,3 +76,15 @@
 }
 .VPHero .image-src { max-width: 560px; max-height: 420px; }
 @media (max-width: 960px) { .VPHero .image-src { max-width: 340px; } }
+
+/* calmer main button on the home page: outline instead of a filled blue pill */
+.VPHero .VPButton.brand {
+  background: transparent;
+  color: var(--vp-c-brand-1);
+  border: 1.5px solid var(--vp-c-brand-1);
+}
+.VPHero .VPButton.brand:hover {
+  background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
+  color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+}
