@@ -6,8 +6,8 @@ hero:
   text: See every device where it really is.
   tagline: Put your Home Assistant devices on your own floorplan in minutes, then watch them live on your dashboard. No wall tracing, no YAML.
   image:
-    src: /guide/sample.webp
-    alt: A floorplan with smart-home devices
+    src: /hero-live.webp
+    alt: "A floorplan with live Home Assistant devices, lights glowing, sensors and climate"
   actions:
     - theme: brand
       text: Get started

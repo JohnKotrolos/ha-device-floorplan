@@ -61,3 +61,18 @@
 .vp-doc div[class*="language-text"] code { white-space: pre-wrap; }
 .ba figure img { aspect-ratio: 4 / 3; object-fit: contain; }
 .howto img.shot { max-width: 520px; }
+
+/* integration icon in front of the name on the home page */
+.VPHero .name::before {
+  content: "";
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.22em;
+  vertical-align: -0.1em;
+  background: url(/ha-device-floorplan/icon.png) center / contain no-repeat;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+.VPHero .image-src { max-width: 560px; max-height: 420px; }
+@media (max-width: 960px) { .VPHero .image-src { max-width: 340px; } }
