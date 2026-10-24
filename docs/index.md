@@ -9,7 +9,7 @@ hero:
     src: /hero-live.webp
     alt: "A floorplan with live Home Assistant devices, lights glowing, sensors and climate"
   actions:
-    - theme: alt
+    - theme: brand
       text: Get started
       link: /guide/what-is
     - theme: alt
@@ -39,3 +39,5 @@ features:
     title: Private by default
     details: Everything stays in Home Assistant. Plan images are only shown to logged-in users.
 ---
+
+<p class="home-cta">Click <a href="./guide/what-is">Get started</a> and begin your Device Floorplan journey ✨</p>

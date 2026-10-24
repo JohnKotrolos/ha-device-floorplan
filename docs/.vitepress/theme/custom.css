@@ -77,3 +77,7 @@
 .VPHero .image-src { max-width: 560px; max-height: 420px; }
 @media (max-width: 960px) { .VPHero .image-src { max-width: 340px; } }
 
+
+/* closing line on the home page */
+.home-cta { text-align: center; font-size: 18px; color: var(--vp-c-text-2); padding-top: 36px; margin: 0 0 16px; }
+.home-cta a { color: var(--vp-c-brand-1); font-weight: 600; text-decoration: none; }
