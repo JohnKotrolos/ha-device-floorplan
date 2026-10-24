@@ -9,7 +9,7 @@ hero:
     src: /hero-live.webp
     alt: "A floorplan with live Home Assistant devices, lights glowing, sensors and climate"
   actions:
-    - theme: brand
+    - theme: alt
       text: Get started
       link: /guide/what-is
     - theme: alt
