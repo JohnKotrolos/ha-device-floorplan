@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Device Floorplan",
+        "description": "Device Floorplan adds a **Floorplan Editor** to your sidebar. There you create your first plan from a drawing, a photo or a sample, and place your devices on it."
+      },
+      "existing": {
+        "title": "Device Floorplan",
+        "description": "Found {count} plan(s) from an earlier installation: **{plans}**.\n\nKeep them: they appear in the **Floorplan Editor** in your sidebar, with all positions. Or start over:",
+        "data": {
+          "start_fresh": "Start fresh: delete these plans and their images"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Device Floorplan is already set up.",
+      "already_configured": "Device Floorplan is already set up."
+    },
+    "create_entry": {
+      "fresh": "✓ Done. **Floorplan Editor** is now in your sidebar. Open it to create your first plan.",
+      "kept": "✓ Done. Your {count} plan(s) are back in the **Floorplan Editor** in your sidebar."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "New devices",
+        "description": "What happens when you add a device to Home Assistant after setting up your plans.",
+        "data": {
+          "notify_new_devices": "Show a notification when new devices are added",
+          "auto_place_new_devices": "Put new devices on the plan next to their room (approximate)"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_positions": {
+      "name": "Get positions",
+      "description": "Returns the devices, room pins and scale of one plan.",
+      "fields": {
+        "plan": {
+          "name": "Plan",
+          "description": "Plan id or name, e.g. ground_floor."
+        }
+      }
+    },
+    "show_overlay": {
+      "name": "Show overlay",
+      "description": "Switches every Device Floorplan card with this card ID to an overlay, on every screen.",
+      "fields": {
+        "card_id": {
+          "name": "Card ID",
+          "description": "The card ID set in the card editor."
+        },
+        "overlay": {
+          "name": "Overlay",
+          "description": "plan, live, lights, comfort, security, network, health, a custom overlay's ID, or reset (back to the card's default)."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "studio-open-plan",
+      "name": "Studio (open plan)",
+      "group": "apartment",
+      "file": "templates/studio-open-plan.webp",
+      "thumbnail": "templates/thumbs/studio-open-plan.webp",
+      "width": 1085,
+      "height": 848
+    },
+    {
+      "id": "apartment-one-bedroom",
+      "name": "One-bedroom apartment",
+      "group": "apartment",
+      "file": "templates/apartment-one-bedroom.webp",
+      "thumbnail": "templates/thumbs/apartment-one-bedroom.webp",
+      "width": 1225,
+      "height": 869
+    },
+    {
+      "id": "apartment-two-bedroom",
+      "name": "Two-bedroom apartment",
+      "group": "apartment",
+      "file": "templates/apartment-two-bedroom.webp",
+      "thumbnail": "templates/thumbs/apartment-two-bedroom.webp",
+      "width": 1367,
+      "height": 806
+    },
+    {
+      "id": "house-garden-two-bedroom",
+      "name": "Two-bedroom house with garden",
+      "group": "house",
+      "file": "templates/house-garden-two-bedroom.webp",
+      "thumbnail": "templates/thumbs/house-garden-two-bedroom.webp",
+      "width": 1452,
+      "height": 1037
+    },
+    {
+      "id": "house-ground-floor",
+      "name": "House – ground floor",
+      "group": "house",
+      "file": "templates/house-ground-floor.webp",
+      "thumbnail": "templates/thumbs/house-ground-floor.webp",
+      "width": 1312,
+      "height": 1019
+    },
+    {
+      "id": "house-upper-floor",
+      "name": "House – upper floor (3 bedrooms)",
+      "group": "house",
+      "file": "templates/house-upper-floor.webp",
+      "thumbnail": "templates/thumbs/house-upper-floor.webp",
+      "width": 1332,
+      "height": 810
+    },
+    {
+      "id": "garage-basement-two-car",
+      "name": "Basement / two-car garage",
+      "group": "other",
+      "file": "templates/garage-basement-two-car.webp",
+      "thumbnail": "templates/thumbs/garage-basement-two-car.webp",
+      "width": 1339,
+      "height": 886
+    }
+  ]
+}

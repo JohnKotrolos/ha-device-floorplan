@@ -1,0 +1,63 @@
+:root {
+  --vp-c-brand-1: #0277bd;
+  --vp-c-brand-2: #0288d1;
+  --vp-c-brand-3: #039be5;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #039be5 25%, #43a047);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #03a9f455 40%, #43a04755 60%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+.dark {
+  --vp-c-brand-1: #4fc3f7;
+  --vp-c-brand-2: #29b6f6;
+  --vp-c-brand-3: #03a9f4;
+}
+
+/* screenshots */
+.shot {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  margin: 16px 0 6px;
+}
+.cap { font-size: 13px; color: var(--vp-c-text-2); margin-top: 0; }
+
+/* step cards */
+.steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 20px 0; }
+.steps-grid figure { margin: 0; }
+.steps-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--vp-c-divider); }
+.steps-grid figcaption { font-size: 14px; line-height: 1.45; margin-top: 8px; }
+.steps-grid b { display: block; color: var(--vp-c-brand-1); font-size: 13px; margin-bottom: 2px; }
+
+/* before / after */
+.ba { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; margin: 16px 0; }
+.ba figure { margin: 0; }
+.ba img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--vp-c-divider);
+  background: repeating-conic-gradient(var(--vp-c-bg-soft) 0 25%, var(--vp-c-bg) 0 50%) 0 0 / 16px 16px;
+}
+.ba figcaption { font-size: 13px; color: var(--vp-c-text-2); text-align: center; margin-top: 6px; }
+@media (max-width: 640px) { .ba { grid-template-columns: 1fr; } }
+
+/* numbered how-to steps */
+.vp-doc ol.howto { counter-reset: step; list-style: none; padding-left: 0; }
+.vp-doc ol.howto > li + li { margin-top: 18px; }
+.howto > li { counter-increment: step; position: relative; padding-left: 44px; margin: 18px 0; }
+.howto > li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: 0;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--vp-c-brand-3); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px;
+}
+
+/* long prompts wrap instead of scrolling sideways */
+.vp-doc div[class*="language-text"] pre { white-space: pre-wrap; word-break: break-word; }
+.vp-doc div[class*="language-text"] code { white-space: pre-wrap; }
+.ba figure img { aspect-ratio: 4 / 3; object-fit: contain; }
+.howto img.shot { max-width: 520px; }

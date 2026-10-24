@@ -1,0 +1,19 @@
+get_positions:
+  fields:
+    plan:
+      required: true
+      example: ground_floor
+      selector:
+        text:
+show_overlay:
+  fields:
+    card_id:
+      required: true
+      example: hall
+      selector:
+        text:
+    overlay:
+      required: true
+      example: comfort
+      selector:
+        text:

@@ -1,0 +1,37 @@
+blueprint:
+  name: "Device Floorplan: tell my phone about new devices"
+  description: >
+    Sends a phone notification when Device Floorplan notices a new device
+    (it waits about 10 minutes after pairing, so a batch of devices arrives
+    together). The notification opens the planner.
+  domain: automation
+  source_url: https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/blueprints/automation/device_floorplan/notify_new_device.yaml
+  input:
+    notify_device:
+      name: Phone
+      description: The phone (Home Assistant companion app) to notify.
+      selector:
+        device:
+          integration: mobile_app
+
+trigger:
+  - platform: event
+    event_type: device_floorplan_new_device
+
+variables:
+  name: "{{ trigger.event.data.name }}"
+  area: "{{ trigger.event.data.area_name or 'no area yet' }}"
+  placed: "{{ trigger.event.data.auto_placed }}"
+
+action:
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "New device: {{ name }}"
+    message: >-
+      {% if placed %}Placed approximately near {{ area }} on your floorplan. Tap to fine-tune.
+      {% else %}{{ area }}. Tap to put it on your floorplan.{% endif %}
+    data:
+      url: /device-floorplan?new=1
+      clickAction: /device-floorplan?new=1
+      tag: device_floorplan_new

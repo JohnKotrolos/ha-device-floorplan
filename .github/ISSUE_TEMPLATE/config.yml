@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Guide
+    url: https://johnkotrolos.github.io/ha-device-floorplan/
+    about: Setup, the Floorplan Editor, the card and the FAQ.
