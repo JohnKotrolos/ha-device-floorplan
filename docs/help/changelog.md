@@ -9,7 +9,7 @@ Device Floorplan puts your Home Assistant devices on your own floorplan image an
 - Use the floorplan image you already have, an image from `config/www`, or one of seven sample plans.
 - Three guided steps: **Measure** (optional), **Mark rooms** (drag your Home Assistant areas onto the plan, optionally draw a room shape), **Place devices** (Auto-place, click-to-place or drag).
 - One plan per Home Assistant floor; export as CSV, JSON backup or PNG.
-- **Bond** (several devices on one spot are one device), **Phantom** (one combined value from devices anywhere), **Split device** (each switch or light sits where it acts).
+- **Bond** (several devices on one spot are one device), **Phantom** (one combined value from devices anywhere), **Split device** (each switch or light sits where it acts); no helpers or template sensors to create, nothing changes in Home Assistant.
 - Light shapes and colours, AC air flow, new devices placed next to their room automatically.
 
 **Dashboard card**

@@ -90,6 +90,9 @@ No floorplan yet? See
     thermometers, any window open), shown like a device; its devices stay where they are.
   - **Split device**: the device sits where its hardware is, each light or switch it
     controls can sit where it acts (a wall panel with two relays = three places).
+  - **No helpers, groups or template sensors to create**: all three are set up with
+    clicks in the Editor and shown by the card. Nothing is created or changed in Home
+    Assistant; your devices and entities stay exactly as they are.
 - **Light shapes** (bulb, spot, strip, panel, wall lamp) and **light colours** (the
   bulb's real colour, or warm ↔ cool / any colour for plain lamps), with a *see it at
   night* preview.
