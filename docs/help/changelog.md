@@ -2,7 +2,7 @@
 
 ## 0.6.0 – first public release (beta)
 
-Device Floorplan puts your Home Assistant devices on your own floorplan image and shows what's happening at home, live, on a dashboard card. No wall tracing, no YAML.
+Device Floorplan puts your Home Assistant devices on your own floorplan image and shows what's happening at home, live, on a dashboard card. Lights glowing in their room, night and day, air flow, people, Zigbee links: all set up with clicks, no coding.
 
 **Floorplan Editor** (sidebar, admins)
 

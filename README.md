@@ -7,11 +7,12 @@
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Put your Home Assistant devices on **your own floorplan image**, quickly.
-Upload the picture you already have (or start from a sample plan), drop a pin
-in each room, press Auto-place and fine-tune by dragging. No wall tracing, no
-YAML. Then put the plan on a dashboard with live overlays: lights, comfort,
-security, network, health and your own.
+Put your Home Assistant devices on **your own floorplan image** and watch your
+home live: lights glowing in their real colour and staying in their room, the
+plan darkening at night, AC air flow, people in their rooms, Zigbee links and
+much more. Things that usually take custom cards, templates and lots of YAML,
+done with clicks: upload your picture (or start from a sample plan), drag your
+rooms onto it, press Auto-place and fine-tune by dragging.
 
 <p align="center">
   <img src="docs/public/screens/card-lights.webp" width="32%" alt="Lights overlay with scenes">
