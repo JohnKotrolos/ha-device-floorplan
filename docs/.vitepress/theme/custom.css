@@ -76,6 +76,8 @@
 }
 .VPHero .image-src { max-width: 560px; max-height: 420px; }
 @media (max-width: 960px) { .VPHero .image-src { max-width: 340px; } }
+/* side by side: never wider than the space next to the text (it would cover the tagline) */
+@media (min-width: 960px) { .VPHero .image-src { max-width: min(560px, calc(100vw - 700px)); } .VPHero.has-image .tagline { max-width: 520px; } }
 
 
 /* closing line on the home page */
