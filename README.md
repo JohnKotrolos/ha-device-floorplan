@@ -33,7 +33,10 @@ Known limits today:
 
 - Zigbee roles, link quality and links in the Network overlay need **ZHA** and an
   **admin** user (that's what Home Assistant allows).
-- Rooms are name pins, not outlines (light pools don't stop at walls yet).
+- Room shapes are optional: without one, a room is a name pin and its light glow
+  isn't stopped by walls.
+- Best on PC (Editor) and tablets / wall panels (card); phones work but aren't
+  optimised yet.
 - People need a room sensor per person (Bermuda, ESPresense, a template…).
 
 No floorplan yet? See
@@ -52,7 +55,9 @@ No floorplan yet? See
      the plan a real scale. Drag the ends to adjust, click a label to change
      the length or delete it.
   2. **Mark rooms**: drag your HA areas onto the plan. Rooms that are not on
-     this plan can be hidden: their devices leave the list.
+     this plan can be hidden: their devices leave the list. Optionally give a
+     room a **shape** (four corners, + for more): light then stays inside it.
+     Overlapping shapes are one open space, a gap between them is a wall.
   3. **Place devices**: Auto-place, click-to-place (with "then next" queue) or
      drag. Auto-placed devices are *approximate* (dashed) until you drag or
      confirm them.
@@ -71,8 +76,12 @@ No floorplan yet? See
   PNG picture.
 - **Search finds everything**: names, rooms, models, entity names and ids, also
   skipped devices and helpers without a device (which can be placed on their own).
-- **What a marker shows** is chosen on the card, per device or per overlay: click a
-  marker on the big plan in the card editor (*Edit markers on the plan*).
+- **One marker per device per overlay**, and you choose what it shows: the leading
+  value, extra readings (with their own icons), a badge, the icon and the tap. Press
+  the ✎ **Edit markers** pen on the card while editing the dashboard and click a marker.
+- **Live** shows what is happening at home right now: things that are off stay
+  hidden, lights that are on glow in their real colour.
+- **Custom overlays**: pick the kinds of devices, in your order.
 - **Bond · Phantom · Split device** ([guide](docs/together/index.md)):
   - **Bond**: several physical devices on one spot are one device (three bulbs in one
     lamp): one marker, switched together, values combined. Device Floorplan asks
@@ -81,7 +90,13 @@ No floorplan yet? See
     thermometers, any window open), shown like a device; its devices stay where they are.
   - **Split device**: the device sits where its hardware is, each light or switch it
     controls can sit where it acts (a wall panel with two relays = three places).
-- **Light shapes** (bulb, spot, strip, panel, wall lamp) with a *see it at night* preview.
+- **Light shapes** (bulb, spot, strip, panel, wall lamp) and **light colours** (the
+  bulb's real colour, or warm ↔ cool / any colour for plain lamps), with a *see it at
+  night* preview.
+- **AC air flow**: an animated flow in the direction the unit blows, coloured for
+  cooling, heating or drying.
+- **Day & night**: at night the plan darkens and lights glow; by day a room gets
+  darker the more of its shutters are closed.
 - HA's own icons and more-info dialog, integration
   logos in the device list, undo/redo, auto-save, keyboard shortcuts.
 - **New devices**: placed next to their room automatically (optional), a
@@ -189,12 +204,12 @@ Shortcuts don't fire while you type in a field.
 ## Roadmap
 
 Next: polish of bonds, phantoms, the night look and people from your feedback; people on several
-floors. Later: room outlines, motion zones that fade, doors and covers drawn, a coverage map,
+floors. Later: motion zones that fade, doors and covers drawn, a coverage map,
 Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
 [docs/help/roadmap.md](docs/help/roadmap.md).
 
 ## Changelog
-- 0.6.0 – One marker per device per overlay with leading entity and extra readings, Marker Editor on the plan, room shapes (lights stay in their room), light colours and glow-only, custom overlays with ordered kinds.
+- 0.6.0 – One marker per device per overlay with leading value, extra readings and badge; Edit markers on the plan; Live shows what's on now; room shapes (lights stay in their room); light colours; AC air flow; shutters darken their room by day; split spots that act as lights; custom overlays with ordered kinds.
 
 - 0.5.1 – Split devices generalised (place each switch where it acts), Edit markers on the plan (what each marker shows, per overlay), names in the Editor and looks on the card, empty rooms and area links, AC-style reading chips, chip card shows bonds.
 - 0.5.0 – Bond · Phantom · Split device, light shapes, several floors in one card, Day & night with glowing lights, People, chip card, cover controls, climate chip v2, Network upgrades.

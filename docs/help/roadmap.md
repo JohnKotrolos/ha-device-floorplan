@@ -10,7 +10,7 @@ What's coming, roughly in order. No dates: it's built in spare time, and your fe
 
 ## Later
 
-- **Room outlines** in the Editor (rooms are points today), so light pools and comfort colours stop at the walls.
+- **Comfort colours per room shape**: the room fills with its temperature colour, now that rooms can have a shape.
 - **Motion zones** that fill when something moves and fade over the next minutes: you see the path through the corridor.
 - **Doors and covers drawn**: an opening arc for doors, a shade over the window for blinds.
 - **Coverage map**: an estimate of the Zigbee / Wi-Fi coverage from the signals measured at the devices' spots, so you see where a repeater would help.
