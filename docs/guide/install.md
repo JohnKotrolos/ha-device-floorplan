@@ -3,7 +3,7 @@
 ## Requirements
 
 - Home Assistant 2025.1 or newer.
-- You set up your plans in the **Floorplan Editor** in the sidebar, which only Home Assistant administrators see (your own login usually is). The dashboard card works for everyone in your home, also users without admin rights.
+- You set up your plans in the **Floorplan Editor** in the sidebar. The dashboard card works for everyone in your home.
 
 ::: tip Before you start
 - **Devices in areas (rooms)**: Auto-place and the room filters use them. [Areas in Home Assistant](https://www.home-assistant.io/docs/organizing/areas/)

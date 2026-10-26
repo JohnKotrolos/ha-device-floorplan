@@ -9,7 +9,7 @@
 
 Put your Home Assistant devices on **your own floorplan image** and watch your
 home live: lights glowing in their real colour and staying in their room, the
-plan darkening at night, AC air flow, people in their rooms, Zigbee links and
+plan darkening at night, AC air flow, people in their rooms, an interactive Zigbee map (ZHA) and
 much more. Things that usually take custom cards, templates and lots of YAML,
 done with clicks: upload your picture (or start from a sample plan), drag your
 rooms onto it, press Auto-place and fine-tune by dragging.
@@ -32,8 +32,7 @@ for anything that breaks, confuses you or is missing. Screenshots help a lot.
 
 Known limits today:
 
-- Zigbee roles, link quality and links in the Network overlay need **ZHA** and an
-  **admin** user (that's what Home Assistant allows).
+- The interactive Zigbee map (roles, links, link quality) needs **ZHA**.
 - Room shapes are optional: without one, a room is a name pin and its light glow
   isn't stopped by walls.
 - Best on PC (Editor) and tablets / wall panels (card); phones work but aren't
@@ -123,7 +122,7 @@ into your `config/custom_components/` folder and restart Home Assistant.
 **Then:**
 
 1. Settings → Devices & services → Add integration → **Device Floorplan**.
-2. Open **Floorplan Editor** in the sidebar (admins only).
+2. Open **Floorplan Editor** in the sidebar.
 
 Options (Settings → Devices & services → Device Floorplan → Configure):
 new-device notification and automatic placement, both on by default.
