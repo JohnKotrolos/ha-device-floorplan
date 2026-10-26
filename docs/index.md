@@ -7,7 +7,7 @@ hero:
   tagline: Put your Home Assistant devices on your own floorplan in minutes, then watch your home live on your dashboard. All with clicks, no coding.
   image:
     src: /hero-live.webp
-    alt: "A floorplan at night with Home Assistant lights glowing where they are"
+    alt: "A floorplan at night: lights glowing in their rooms, two ACs with their air flow, a person in the living room"
   actions:
     - theme: brand
       text: Get started
