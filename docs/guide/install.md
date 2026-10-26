@@ -14,6 +14,10 @@ Neither is needed to place devices by hand.
 
 ## With HACS (custom repository)
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
+
+One click opens Device Floorplan in HACS on your Home Assistant: press **Download**, then restart. Or add it by hand:
+
 1. In HACS, open the ⋮ menu → **Custom repositories**.
 2. Add this repository's URL with type **Integration**:
 
@@ -34,6 +38,10 @@ Replace the `device_floorplan` folder with the new one and restart. Your plans, 
 :::
 
 ## Add the integration
+
+[![Open your Home Assistant instance and start setting up Device Floorplan.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=device_floorplan)
+
+Or by hand:
 
 1. Go to **Settings → Devices & services → Add integration**.
 2. Search for **Device Floorplan** and confirm.

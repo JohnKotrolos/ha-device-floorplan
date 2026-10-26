@@ -109,6 +109,10 @@ No floorplan yet? See
 
 **With HACS (recommended)**
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
+
+One click opens Device Floorplan in HACS on your Home Assistant. Or by hand:
+
 1. HACS → ⋮ (top right) → **Custom repositories**.
 2. Repository: `https://github.com/JohnKotrolos/ha-device-floorplan`, type
    **Integration** → Add.
@@ -121,7 +125,8 @@ into your `config/custom_components/` folder and restart Home Assistant.
 
 **Then:**
 
-1. Settings → Devices & services → Add integration → **Device Floorplan**.
+1. [![Open your Home Assistant instance and start setting up Device Floorplan.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=device_floorplan)
+   or Settings → Devices & services → Add integration → **Device Floorplan**.
 2. Open **Floorplan Editor** in the sidebar.
 
 Options (Settings → Devices & services → Device Floorplan → Configure):
