@@ -6,7 +6,7 @@ What's coming, roughly in order. No dates: it's built in spare time, and your fe
 
 - Light pools for every light shape in more overlays, and a real night photo of your plan as an option (instead of the drawn night look).
 - Persons on several floors: the card follows the floor a person is on.
-- Polishing what 0.5.0 brought, from your feedback: bonds, phantoms, the night look, people.
+- Polishing from your feedback: bonds, phantoms, the night look, people, room shapes.
 
 ## Later
 

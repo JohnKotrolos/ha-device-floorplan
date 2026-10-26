@@ -56,6 +56,3 @@ Split devices are only for devices that switch something themselves (a relay, a 
 - **Wall panel with two relays**: the panel on the corridor wall, *Relay 1* in the WC, *Relay 2* in the corridor: three places, one device.
 - **Plug and lamp**: either split it (plug at the socket, the lamp spot where the lamp is), or simply place the plug at the lamp: easier, only the Network view is slightly off.
 
-::: tip Updated from 0.5.0
-The older "box is somewhere else" spot was converted automatically: the device moved to the box spot, and its main entity got a spot where the device was. Nothing moves on your dashboards.
-:::

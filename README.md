@@ -131,8 +131,7 @@ new-device notification and automatic placement, both on by default.
 
 Each plan is a **device** (“Ground floor plan”) under Settings → Devices with:
 
-- `image.device_floorplan_<plan>`: the plan picture, usable in any card
-  (plans created before 0.4.2 keep their existing id).
+- `image.device_floorplan_<plan>`: the plan picture, usable in any card.
 - `sensor.device_floorplan_<plan>`: state = number of devices on the plan;
   attributes (kept out of the history database): `plan_id`, `image_url`,
   `image_fallback_url`, `image_width`, `image_height`, `kind`, `floor_id`,
@@ -203,27 +202,10 @@ Shortcuts don't fire while you type in a field.
 
 ## Roadmap
 
-Next: polish of bonds, phantoms, the night look and people from your feedback; people on several
-floors. Later: motion zones that fade, doors and covers drawn, a coverage map,
+Next: polishing from your feedback, people on several floors, light pools in more overlays. Later: motion zones that fade, doors and covers drawn, a coverage map,
 Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
 [docs/help/roadmap.md](docs/help/roadmap.md).
 
 ## Changelog
-- 0.6.0 – One marker per device per overlay with leading value, extra readings and badge; Edit markers on the plan; Live shows what's on now; room shapes (lights stay in their room); light colours; AC air flow; shutters darken their room by day; split spots that act as lights; custom overlays with ordered kinds.
 
-- 0.5.1 – Split devices generalised (place each switch where it acts), Edit markers on the plan (what each marker shows, per overlay), names in the Editor and looks on the card, empty rooms and area links, AC-style reading chips, chip card shows bonds.
-- 0.5.0 – Bond · Phantom · Split device, light shapes, several floors in one card, Day & night with glowing lights, People, chip card, cover controls, climate chip v2, Network upgrades.
-- 0.4.7 – beta-ready: typing in the card editor fixed, clearer editor order, Layers in the button bar, links apply every time, fewer redraws.
-- 0.4.6 – Lights overlay with scenes, reworked Network overlay, climate chips, rooms on the card, custom overlays, overlay buttons anywhere or hidden, switching overlays from other cards.
-- 0.4.5 – new dashboard card with overlays and a card editor where everything is adjustable.
-
-All versions: [docs/help/changelog.md](docs/help/changelog.md).
-
-## Feedback and contributing
-
-Bug reports and ideas are very welcome: [issues](https://github.com/JohnKotrolos/ha-device-floorplan/issues).
-Questions and show-and-tell: the Home Assistant community thread (link coming with the first post).
-
-## License
-
-[MIT](LICENSE) © 2026 John Kotrolos. Not affiliated with the Home Assistant project.
+- 0.6.0 – First public release (beta). See the [changelog](docs/help/changelog.md).

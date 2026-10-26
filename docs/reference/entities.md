@@ -6,7 +6,7 @@ Every plan is a device in **Settings → Devices** (for example *Ground floor pl
 
 | Entity | What it is |
 |---|---|
-| `image.device_floorplan_<plan>` | The plan picture. Usable in any card that shows an image entity. Plans created before 0.4.2 keep their existing id. |
+| `image.device_floorplan_<plan>` | The plan picture. Usable in any card that shows an image entity. |
 | `sensor.device_floorplan_<plan>` | State: number of devices and entities on the plan. Attributes: everything about the plan (below). |
 
 The device's link opens the planner.
