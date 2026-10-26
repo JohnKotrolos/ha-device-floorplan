@@ -1,11 +1,11 @@
-<p align="center"><img src="docs/public/icon.png" width="96" alt="Device Floorplan icon"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/icon.png" width="96" alt="Device Floorplan icon"></p>
 
 # Device Floorplan
 
 [![Beta](https://img.shields.io/badge/status-beta-orange)](#beta)
 [![HACS Custom](https://img.shields.io/badge/HACS-custom-41BDF5)](#install)
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
 
 Put your Home Assistant devices on **your own floorplan image** and watch your
 home live: lights glowing in their real colour and staying in their room, the
@@ -15,9 +15,9 @@ done with clicks: upload your picture (or start from a sample plan), drag your
 rooms onto it, press Auto-place and fine-tune by dragging.
 
 <p align="center">
-  <img src="docs/public/screens/card-lights.webp" width="32%" alt="Lights overlay with scenes">
-  <img src="docs/public/screens/card-comfort.webp" width="32%" alt="Comfort overlay with climate chips">
-  <img src="docs/public/screens/card-network.webp" width="32%" alt="Network overlay with Zigbee links">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-lights.webp" width="32%" alt="Lights overlay with scenes">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-comfort.webp" width="32%" alt="Comfort overlay with climate chips">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-network.webp" width="32%" alt="Network overlay with Zigbee links">
 </p>
 
 📖 **Full guide:** https://johnkotrolos.github.io/ha-device-floorplan/
@@ -40,7 +40,7 @@ Known limits today:
 - People need a room sensor per person (Bermuda, ESPresense, a template…).
 
 No floorplan yet? See
-[Turn your sketch into a floorplan in 10 minutes](docs/images/sketch.md).
+[Turn your sketch into a floorplan in 10 minutes](https://johnkotrolos.github.io/ha-device-floorplan/images/sketch).
 
 ## Features
 
@@ -82,7 +82,7 @@ No floorplan yet? See
 - **Live** shows what is happening at home right now: things that are off stay
   hidden, lights that are on glow in their real colour.
 - **Custom overlays**: pick the kinds of devices, in your order.
-- **Bond · Phantom · Split device** ([guide](docs/together/index.md)):
+- **Bond · Phantom · Split device** ([guide](https://johnkotrolos.github.io/ha-device-floorplan/together/)):
   - **Bond**: several physical devices on one spot are one device (three bulbs in one
     lamp): one marker, switched together, values combined. Device Floorplan asks
     before it bonds; printers + AMS or NAS + drives are bonded automatically.
@@ -172,7 +172,7 @@ the plan darkens and the lights that are on glow (follows the sun by default).
 Everything else (floors, which overlays, where the buttons are, what each overlay shows, light
 scenes, rooms, people, day & night, tap behaviour, look, per-device settings) is set in the card
 editor. Other cards can switch the overlay with the action `device_floorplan.show_overlay`, or use
-the **chip card** that glows for the active overlay. See [docs/reference/card.md](docs/reference/card.md).
+the **chip card** that glows for the active overlay. See [the card reference](https://johnkotrolos.github.io/ha-device-floorplan/reference/card).
 
 ```yaml
 type: custom:device-floorplan-card
@@ -204,8 +204,8 @@ Shortcuts don't fire while you type in a field.
 
 Next: polishing from your feedback, people on several floors, light pools in more overlays. Later: motion zones that fade, doors and covers drawn, a coverage map,
 Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
-[docs/help/roadmap.md](docs/help/roadmap.md).
+[roadmap](https://johnkotrolos.github.io/ha-device-floorplan/help/roadmap).
 
 ## Changelog
 
-- 0.6.0 – First public release (beta). See the [changelog](docs/help/changelog.md).
+- 0.6.0 – First public release (beta). See the [changelog](https://johnkotrolos.github.io/ha-device-floorplan/help/changelog).
