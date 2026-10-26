@@ -1,11 +1,30 @@
 /*
- * Device Floorplan – planner panel (v0.4.7).
+ * Device Floorplan – planner panel (v0.5.1).
  * Plain web component, no build step. Talks to the integration through
  * hass.callWS and uploads images through the authenticated HTTP endpoint.
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.4.7";
+const VERSION = "0.6.0";
+
+/** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
+function kelvinRgb(k) {
+  const t = Math.max(1000, Math.min(12000, k)) / 100;
+  const c = (v) => Math.round(Math.max(0, Math.min(255, v)));
+  const r = t <= 66 ? 255 : c(329.698727446 * Math.pow(t - 60, -0.1332047592));
+  const g = t <= 66 ? c(99.4708025861 * Math.log(t) - 161.1195681661) : c(288.1221695283 * Math.pow(t - 60, -0.0755148492));
+  const b = t >= 66 ? 255 : t <= 19 ? 0 : c(138.5177312231 * Math.log(t - 10) - 305.0447927307);
+  return [r, g, b];
+}
+
+/** A stored light colour ("k:2700" / "#ffaa00") → css colour, or null for Auto. */
+function lightCss(col) {
+  if (!col || col === "auto") return null;
+  if (col.startsWith("#")) return col;
+  if (col.startsWith("k:")) return `rgb(${kelvinRgb(Number(col.slice(2)) || 3000).join(",")})`;
+  return null;
+}
+const DOCS = "https://johnkotrolos.github.io/ha-device-floorplan/";
 const LS = "device_floorplan_";
 const STATIC = "/device_floorplan_static";
 const BRANDS = "https://brands.home-assistant.io/_";
@@ -86,6 +105,8 @@ const SVG = {
   okcircle: '<svg viewBox="0 0 24 24" class="fill"><circle cx="12" cy="12" r="11" fill="var(--df-ok)"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   dots: '<svg viewBox="0 0 24 24" class="fill"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
   layers: '<svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>',
+  moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>',
   eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
@@ -192,6 +213,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .mk.two .ring { box-shadow: 0 0 0 2px var(--df-card), 0 0 0 4px var(--c2); }
 .mk.approx .ring { border-style: dashed; }
 .mk.sel .ring { outline: 3px solid var(--df-primary); outline-offset: 4px; }
+.mk .tip.multi { white-space:nowrap; text-align:left; line-height:1.35; }
 .mk .tip { position:absolute; bottom:38px; left:50%; transform:translateX(-50%); white-space:nowrap; background: rgba(28,28,28,.92); color:#fff; font-size:12px; padding:4px 8px; border-radius:6px; opacity:0; pointer-events:none; transition: opacity .12s; }
 .mk:hover .tip, .mk.sel .tip, .names-always .mk .tip { opacity:1; }
 .names-off .mk:not(:hover):not(.sel) .tip { opacity:0; }
@@ -201,14 +223,68 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--df-primary) 60%, transparent); } 100% { box-shadow: 0 0 0 22px transparent; } }
 .mk.dragging { cursor: grabbing; z-index: 6; pointer-events:none; }
 .mk .count.bondc { background: var(--df-ok); }
+.mk .count.stk { background: #6b7280; }
+.mk.approx::before { content:''; position:absolute; left:50%; top:50%; width:44px; height:44px; margin:-22px 0 0 -22px; border-radius:50%; background: radial-gradient(circle, rgba(245,158,11,.6) 45%, rgba(245,158,11,0) 70%); pointer-events:none; }
+.mk.droptgt { z-index: 7; }
+.mk.droptgt .ring { transform: scale(1.45); transition: transform .15s; box-shadow: 0 0 0 4px var(--df-card), 0 0 0 7px var(--df-primary); }
+.mk.droptgt .tip { opacity:1; background: var(--df-primary); }
+.mk.ph { width:48px; height:48px; margin:-24px 0 0 -24px; }
+.mk.ph .ring { width:36px; height:36px; background: var(--primary-text-color); color: var(--df-card); border:2px dashed var(--df-card); outline: 2px dashed var(--primary-text-color); outline-offset: 1px; --mdc-icon-size: 22px; }
+.mk.ph.sel .ring { outline: 3px solid var(--df-primary); outline-offset: 4px; }
+.mk.ph.empty .ring { animation: phglow 1.6s ease-in-out infinite; }
+@keyframes phglow { 0%,100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--df-primary) 50%, transparent); } 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--df-primary) 15%, transparent); } }
+.mk .count.phc { background: var(--primary-text-color); color: var(--df-card); }
+.stackpop { position:absolute; transform: translate(-50%, 26px); background: var(--df-card); color: var(--primary-text-color); border:1px solid var(--df-div); border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.25); padding:6px; display:flex; flex-direction:column; gap:2px; min-width:200px; pointer-events:auto; z-index:9; font-size:13px; }
+.stackpop .sh { font-size:11px; color: var(--df-sec); padding:2px 6px 4px; display:flex; align-items:center; }
+.stackpop .sh button { margin-left:auto; }
+.stackpop .si { display:flex; align-items:center; gap:8px; border:0; background:transparent; padding:6px; border-radius:8px; cursor:pointer; font: inherit; color: inherit; text-align:left; }
+.stackpop .si:hover { background: var(--df-hover); }
+.stackpop .si .ico { --mdc-icon-size:16px; display:flex; }
+.details .bh { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.details .bcount { background: var(--df-ok); color:#fff; border-radius:9px; font-size:11px; font-weight:600; padding:1px 7px; }
+.details .bcount.ph { background: var(--primary-text-color); color: var(--df-card); }
+.details .mems { display:flex; flex-direction:column; gap:2px; }
+.details .mem { display:flex; align-items:center; gap:8px; padding:4px 2px; border-radius:8px; }
+.details .mem .cring { width:22px; height:22px; border-radius:50%; border:2px solid var(--c1); display:flex; align-items:center; justify-content:center; --mdc-icon-size:13px; flex:none; background: var(--df-card); }
+.details .mem .link { padding:0; text-align:left; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.details .mem .mst { font-size:12px; color: var(--df-sec); white-space:nowrap; }
+.details .mem .small { width:24px; height:24px; }
+.details input.nmin { font: inherit; font-size:15px; font-weight:500; border:1px solid transparent; border-radius:6px; padding:2px 4px; margin-left:-4px; width:100%; background:transparent; color: inherit; box-sizing:border-box; }
+.details input.nmin:hover, .details input.nmin:focus { border-color: var(--df-div); background: var(--df-card); outline:none; }
+.details .morebtn { align-self:flex-start; padding:0; display:flex; align-items:center; gap:2px; }
+.details .morebtn svg { width:14px; height:14px; transition: transform .15s; }
+.details .morebtn.open svg { transform: rotate(180deg); }
+.details .more { display:flex; flex-direction:column; gap:10px; border-top:1px dashed var(--df-div); padding-top:10px; }
+.details .back { align-self:flex-start; padding:0; font-size:12px; }
+.details label.fl { font-size:12px; color: var(--df-sec); display:flex; flex-direction:column; gap:4px; }
+.details input.ent2 { font: inherit; font-size:13px; border:1px solid var(--df-div); border-radius:6px; padding:5px 6px; background: var(--df-card); color: inherit; }
+.itipw { position:relative; display:inline-flex; vertical-align:middle; }
+.itip { width:18px; height:18px; border-radius:50%; border:1px solid var(--df-sec); background:transparent; color: var(--df-sec); font: italic 600 11px/1 Georgia, serif; cursor:pointer; padding:0; display:inline-flex; align-items:center; justify-content:center; }
+.itip.on, .itip:hover { border-color: var(--df-primary); color: var(--df-primary); }
+.ipop { position:fixed; top:-999px; left:-999px; width:260px; z-index:30; background: var(--df-card); color: var(--primary-text-color); border:1px solid var(--df-div); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.22); padding:10px 12px; font-size:12.5px; line-height:1.45; font-style:normal; font-weight:400; text-align:left; white-space:normal; }
+.ipop b { display:block; font-size:13px; margin-bottom:4px; }
+.ipop a { color: var(--df-primary); }
+.ipop .x { position:absolute; top:4px; right:4px; border:0; background:transparent; color: var(--df-sec); cursor:pointer; font-size:13px; }
+.ovctl.layerctl { display:flex; gap:6px; align-items:flex-start; }
+.lhd { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); cursor:grab; pointer-events:auto; touch-action:none; z-index:6; }
+.details .lsec { display:flex; flex-direction:column; gap:6px; border:1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 8%, var(--df-card)); border-radius:10px; padding:8px 10px; }
+.details .lsec .lh { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; }
+.details .lsec .lh small { font-weight:400; color: var(--df-sec); margin-left:auto; }
+.details .lchips { display:flex; flex-wrap:wrap; gap:4px; }
+.details .lchips button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:14px; padding:3px 10px; font: inherit; font-size:12px; cursor:pointer; }
+.details .lchips button.on { border-color:#f59e0b; background: color-mix(in srgb, #f59e0b 22%, var(--df-card)); font-weight:500; }
+.details .lsz { display:flex; gap:8px; align-items:center; font-size:12px; color: var(--df-sec); flex-wrap:wrap; }
+.details .lsz input { width:64px; font: inherit; font-size:13px; border:1px solid var(--df-div); border-radius:6px; padding:4px 6px; background: var(--df-card); color: var(--primary-text-color); }
+.ovbtn ha-icon { --mdc-icon-size: 22px; display:flex; }
+.ovbtn.on { background: var(--df-tint); color: var(--df-primary); border-color: var(--df-primary); }
 .mk.bond .ring { box-shadow: 0 0 0 2px var(--df-card), 0 0 0 4px var(--c1); }
 .mk.bondhint { z-index: 7; }
 .mk.bondhint .ring { transform: scale(1.55); transition: transform .18s; box-shadow: 0 0 0 4px var(--df-card), 0 0 0 8px var(--df-ok); }
 .mk.bondhint .tip { opacity:1; background: var(--df-ok); }
-.pin { position:absolute; transform: translate(-7px, -100%); border-bottom-left-radius: 2px !important; display:flex; align-items:center; gap:2px; font-size:12px; font-weight:500; color: var(--df-primary); background: var(--df-card); border:1.5px solid var(--df-primary); border-radius:12px; padding:3px 8px 3px 4px; white-space:nowrap; pointer-events:auto; cursor:grab; touch-action:none; box-shadow:0 1px 4px rgba(0,0,0,.2); }
+.pin { position:absolute; transform: translate(-50%, -50%); display:flex; align-items:center; gap:2px; font-size:12px; font-weight:500; color: var(--df-primary); background: var(--df-card); border:1.5px solid var(--df-primary); border-radius:12px; padding:3px 8px 3px 4px; white-space:nowrap; pointer-events:auto; cursor:grab; touch-action:none; box-shadow:0 1px 4px rgba(0,0,0,.2); }
 .pin svg { width:14px; height:14px; }
 #dragghost { position:fixed; left:-1000px; top:-1000px; pointer-events:none; }
-.pin.dragpin { position:static; transform:none; display:inline-flex; border-radius: 12px 12px 12px 2px; }
+.pin.dragpin { position:static; transform:none; display:inline-flex; border-radius: 12px; }
 .dragmk { width:40px; height:40px; display:flex; align-items:center; justify-content:center; }
 .dragmk .ring { width:28px; height:28px; border-radius:50%; background: var(--df-card); display:flex; align-items:center; justify-content:center; border: 2.5px dashed var(--c1); --mdc-icon-size:16px; }
 .pin.dim { opacity:.75; pointer-events:none; }
@@ -229,6 +305,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .ovctl.zoomctl { right:10px; bottom:10px; }
 .ovctl.scalectl { left:12px; bottom:12px; pointer-events:none; font-size:12px; color: var(--primary-text-color); background: color-mix(in srgb, var(--df-card) 85%, transparent); border-radius:6px; padding:4px 8px 6px; }
 .ovctl.layerctl { right:10px; top:10px; }
+.layerctl .lwrap { position:relative; }
 .scalebar { display:flex; flex-direction:column; gap:2px; }
 .scalebar span:last-child { height:6px; border:2px solid var(--primary-text-color); border-top:0; }
 .ovbtn { width:38px; height:38px; border:1px solid var(--df-div); background: var(--df-card); border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.15); }
@@ -263,7 +340,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .zoom button { width:32px; height:32px; border:0; background:transparent; font-size:18px; cursor:pointer; border-radius:8px; }
 .zoom .fit { width:auto; font-size:12px; padding:0 10px; border-left:1px solid var(--df-div); border-radius:0 8px 8px 0; }
 .zoom span { min-width:44px; text-align:center; color: var(--primary-text-color); }
-.side { flex: 0 0 360px; min-width: 0; min-height:0; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; }
+.side { flex: 0 0 360px; min-width: 0; min-height:0; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; display:flex; flex-direction:column; overflow-y:auto; overscroll-behavior:contain; }
 .sidehead { padding:12px 14px 4px; display:flex; flex-direction:column; gap:2px; }
 .sidehead h2 { margin:0; font-size:16px; font-weight:500; display:flex; align-items:baseline; gap:8px; }
 .sidehead p { margin:0; font-size:12px; color: var(--df-sec); line-height:1.4; }
@@ -281,7 +358,8 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .fbtn.open { background: var(--df-tint); }
 .fbtn .cnt { background: var(--df-primary); color:#fff; border-radius:9px; font-size:11px; line-height:16px; padding:0 6px; }
 .fbtn svg { width:12px; height:12px; }
-.pop { position:absolute; left:12px; right:12px; top:100%; z-index:20; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:12px; display:flex; flex-direction:column; gap:10px; }
+.pop { position:absolute; left:12px; right:12px; top:100%; z-index:20; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:12px; display:flex; flex-direction:column; gap:10px; max-height:60vh; overflow-y:auto; overscroll-behavior:contain; }
+.pop > .btn.primary { position:sticky; bottom:0; box-shadow:0 -6px 10px var(--df-card); }
 .chips { display:flex; flex-wrap:wrap; gap:6px; }
 .chip { display:flex; align-items:center; gap:6px; border:1px solid var(--df-div); background: var(--df-card); border-radius:16px; padding:6px 10px; font-size:13px; cursor:pointer; }
 .chip.on { border-color: var(--df-primary); background: var(--df-tint); color: var(--df-primary); font-weight:500; }
@@ -292,7 +370,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .opts { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:12px; color: var(--df-sec); }
 .opts select { font: inherit; font-size:12px; border:1px solid var(--df-div); border-radius:6px; padding:3px 4px; background: var(--df-card); color: inherit; }
 .newbar { margin: 0 12px; padding: 8px 10px; border-radius:8px; background: var(--df-tint); font-size:13px; display:flex; align-items:center; gap:8px; }
-.list { flex:1; min-height:0; overflow-y:auto; border-top:1px solid var(--df-div); }
+.list { flex:none; border-top:1px solid var(--df-div); }
 .ghead { width:100%; display:flex; align-items:center; gap:8px; padding:9px 14px; border:0; border-bottom:1px solid var(--df-div); background: color-mix(in srgb, var(--primary-background-color) 60%, var(--df-card)); cursor:pointer; text-align:left; position: sticky; top: 0; z-index: 1; }
 .ghead svg { width:14px; height:14px; color: var(--df-sec); transition: transform .15s; }
 .ghead.open svg { transform: rotate(90deg); }
@@ -317,11 +395,47 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .small:hover { background: var(--df-hover); }
 .small.eyeon { color: var(--df-primary); }
 .hiddenrow .ico { opacity:.4; }
+.side > .details { flex: none; }
+.details .note.parts .prow { display:flex; align-items:center; gap:6px; margin-top:4px; }
+.details .note.parts .prow .pn { flex:1; min-width:0; display:flex; flex-direction:column; }
+.details .note.parts .prow .pn b { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.details .note.parts .prow .pn small { color: var(--df-sec); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.details .note.parts .prow .btn { flex:none; padding:2px 8px; min-height:0; font-size:12px; }
 .details { margin: 10px 12px 0; padding: 12px; border-radius:12px; border:1px solid color-mix(in srgb, var(--df-primary) 40%, transparent); background: color-mix(in srgb, var(--df-tint) 50%, var(--df-card)); display:flex; flex-direction:column; gap:10px; }
 .details .top { display:flex; gap:10px; align-items:flex-start; }
 .details .nm { font-size:15px; font-weight:500; }
 .details .sub { font-size:12px; color: var(--df-sec); margin-top:2px; }
 .details .acts { display:flex; flex-wrap:wrap; gap:6px; }
+.shc { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#fff; border:2.5px solid #b3261e; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.shp { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background: rgba(179,38,30,.85); color:#fff; font-size:13px; line-height:16px; text-align:center; cursor:copy; pointer-events:auto; touch-action:none; z-index:5; opacity:.75; }
+.shp:hover { opacity:1; }
+.she { position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:5px; background:#b3261e; color:#fff; font-size:10px; line-height:18px; text-align:center; cursor:pointer; pointer-events:auto; z-index:5; opacity:.85; }
+.she.open { background:#2e7d32; }
+.shbox { position:absolute; z-index:20; width:260px; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:8px 10px; font-size:12px; }
+.shbox .shgrip { cursor:move; user-select:none; margin-bottom:4px; color: var(--primary-text-color); }
+.shbox .shtip { color: var(--df-sec); line-height:1.4; margin-bottom:8px; }
+.shbox .shacts { display:flex; gap:6px; flex-wrap:wrap; }
+.shbox .shacts button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:14px; padding:4px 10px; font: inherit; cursor:pointer; }
+.shbox .shacts button.pri { background:#2e7d32; border-color:#2e7d32; color:#fff; }
+.shbtn { flex:none; border:1px solid #b3261e; color:#b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); border-radius:12px; padding:3px 9px; font: inherit; font-size:12px; cursor:pointer; margin-left:4px; }
+.shbtn.done { border-color: var(--df-ok); color: var(--df-ok); background: color-mix(in srgb, var(--df-ok) 12%, transparent); }
+.shbtn.act { outline:2px solid currentColor; outline-offset:1px; }
+.details .usesrow { margin: -2px 0 4px 30px; font-size:12px; }
+.details .usesrow .link { padding:0; font-size:12px; }
+.details .uses { display:flex; flex-direction:column; gap:2px; margin-top:4px; }
+.details .uses small { color: var(--df-sec); }
+.ahd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #4fa3ff; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.details .lsec.air { border-color: color-mix(in srgb, #4fa3ff 45%, transparent); background: color-mix(in srgb, #4fa3ff 8%, var(--df-card)); }
+.details .lcol { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--df-sec); }
+.details .lcol button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:12px; padding:2px 10px; font: inherit; cursor:pointer; }
+.details .lcol button.on { border-color:#f59e0b; color: var(--primary-text-color); }
+.details .lcol input[type=range] { flex:1; min-width:80px; height:6px; -webkit-appearance:none; appearance:none; border-radius:3px; background: linear-gradient(90deg, rgb(255,160,70), rgb(255,240,225), rgb(200,220,255)); outline:none; opacity:.55; }
+.details .lcol input[type=range].on { opacity:1; }
+.details .lcol input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid #f59e0b; cursor:pointer; }
+.details .lcol input[type=color] { width:28px; height:24px; padding:0; border:1px solid var(--df-div); border-radius:6px; background:none; cursor:pointer; opacity:.6; }
+.details .lcol input[type=color].on { opacity:1; border-color:#f59e0b; }
+.details .note.split .srow { display:flex; align-items:center; gap:6px; margin-top:6px; }
+.details .note.split .snm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .details .note { font-size:12px; line-height:1.4; border-radius:8px; padding:7px 9px; background: var(--primary-background-color); }
 .details select { font: inherit; font-size:13px; border:1px solid var(--df-div); border-radius:8px; padding:6px; background: var(--df-card); color: inherit; width:100%; }
 .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:40; display:flex; align-items:center; gap:12px; background:#1c1c1c; color:#fff; border-radius:10px; padding:10px 10px 10px 16px; font-size:14px; box-shadow:0 6px 20px rgba(0,0,0,.35); max-width: calc(100% - 32px); }
@@ -473,6 +587,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       planId: lsGet("plan", null),
       tool: "place",
       guide: lsGet("guide", true),
+      more: lsGet("more", false),
       colorBy: lsGet("colorBy", "conn"),
       names: lsGet("names", "hover"),
       groupBy: lsGet("groupBy", "room"),
@@ -669,10 +784,10 @@ class DeviceFloorplanPanel extends HTMLElement {
     this.s.planId = planId;
     lsSet("plan", planId);
     const plan = this._plan();
-    this.work = plan ? { positions: clone(plan.positions) || {}, anchors: clone(plan.anchors) || {}, refs: clone(plan.refs) || [], hidden_rooms: clone(plan.hidden_rooms) || [], bonds: clone(plan.bonds) || {} } : null;
+    this.work = plan ? { positions: clone(plan.positions) || {}, anchors: clone(plan.anchors) || {}, refs: clone(plan.refs) || [], hidden_rooms: clone(plan.hidden_rooms) || [], bonds: clone(plan.bonds) || {}, bond_meta: clone(plan.bond_meta) || {}, phantoms: clone(plan.phantoms) || {}, shapes: clone(plan.shapes) || {} } : null;
     this._undo = [];
     this._redo = [];
-    Object.assign(this.s, { sel: null, placing: null, placingRoom: null, fan: null, m1: null, m2: null, mh: null, ask: false, z: 1, tx: 0, ty: 0, refSel: null, menu: null, layersOpen: false, imgFailed: null });
+    Object.assign(this.s, { sel: null, memberView: null, stack: null, itip: null, placing: null, placingRoom: null, fan: null, m1: null, m2: null, mh: null, ask: false, z: 1, tx: 0, ty: 0, refSel: null, menu: null, layersOpen: false, imgFailed: null });
     if (!this.s.dialog) this.s.form = null;
     if (plan) {
       let dirty = false;
@@ -736,12 +851,14 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   /** Entities without a device only show up when placed on this plan or found by the search. */
   _listable(d) {
+    if (d.split) return false;
     if (!d.loose || d.physical) return true;
     return !!(this.work && this.work.positions[d.id]) || !!this.s.q.trim();
   }
 
   /** Devices that count (steps, rooms, guide): real devices, plus entities placed here. */
   _counted(d) {
+    if (d.split) return false;
     return !d.loose || d.physical || !!(this.work && this.work.positions[d.id]);
   }
 
@@ -761,7 +878,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     return word || null;
   }
 
-  _roomsForPlan() {
+  _roomsForPlan(withEmpty = false) {
     const f = this._scopeFloor();
     const counts = {};
     for (const d of this.devices) {
@@ -769,8 +886,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       counts[d.area_id] = (counts[d.area_id] || 0) + 1;
     }
     return this.areas
-      .filter((a) => counts[a.area_id] && (!f || a.floor_id === f || !a.floor_id))
-      .map((a) => ({ ...a, count: counts[a.area_id], pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id) }));
+      .filter((a) => (withEmpty || counts[a.area_id]) && (!f || a.floor_id === f || !a.floor_id))
+      .map((a) => ({ ...a, count: counts[a.area_id] || 0, pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id) }));
   }
 
   _ignoredRooms() {
@@ -832,7 +949,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!this._listable(d)) return false;
     if (!this._inScope(d)) return false;
     if (s.conn.length && !d.conns.some((c) => s.conn.includes(c))) return false;
-    if (s.type.length && !s.type.includes(d.group)) return false;
+    if (s.type.length && !s.type.some((t) => this._inType(d, t))) return false;
     if (st === "hiddenroom" && !s.withHidden) return false;
     if (s.status.length && !s.withHidden) {
       const ok = s.status.some((x) => (x === "new" ? this._isNew(d) && st !== "skipped" : x === st));
@@ -848,7 +965,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     // While searching the plan follows the list: filters are ignored (#42).
     if (s.q.trim()) return this._hay(d).includes(s.q.trim().toLowerCase());
     if (s.conn.length && !d.conns.some((c) => s.conn.includes(c))) return false;
-    if (s.type.length && !s.type.includes(d.group)) return false;
+    if (s.type.length && !s.type.some((t) => this._inType(d, t))) return false;
     const onPlan = s.status.filter((x) => x === "approx" || x === "placed");
     if (onPlan.length && !onPlan.includes(st)) return false;
     return true;
@@ -861,7 +978,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   // ------------------------------------------------------------ undo + save
   _snap() {
-    return { positions: clone(this.work.positions), anchors: clone(this.work.anchors), refs: clone(this.work.refs), hidden_rooms: clone(this.work.hidden_rooms), bonds: clone(this.work.bonds || {}), skipped: [...this.skipped] };
+    return { positions: clone(this.work.positions), anchors: clone(this.work.anchors), refs: clone(this.work.refs), hidden_rooms: clone(this.work.hidden_rooms), bonds: clone(this.work.bonds || {}), bond_meta: clone(this.work.bond_meta || {}), phantoms: clone(this.work.phantoms || {}), shapes: clone(this.work.shapes || {}), skipped: [...this.skipped] };
   }
 
   _pushUndo(snap) {
@@ -877,6 +994,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     this.work.refs = snap.refs;
     this.work.hidden_rooms = snap.hidden_rooms || [];
     this.work.bonds = snap.bonds || {};
+    this.work.bond_meta = snap.bond_meta || {};
+    this.work.phantoms = snap.phantoms || {};
+    this.work.shapes = snap.shapes || {};
     const after = new Set(snap.skipped);
     const nowSkipped = [...after].filter((x) => !before.has(x));
     const nowUnskipped = [...before].filter((x) => !after.has(x));
@@ -930,10 +1050,17 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (m.length >= 2) bonds[k] = m;
     }
     this.work.bonds = bonds;
-    const body = { plan_id: plan.id, positions: this.work.positions, anchors: this.work.anchors, refs: this.work.refs, hidden_rooms: this.work.hidden_rooms, bonds };
+    const bondMeta = {};
+    for (const [k, v] of Object.entries(this.work.bond_meta || {})) if (bonds[k]) bondMeta[k] = v;
+    this.work.bond_meta = bondMeta;
+    // Phantom members must be on the plan; empty phantoms are kept while you fill them.
+    const phantoms = {};
+    for (const [k, v] of Object.entries(this.work.phantoms || {})) phantoms[k] = { ...v, members: (v.members || []).filter((id) => this.work.positions[id]) };
+    this.work.phantoms = phantoms;
+    const body = { plan_id: plan.id, positions: this.work.positions, anchors: this.work.anchors, refs: this.work.refs, hidden_rooms: this.work.hidden_rooms, bonds, bond_meta: bondMeta, phantoms, shapes: this.work.shapes || {} };
     try {
       const res = await this._ws("plan/update", body);
-      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {} });
+      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {}, bond_meta: res.bond_meta || {}, phantoms: res.phantoms || {}, shapes: res.shapes || {} });
       if (this._saveT === null && this.s.save === "busy") this.s.save = "ok";
     } catch (err) {
       this._saveError(err);
@@ -1021,8 +1148,12 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _renderNow() {
     if (!this._app) return;
-    const listEl = this.shadowRoot.querySelector(".list");
-    const scroll = listEl ? listEl.scrollTop : 0;
+    this._syncSplit();
+    requestAnimationFrame(() => this._fitPop());
+    const sideEl = this.shadowRoot.querySelector(".side");
+    // Keep the right column's scroll; a newly selected device starts at the top.
+    const scroll = sideEl && this._lastSel === this.s.sel ? sideEl.scrollTop : 0;
+    this._lastSel = this.s.sel;
     const focused = this.shadowRoot.activeElement;
     const focusId = focused && focused.id;
     const caret = focused && focused.selectionStart;
@@ -1044,8 +1175,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     this._bindBrandIcons();
     this._hydrateCardPreview();
-    const list2 = this.shadowRoot.querySelector(".list");
-    if (list2) list2.scrollTop = scroll;
+    const side2 = this.shadowRoot.querySelector(".side");
+    if (side2) side2.scrollTop = scroll;
     if (focusId) {
       const el = this.shadowRoot.getElementById(focusId);
       if (el) {
@@ -1158,6 +1289,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _iconHtml(d) {
+    if (d.split && d.as && d.as !== "other") return `<ha-icon icon="${{ light: "mdi:lightbulb", switch: "mdi:toggle-switch-variant", fan: "mdi:fan" }[d.as]}"></ha-icon>`;
     const fb = (GROUPS[d.group] || GROUPS.other)[1];
     const ent = this.mainEntity[d.id] || d.main_entity;
     if (ent && customElements.get("ha-state-icon")) return `<ha-state-icon data-ent="${esc(ent)}" data-fallback="${fb}"></ha-state-icon>`;
@@ -1198,9 +1330,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     return `<header>${menu}${title}
       <nav class="tabs" aria-label="Plans">${tabs}<button class="tab new" data-act="newplan">+ New plan</button></nav>
       <div class="hdr-right">
+        ${this._saveHtml()}${ready}
         <button class="iconbtn" data-act="undo" aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" ${this._undo.length ? "" : "disabled"}>${SVG.undo}</button>
-        <button class="iconbtn" data-act="redo" aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" ${this._redo.length ? "" : "disabled"}>${SVG.redo}</button>
-        ${this._saveHtml()}${ready}${more}
+        <button class="iconbtn" data-act="redo" aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" ${this._redo.length ? "" : "disabled"}>${SVG.redo}</button>${more}
       </div></header>`;
   }
 
@@ -1268,7 +1400,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         <label><input type="checkbox" data-act="queue" ${this.s.queue ? "checked" : ""}>then next</label>
         ${pd && this.s.sel !== pd.id ? `<button data-act="placingdetails">Details</button>` : ""}<button data-act="stopplace">Stop (Esc)</button></span>`;
     }
-    const guideLink = this.s.guide ? "" : `<button class="link" data-act="guide">Show guide</button>`;
+    const guideLink = `<button class="link" data-act="guide">${this.s.guide ? "Hide guide" : "Show guide"}</button>`;
     return `<div class="toolbar"><div class="steps" role="group" aria-label="Steps">
       ${step("measure", 1, "Measure", d1, angled)}${step("rooms", 2, "Mark rooms", d2)}${step("place", 3, "Place devices", d3)}</div>
       ${calib}${placing}${guideLink}</div>`;
@@ -1289,13 +1421,17 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (t === "rooms") {
       const rooms = this._roomsForPlan();
       const pinned = rooms.filter((r) => r.pos || r.ignored).length;
+      const anyAreas = this._roomsForPlan(true).length > 0;
       const tip = !rooms.length
-        ? "None of your devices has an area yet. Give devices an area in HA, or skip this step and place devices by hand."
+        ? anyAreas
+          ? "Your rooms are listed, but no device is assigned to them yet: open a device in HA and choose its area, then come back. Or skip this step and place devices by hand."
+          : "None of your devices has an area yet. Assign each device to an area in its device page, then come back: rooms appear here. Or skip this step and place devices by hand."
         : d2
           ? `All ${rooms.length} rooms are on the plan. You can still drag a pin to adjust it.`
           : `${pinned} of ${rooms.length} rooms on the plan. "Done" appears when all of them are placed.`;
-      const acts = d2 || !rooms.length ? `<button class="btn ok" data-act="tool" data-tool="place">Done, place devices →</button>` : "";
-      return this._guideBox(d2 ? "✓" : "2", d2, "Step 2 of 3 · Mark rooms", "Your rooms from HA are listed on the right. Drag each one onto the plan and drop it in the middle of that room, or click a room and then click on the plan. Auto-place uses them to put each device in the right room. Rooms that are not on this plan: hide them with the eye button, their devices leave the list.", tip, acts);
+      const areaLinks = !rooms.length ? `<a class="btn" href="/config/areas/dashboard" target="_self">${anyAreas ? "Open areas" : "Create areas"}</a><a class="btn" href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work${SVG.ext}</a>` : "";
+      const acts = areaLinks + (d2 || !rooms.length ? `<button class="btn ok" data-act="tool" data-tool="place">Done, place devices →</button>` : "");
+      return this._guideBox(d2 ? "✓" : "2", d2, "Step 2 of 3 · Mark rooms", "Your rooms from HA are listed on the right. Drag each one onto the plan and drop it in the middle of that room, or click a room and then click on the plan. Auto-place uses them to put each device in the right room. Rooms that are not on this plan: hide them with the eye button, their devices leave the list. Optional: Shape draws a room's outline, so its lights stay inside (edges snap straight, hold Alt for a free angle).", tip, acts);
     }
     let left = 0;
     let approx = 0;
@@ -1318,7 +1454,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _guideBox(step, done, title, text, tip, acts) {
     return `<div class="guide"><span class="badge ${done ? "done" : ""}">${step}</span>
       <div class="txt"><div class="t1">${esc(title)}</div><div class="t2">${esc(text)}</div>${tip ? `<div class="t3">${esc(tip)}</div>` : ""}</div>
-      <div class="acts">${acts}<button class="link" data-act="guide">Hide guide</button></div></div>`;
+      ${acts ? `<div class="acts">${acts}</div>` : ""}</div>`;
   }
 
   // ---------------------------------------------------------------- plan
@@ -1344,7 +1480,7 @@ class DeviceFloorplanPanel extends HTMLElement {
             <svg class="ov ${fadeRefs}" viewBox="0 0 1000 1000" preserveAspectRatio="none" id="ovsvg">${this._svgOverlay()}</svg></div>
           <div class="layer" id="layer">${this._overlayHtml()}</div>
         </div>
-        ${this._canvasCtlHtml()}
+        ${this._canvasCtlHtml()}${this._shapeBoxHtml()}
       </div>
       ${this.s.imgFailed === plan.image_url && plan.image_fallback_url ? `<div class="warnbox" style="margin:0">The original image (${esc(plan.image_url)}) was not found, so the saved copy is shown. <button class="link" data-act="replaceimg">Choose the image again</button></div>` : ""}
       ${this._footHtml()}
@@ -1378,14 +1514,15 @@ class DeviceFloorplanPanel extends HTMLElement {
       const on = locked || (s.layers[key] !== false && !angledOff);
       return `<button class="lrow ${on ? "" : "off"}" data-act="layer" data-key="${key}" ${locked || angledOff ? "disabled" : ""} aria-pressed="${on}"><span class="eye">${SVG.eye}</span><span class="l">${label}</span>${locked ? "<small>current step</small>" : angledOff ? "<small>angled image</small>" : ""}</button>`;
     };
-    const layers = `<div class="ovctl layerctl"><button class="ovbtn ${s.layersOpen ? "open" : ""}" data-act="layers" aria-label="Layers" title="Layers" aria-expanded="${s.layersOpen}">${SVG.layers}</button>
-      ${s.layersOpen ? `<div class="layerpop" role="dialog" aria-label="Layers"><h4>Show on the plan</h4>${row("refs", "Measurements")}${row("rooms", "Rooms")}${row("devices", "Devices")}${s.tool === "place" ? row("others", "Devices outside the filter") : ""}</div>` : ""}</div>`;
+    const phBtn = s.tool === "place" ? `<button class="ovbtn ${String(s.sel || "").startsWith("ph:") ? "on" : ""}" data-act="phnew" aria-label="New phantom" title="New phantom: one combined value from several devices"><ha-icon icon="dfp:phantom-plus"></ha-icon></button>` : "";
+    const layers = `<div class="ovctl layerctl">${this._extraCtlHtml ? this._extraCtlHtml() : ""}${phBtn}<div class="lwrap"><button class="ovbtn ${s.layersOpen ? "open" : ""}" data-act="layers" aria-label="Layers" title="Layers" aria-expanded="${s.layersOpen}">${SVG.layers}</button>
+      ${s.layersOpen ? `<div class="layerpop" role="dialog" aria-label="Layers"><h4>Show on the plan</h4>${row("refs", "Measurements")}${row("rooms", "Rooms")}${row("devices", "Devices")}${row("bonds", "Bonds")}${row("phantoms", "Phantoms")}${this._extraLayerRows ? this._extraLayerRows(row) : ""}${s.tool === "place" ? row("others", "Devices outside the filter") : ""}</div>` : ""}</div></div>`;
     const zoom = `<div class="ovctl zoomctl"><div class="zoom"><button data-act="zoomout" aria-label="Zoom out">−</button><span id="zl">${Math.round(s.z * 100)}%</span><button data-act="zoomin" aria-label="Zoom in">+</button><button class="fit" data-act="zoomfit">Fit</button></div></div>`;
     return scale + layers + zoom;
   }
 
   _svgOverlay() {
-    const parts = [];
+    const parts = [this._lightSvg()];
     const lr = this._layer("refs");
     if (this.work && lr !== "off") {
       this.work.refs.forEach((r, i) => {
@@ -1397,8 +1534,41 @@ class DeviceFloorplanPanel extends HTMLElement {
       const b = this.s.m2 || this.s.mh || this.s.m1;
       parts.push(`<line id="mline" x1="${this.s.m1.x * 10}" y1="${this.s.m1.y * 10}" x2="${b.x * 10}" y2="${b.y * 10}" stroke="#c2410c" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`);
     }
+    // Room shapes (#111): every room in its own see-through colour while marking rooms.
+    if (this.work && ((this.s.tool === "rooms" && this.s.layers.roomshapes !== false) || this.s.shapeEdit)) {
+      const cols = ["#4f9de0", "#7cc04b", "#f0a030", "#e57399", "#e8d24a", "#9b7be0", "#4fc1b5", "#e0784f"];
+      const colOf = (aid) => cols[[...aid].reduce((t, ch) => t + ch.charCodeAt(0), 0) % cols.length];
+      for (const [aid, sp0] of Object.entries(this.work.shapes || {})) {
+        if (aid === this.s.shapeEdit) continue;
+        const c = colOf(aid);
+        parts.push(`<polygon points="${sp0.map((p) => `${p[0] * 10},${p[1] * 10}`).join(" ")}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
+    if (this.work && this.s.shapeEdit && (this.work.shapes || {})[this.s.shapeEdit]) {
+      const sp = this.work.shapes[this.s.shapeEdit];
+      const pts = sp.map((p) => `${p[0] * 10},${p[1] * 10}`).join(" ");
+      parts.push(`<polygon points="${pts}" fill="rgba(255,255,255,.28)" stroke="none"/>`);
+      sp.forEach((p, i) => {
+        const q = sp[(i + 1) % sp.length];
+        parts.push(`<line x1="${p[0] * 10}" y1="${p[1] * 10}" x2="${q[0] * 10}" y2="${q[1] * 10}" stroke="#b3261e" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+      });
+    }
     // Device with a separate box / radio spot: dashed line when either is selected.
     const sel = this.s.sel && this.work && this.work.positions[this.s.sel];
+    const phSel = String(this.s.sel || "").startsWith("ph:") && this.work && (this.work.phantoms || {})[this.s.sel.slice(3)];
+    if (phSel) for (const m of phSel.members || []) {
+      const q = this.work.positions[m];
+      if (q) parts.push(`<line x1="${phSel.x * 10}" y1="${phSel.y * 10}" x2="${q.x * 10}" y2="${q.y * 10}" stroke="var(--primary-text-color)" stroke-width="1.4" stroke-dasharray="4 4" opacity=".7" vector-effect="non-scaling-stroke"/>`);
+    }
+    // Split device (#91): dashed lines from the device to the spots where its entities act.
+    if (sel && this.s.sel) {
+      const devId = sel.of || this.s.sel;
+      const dp = this.work.positions[devId];
+      if (dp) for (const k of this._splitSpots(devId)) {
+        const q = this.work.positions[k];
+        parts.push(`<line x1="${dp.x * 10}" y1="${dp.y * 10}" x2="${q.x * 10}" y2="${q.y * 10}" stroke="var(--df-primary)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
     if (sel && sel.box) parts.push(`<line x1="${sel.x * 10}" y1="${sel.y * 10}" x2="${sel.box.x * 10}" y2="${sel.box.y * 10}" stroke="var(--df-primary)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`);
     if (this._fanLines) for (const l of this._fanLines) parts.push(`<line x1="${l[0] * 10}" y1="${l[1] * 10}" x2="${l[2] * 10}" y2="${l[3] * 10}" stroke="var(--df-primary)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
     return parts.join("");
@@ -1424,6 +1594,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (!d || this.skipped.has(id) || this._bondLeader(id) !== id) continue;
       const st = pos.approx ? "approx" : "placed";
       const b = this._bondOf(id);
+      if (this.s.layers.bonds === false && (b || (d.parts && d.parts.length)) && !(b ? b[1].includes(this.s.sel) : this.s.sel === id)) continue;
       const match = b ? b[1].some((m) => this.byId.get(m) && this._markerMatch(this.byId.get(m), st)) : this._markerMatch(d, st);
       if (!match && !(b ? b[1].includes(this.s.sel) : this.s.sel === id)) continue;
       out.push({ d, pos, z: pos.z || 0 });
@@ -1469,6 +1640,16 @@ class DeviceFloorplanPanel extends HTMLElement {
     const lRooms = this._layer("rooms");
     const lDev = this._layer("devices");
     const lRefs = this._layer("refs");
+    // Room shape being drawn (#111): corners, "+" on edges, movable toolbox.
+    if (this.work && s.shapeEdit && (this.work.shapes || {})[s.shapeEdit]) {
+      const pts = this.work.shapes[s.shapeEdit];
+      pts.forEach((p, i) => {
+        parts.push(`<span class="shc" data-shc="${i}" data-x="${p[0]}" data-y="${p[1]}" title="Drag · double-click to remove"></span>`);
+        const q = pts[(i + 1) % pts.length];
+        parts.push(`<span class="shp" data-shp="${i}" data-x="${(p[0] + q[0]) / 2}" data-y="${(p[1] + q[1]) / 2}" title="Add a corner here">+</span>`);
+
+      });
+    }
     // room pins (under the devices)
     if (this.work && (lRooms !== "off" || s.placingRoom)) {
       for (const [aid, pos] of Object.entries(this.work.anchors)) {
@@ -1507,13 +1688,28 @@ class DeviceFloorplanPanel extends HTMLElement {
         const v = this._ringVars(front.d);
         const names = c.m.map((m) => m.d.name).join(" · ");
         parts.push(`<button class="mk ${fade} ${anySel ? "sel" : ""} ${v.c2 ? "two" : ""} ${front.pos.approx ? "approx" : ""}" data-cluster="${esc(front.d.id)}" data-x="${c.x}" data-y="${c.y}" style="--c1:${v.c1};--c2:${v.c2 || "transparent"}" aria-label="${esc(c.m.length + " devices: " + names)}" ${fade ? 'tabindex="-1"' : ""}>
-          <span class="ring">${this._iconHtml(front.d)}</span><span class="count">${c.m.length}</span><span class="tip">${esc(names)}</span></button>`);
+          <span class="ring">${this._iconHtml(front.d)}</span><span class="count stk">${c.m.length}</span><span class="tip">${esc(names)}</span></button>`);
+        if (s.stack === front.d.id && !fade) parts.push(this._stackPopHtml(c));
       }
       // separate box / radio spots (#23): small square, draggable in the Place step
       for (const [id, pos] of Object.entries(this.work.positions)) {
         const d = this.byId.get(id);
         if (!pos.box || !d || this.skipped.has(id)) continue;
-        parts.push(`<button class="bx ${fade} ${s.sel === id ? "sel" : ""}" data-box="${esc(id)}" data-x="${pos.box.x}" data-y="${pos.box.y}" aria-label="${esc(`Box / radio of ${d.name}`)}" ${fade ? 'tabindex="-1"' : ""}><span class="tip">${esc(`${d.name} · box / radio`)}</span></button>`);
+        parts.push(`<button class="bx ${fade} ${s.sel === id ? "sel" : ""}" data-box="${esc(id)}" data-x="${pos.box.x}" data-y="${pos.box.y}" aria-label="${esc(`Split device: box of ${d.name}`)}" ${fade ? 'tabindex="-1"' : ""}><span class="tip">${esc(`${d.name} · box / radio`)}</span></button>`);
+      }
+      // Light shape handles (#74) for the selected light.
+      if (s.sel && this.work.positions[s.sel] && !fade && this._isLight(s.sel)) parts.push(this._shapeHandles(this._shape(s.sel)));
+      if (s.sel && this.work.positions[s.sel] && !fade && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) {
+        const c = this._air(s.sel);
+        if (c.type === "cone") parts.push(`<span class="ahd" data-ah="1" data-x="${c.x + Math.cos((c.a * Math.PI) / 180) * c.r}" data-y="${c.y + Math.sin((c.a * Math.PI) / 180) * c.r * this._ratio()}" title="Drag: direction and reach of the air flow"></span>`);
+      }
+      // Phantoms (#60): bigger, inverted, dashed; members stay where they are.
+      if (s.layers.phantoms !== false || String(s.sel).startsWith("ph:")) {
+        for (const [pid, ph] of Object.entries(this.work.phantoms || {})) {
+          const n = (ph.members || []).filter((m) => this.work.positions[m]).length;
+          const sel = s.sel === `ph:${pid}`;
+          parts.push(`<button class="mk ph ${n < 2 ? "empty" : ""} ${sel ? "sel" : ""} ${fade && !sel ? "fade" : ""}" data-ph="${esc(pid)}" data-x="${ph.x}" data-y="${ph.y}" aria-label="${esc(`Phantom: ${ph.name || "Phantom"}`)}"><span class="ring"><ha-icon icon="${esc(ph.icon || "dfp:phantom")}"></ha-icon></span>${n ? `<span class="count phc">${n}</span>` : ""}<span class="tip">${esc(`Phantom · ${ph.name || "Phantom"}${n < 2 ? " · drag devices onto it" : ""}`)}</span></button>`);
+        }
       }
       // devices that no longer exist in HA
       for (const id of this._missingIds()) {
@@ -1523,8 +1719,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     // placing ghost
     if ((s.placing || s.placingRoom || s.placingBox) && s.hover) {
-      const d = (s.placing || s.placingBox) && this.byId.get(s.placing || s.placingBox);
-      const name = d ? (s.placingBox ? `${d.name} · box / radio` : d.name) : (this.areaById.get(s.placingRoom) || {}).name;
+      const pb = s.placingBox ? s.placingBox.split("|") : null;
+      const d = (s.placing || pb) && this.byId.get(s.placing || pb[0]);
+      const name = d ? (pb ? `${d.name} · ${pb[1] || "box / radio"}` : d.name) : (this.areaById.get(s.placingRoom) || {}).name;
       parts.push(`<span class="ghost" id="ghost" data-x="${s.hover.x}" data-y="${s.hover.y}"><span class="c"></span><span class="n">${esc(name)}</span></span>`);
     }
     // saved measurements: editable in the Measure step, a faded "2.40 m" otherwise
@@ -1556,6 +1753,58 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   /** Positions whose device is gone from HA (not merged into another device). */
+  /** The filter popup stays inside the right column (it scrolls, Done stays visible). */
+  _fitPop() {
+    // ⓘ explanations: next to their button, inside the window.
+    const ip = this.shadowRoot && this.shadowRoot.querySelector(".ipop");
+    if (ip) {
+      const b = ip.parentElement.querySelector(".itip").getBoundingClientRect();
+      const h = ip.offsetHeight;
+      ip.style.left = `${Math.max(8, Math.min(window.innerWidth - 268, b.right - 260))}px`;
+      ip.style.top = `${b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - h - 6) : b.bottom + 6}px`;
+    }
+    const pop = this.shadowRoot && this.shadowRoot.querySelector(".side .pop");
+    const side = pop && pop.closest(".side");
+    if (!pop || !side) return;
+    const room = side.getBoundingClientRect().bottom - pop.getBoundingClientRect().top - 10;
+    pop.style.maxHeight = `${Math.max(160, room)}px`;
+  }
+
+  /** Split device (#91): entity spots ("entity:<id>" with `of`) get a list-less item. */
+  _syncSplit() {
+    if (!this.work || !this.byId) return;
+    for (const [key, pos] of Object.entries(this.work.positions)) {
+      if (!pos.of || !key.startsWith("entity:")) continue;
+      const old = this.byId.get(key);
+      if (old && old.split && old.as === (pos.as || "")) continue;
+      const eid = key.slice(7);
+      const dev = this.byId.get(pos.of);
+      const so = this._hass && this._hass.states[eid];
+      const ent = dev && (dev.entities || []).find((e) => e.entity_id === eid);
+      const item = {
+        id: key, entity_id: eid, loose: true, split: true, of: pos.of, as: pos.as || "",
+        name: (ent && ent.name !== eid && ent.name) || (so && so.attributes.friendly_name) || eid,
+        manufacturer: null, model: null, area_id: dev ? dev.area_id : null, area_name: dev ? dev.area_name : null,
+        floor_id: dev ? dev.floor_id : null, integration: null, conns: [], virtual: false,
+        group: pos.as === "light" || eid.startsWith("light.") ? "lights" : pos.as === "fan" ? "climate" : "plugs_switches",
+        physical: false, main_entity: eid, entities: [], merged: [], parts: [], search: eid,
+      };
+      if (old) this.devices = this.devices.filter((x) => x !== old);
+      this.devices.push(item);
+      this.byId.set(key, item);
+    }
+  }
+
+  /** Entities of a device that can act somewhere else (#91). */
+  _switchables(d) {
+    return (d.entities || []).filter((e) => !e.other && ["light", "switch", "cover", "fan", "climate", "valve"].includes(e.domain));
+  }
+
+  _splitSpots(devId) {
+    if (!this.work) return [];
+    return Object.entries(this.work.positions).filter(([k, p]) => p.of === devId && k.startsWith("entity:")).map(([k]) => k);
+  }
+
   _missingIds() {
     if (!this.work) return [];
     return Object.keys(this.work.positions).filter((id) => !this.byId.has(id) && !this.mergedInto[id] && !this.partOf[id]);
@@ -1568,10 +1817,18 @@ class DeviceFloorplanPanel extends HTMLElement {
     const b = this._bondOf(d.id);
     const members = b ? b[1].filter((m) => this.work.positions[m]) : [d.id];
     const selHere = members.includes(s.sel);
-    const cls = ["mk", fade, v.c2 ? "two" : "", pos && pos.approx ? "approx" : "", selHere ? "sel" : "", members.includes(s.flash) ? "flash" : "", b ? "bond" : ""].join(" ");
-    const names = members.map((m) => (this.byId.get(m) || {}).name || m).join(" + ");
-    return `<button class="${cls}" data-mk="${esc(d.id)}" data-x="${x}" data-y="${y}" style="--c1:${v.c1};--c2:${v.c2 || "transparent"}" aria-label="${esc(b ? `Bonded: ${names}` : d.name)}" ${fade ? 'tabindex="-1"' : ""}>
-      <span class="ring">${this._iconHtml(d)}</span>${b ? `<span class="count bondc">×${members.length}</span>` : ""}<span class="tip">${esc(b ? `Bonded · ${names}` : d.name)}${pos && pos.approx ? " · approx" : ""}</span></button>`;
+    const auto = !b && d.parts && d.parts.length ? d.parts.length + 1 : 0;
+    const cls = ["mk", fade, v.c2 ? "two" : "", pos && pos.approx ? "approx" : "", selHere ? "sel" : "", members.includes(s.flash) ? "flash" : "", b || auto ? "bond" : ""].join(" ");
+    const names = members.map((m) => (this.byId.get(m) || {}).name || m);
+    const bname = b ? this._bondName(b) : "";
+    const tip = b ? `<b>${esc(bname)}</b> · bonded${this._shortNames(names).map((n) => `<br>${esc(n)}`).join("")}` : esc(d.name) + (auto ? ` · bonded ×${auto}` : "");
+    return `<button class="${cls}" data-mk="${esc(d.id)}" data-x="${x}" data-y="${y}" style="--c1:${v.c1};--c2:${v.c2 || "transparent"}" aria-label="${esc(b ? `Bonded: ${bname} (${names.join(", ")})` : d.name)}" ${fade ? 'tabindex="-1"' : ""}>
+      <span class="ring">${b && this._bondMeta(b[0]).icon ? `<ha-icon icon="${esc(this._bondMeta(b[0]).icon)}"></ha-icon>` : this._iconHtml(d)}</span>${b ? `<span class="count bondc">×${members.length}</span>` : auto ? `<span class="count bondc">×${auto}</span>` : ""}<span class="tip ${b ? "multi" : ""}">${tip}${pos && pos.approx ? " · approx" : ""}</span></button>`;
+  }
+
+  _stackPopHtml(c) {
+    const rows = c.m.map((m) => `<button class="si" data-act="stackpick" data-id="${esc(m.d.id)}"><span class="ico">${this._iconHtml(m.d)}</span>${esc(this._bondOf(m.d.id) ? this._bondName(this._bondOf(m.d.id)) : m.d.name)}</button>`).join("");
+    return `<div class="stackpop" data-x="${c.x}" data-y="${c.y}" role="dialog" aria-label="Devices on this spot"><div class="sh">${c.m.length} on this spot · not bonded<button class="link" data-act="stackfan" data-id="${esc(c.m[0].d.id)}">Spread out to drag</button></div>${rows}</div>`;
   }
 
   _mboxInner() {
@@ -1633,12 +1890,71 @@ class DeviceFloorplanPanel extends HTMLElement {
       </div></div>`;
   }
 
+  _shapeBoxHtml() {
+    const aid = this.s.shapeEdit;
+    if (!aid || !this.work || !(this.work.shapes || {})[aid]) return "";
+    const a = this.areaById.get(aid);
+    const pos = this.s.shapeBox || { x: 12, y: 12 };
+    return `<div class="shbox" id="shbox" style="left:${pos.x}px;top:${pos.y}px"><div class="shgrip" data-shgrip="1" title="Move">⋮⋮ <b>${esc(a ? a.name : aid)}</b> · shape</div>
+      <div class="shtip">Drag the corners · "+" adds a corner · double-click removes one. Edges snap straight · hold Alt for a free angle. Let shapes overlap where rooms are open to each other (open-plan kitchen, a door); leave a small gap where there is a wall: light stops at gaps.</div>
+      <div class="shacts"><button data-act="shapereset">Reset to rectangle</button><button data-act="shapedel">🗑 Remove</button><button class="pri" data-act="shapedone">Done</button></div></div>`;
+  }
+
+  /** A rectangle around the room pin (or the plan centre). */
+  _shapeRect(aid) {
+    const p = (this.work.anchors || {})[aid] || { x: 50, y: 50 };
+    const w = 12, h = 14;
+    return [[clamp(p.x - w, 0, 100), clamp(p.y - h, 0, 100)], [clamp(p.x + w, 0, 100), clamp(p.y - h, 0, 100)], [clamp(p.x + w, 0, 100), clamp(p.y + h, 0, 100)], [clamp(p.x - w, 0, 100), clamp(p.y + h, 0, 100)]];
+  }
+
+  /** Snap a dragged corner so its edges to both neighbours come out straight (unless Alt). */
+  _shapeSnap(pts, i, p, alt) {
+    if (alt) return p;
+    const n = pts.length;
+    const prev = pts[(i - 1 + n) % n];
+    const next = pts[(i + 1) % n];
+    const vpW = this._vpW || 800;
+    const vpH = this._vpH || 500;
+    const z = this.s.z || 1;
+    const tol = 9; // px on screen
+    let { x, y } = p;
+    let snapped = false;
+    for (const q of [prev, next]) {
+      if (Math.abs((x - q[0]) * vpW * z) / 100 < tol) { x = q[0]; snapped = true; }
+      if (Math.abs((y - q[1]) * vpH * z) / 100 < tol) { y = q[1]; snapped = true; }
+    }
+    this._shSnapped = snapped;
+    return { x, y };
+  }
+
+  /** 0.5.1 (#85): the saved room point is the centre of the name. Older anchors were the pin's
+   *  tip (pill up-right of it): move them once so names stay where they were seen. */
+  _centerAnchors() {
+    const plan = this._plan();
+    if (!plan || !this.work || plan.anchors_centered || !this._vpW || !this._vpH) return;
+    plan.anchors_centered = true;
+    const z = this.s.z || 1;
+    const names = Object.keys(this.work.anchors);
+    if (names.length) {
+      for (const aid of names) {
+        const a = this.areaById && this.areaById.get(aid);
+        const w = String(a ? a.name : aid).length * 6.8 + 30;
+        const p = this.work.anchors[aid];
+        p.x = clamp(p.x + ((w / 2 - 7) * 100) / (this._vpW * z), 0, 100);
+        p.y = clamp(p.y - (11 * 100) / (this._vpH * z), 0, 100);
+      }
+    }
+    this._ws("plan/update", { plan_id: plan.id, anchors: this.work.anchors, anchors_centered: true }).catch(() => {});
+    if (names.length) requestAnimationFrame(() => this._render());
+  }
+
   /** Position stage + overlay elements for the current zoom/pan (no re-render). */
   _layout() {
     if (!this._vp) return;
     const r = this._vp.getBoundingClientRect();
     this._vpW = r.width;
     this._vpH = r.height;
+    this._centerAnchors();
     const { z, tx, ty } = this.s;
     const stage = this.shadowRoot.getElementById("stage");
     if (stage) stage.style.transform = `translate(${tx}%, ${ty}%) scale(${z})`;
@@ -1721,12 +2037,11 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _roomsSideHtml() {
-    const rooms = this._roomsForPlan();
+    const allRooms = this._roomsForPlan(true);
+    const rooms = allRooms.filter((r) => r.count);
+    const empty = allRooms.filter((r) => !r.count);
     const left = rooms.filter((r) => !r.pos && !r.ignored).length;
-    const rows = rooms
-      .slice()
-      .sort((a, b) => (a.pos || a.ignored ? 1 : 0) - (b.pos || b.ignored ? 1 : 0) || a.name.localeCompare(b.name))
-      .map((r) => {
+    const roomRow = (r) => {
         const on = !!r.pos;
         if (r.ignored && !on) {
           return `<div class="row done hiddenrow"><span class="main" style="cursor:default"><span class="ico">${SVG.pin}</span><span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">hidden · its ${r.count} devices are out of the list</span></span><span class="pill grey">hidden</span></span>
@@ -1735,16 +2050,21 @@ class DeviceFloorplanPanel extends HTMLElement {
         const active = this.s.placingRoom === r.area_id;
         return `<div class="row ${on ? "done" : "todo"} ${active ? "sel" : ""}" draggable="true" data-room="${esc(r.area_id)}">
           <button class="main" data-act="pickroom" data-id="${esc(r.area_id)}"><span class="ico" style="color:${on ? "var(--df-primary)" : "var(--df-sec)"}">${SVG.pin}</span>
-          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.count} devices</span></span>
+          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.count ? `${r.count} device${r.count > 1 ? "s" : ""}` : "no devices yet"}</span></span>
           <span class="pill ${on ? "ok" : ""}">${on ? "✓ on plan" : active ? "click on plan" : "drag to plan"}</span></button>
+          ${on ? `<button class="shbtn ${(this.work.shapes || {})[r.area_id] ? "done" : ""} ${this.s.shapeEdit === r.area_id ? "act" : ""}" data-act="shapeedit" data-id="${esc(r.area_id)}" title="Draw the room's shape – its lights stay inside">${(this.work.shapes || {})[r.area_id] ? "Shape ✓" : "Shape"}</button>` : ""}
           ${on ? `<button class="small" data-act="unpin" data-id="${esc(r.area_id)}" title="Take the pin off the plan" aria-label="Take the pin off the plan">${SVG.close}</button>` : ""}
           <button class="small eyeon" data-act="ignore" data-id="${esc(r.area_id)}" title="Hide: not on this plan" aria-label="Hide ${esc(r.name)}: not on this plan">${SVG.eye}</button></div>`;
-      })
-      .join("");
+      };
+    const rows = rooms
+      .slice()
+      .sort((a, b) => (a.pos || a.ignored ? 1 : 0) - (b.pos || b.ignored ? 1 : 0) || a.name.localeCompare(b.name))
+      .map(roomRow)
+      .join("") + (empty.length ? `<div class="lgh" style="padding:10px 12px 4px;font-size:12px;font-weight:500;color:var(--df-sec)">Empty rooms · no devices yet</div>` + empty.slice().sort((a, b) => a.name.localeCompare(b.name)).map(roomRow).join("") : "");
     const scope = this._plan().floor_id && this._plan().kind === "floor" ? "on this floor" : "with devices";
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan"><div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
       <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p></div>
-      <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms with devices${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas.</p>`}</div></aside>`;
+      <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
   }
 
   _devicesSideHtml() {
@@ -1760,7 +2080,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     this._shownOrder = [];
     const newCount = scoped.filter((d) => this._isNew(d) && statuses.get(d.id) !== "skipped").length;
 
-    const counts = (key, val) => scoped.filter((d) => statuses.get(d.id) !== "skipped" || s.status.includes("skipped")).filter((d) => (key === "conn" ? d.conns.includes(val) : d.group === val)).length;
+    const counts = (key, val) => scoped.filter((d) => statuses.get(d.id) !== "skipped" || s.status.includes("skipped")).filter((d) => (key === "conn" ? d.conns.includes(val) : this._inType(d, val))).length;
     const real = (key) => s[key].filter((x) => x !== "__none__");
     const fbtn = (key, label) => {
       const on = s[key].length > 0;
@@ -1773,7 +2093,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       let chips = "";
       // Progress, not totals (#44): "7 left", or a green ✓ when everything of that kind is placed.
       const prog = (key, val) => {
-        const items = scoped.filter((d) => statuses.get(d.id) !== "skipped" && statuses.get(d.id) !== "hiddenroom" && (key === "conn" ? d.conns.includes(val) : d.group === val));
+        const items = scoped.filter((d) => statuses.get(d.id) !== "skipped" && statuses.get(d.id) !== "hiddenroom" && (key === "conn" ? d.conns.includes(val) : this._inType(d, val)));
         const left = items.filter((d) => statuses.get(d.id) === "unplaced").length;
         return { left, total: items.length, on: items.filter((d) => ["placed", "approx"].includes(statuses.get(d.id))).length };
       };
@@ -1906,9 +2226,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     const done = st === "placed" || st === "approx" || st === "elsewhere" || st === "skipped" || st === "hiddenroom";
     const area = (s.groupBy !== "room" || s.q.trim()) && d.area_name ? `<span>${esc(d.area_name)}</span>` : "";
     const hitName = this._matchedEntity(d);
-    const hit = hitName ? `<span class="hit">matches: ${esc(hitName)}</span>` : "";
+    // #91: an entity of a device matched: say it's part of the device (and where it acts).
+    const hitEnt = hitName && (d.entities || []).find((x) => x.name === hitName || x.entity_id === hitName);
+    const hitSpot = hitEnt && this.work && this.work.positions[`entity:${hitEnt.entity_id}`];
+    const hit = hitName ? `<span class="hit">${esc(hitName)} · ${hitSpot ? "placed where it acts" : hitEnt && this._switchables(d).includes(hitEnt) && this.work && this.work.positions[d.id] ? "part of this device · can sit where it acts" : "part of this device"}</span>` : "";
     const ent = d.loose ? `<span>${esc(d.entity_id)}</span>` : "";
-    const parts = d.parts && d.parts.length ? `<span>+${d.parts.length} part${d.parts.length > 1 ? "s" : ""}</span>` : "";
+    const rb = this.work && this.work.positions[d.id] && this._bondOf(d.id);
+    const parts = d.parts && d.parts.length ? `<span style="color:var(--df-ok)">🔗 Bonded ×${d.parts.length + 1}</span>` : rb ? `<span style="color:var(--df-ok)" title="${esc(this._bondName(rb))}">🔗 Bonded</span>` : "";
     const meta = isNew + bat + area + parts + ent + hit;
     return `<div class="row ${done ? "done" : "todo"} ${s.sel === d.id || s.placing === d.id ? "sel" : ""}" draggable="${st === "skipped" ? "false" : "true"}" data-dev="${esc(d.id)}">
       <button class="main" data-act="pick" data-id="${esc(d.id)}">${this._avatarHtml(d)}
@@ -1919,6 +2243,9 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _detailsHtml() {
     const s = this.s;
+    if (String(s.sel || "").startsWith("ph:")) return this._phantomCardHtml(s.sel.slice(3));
+    const sb = s.sel && this.work && this.work.positions[s.sel] && this._bondOf(s.sel);
+    if (sb && s.memberView !== s.sel) return this._bondCardHtml(sb);
     if (s.sel && !this.byId.has(s.sel) && this.work && this.work.positions[s.sel]) {
       const cand = this.devices.filter((x) => this._inScope(x) && ["unplaced", "hiddenroom"].includes(this._status(x)));
       return `<div class="details"><div class="top"><span class="ico" style="width:36px;height:36px;font-weight:700">?</span>
@@ -1932,6 +2259,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     const st = this._status(d);
     const onPlan = st === "placed" || st === "approx";
     const close = `<button class="small" data-act="desel" aria-label="Close">${SVG.close}</button>`;
+    if (d.split) {
+      const dev = this.byId.get(d.of);
+      return `<div class="details"><div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
+        <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc(d.entity_id)} · part of ${esc(dev ? dev.name : "a device")}</div></div>${close}</div>
+        <div class="note">Split device: ${esc(dev ? dev.name : "the device")} sits where its hardware is, this ${esc(d.entity_id.split(".")[0])} shows here, where it acts. ${this._tip("split")}</div>
+        ${d.entity_id.startsWith("light.") ? "" : `<label class="fl">Acts as<select data-act="splitas"><option value="">${esc(d.entity_id.split(".")[0])} (as in Home Assistant)</option>${[["light", "Light"], ["switch", "Switch"], ["fan", "Fan"], ["other", "Other"]].map(([k, l]) => `<option value="${k}" ${d.as === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>`}
+        ${this._lightSectionHtml(d)}${this._airSectionHtml(d)}
+        <div class="acts"><button class="btn" data-act="selid" data-id="${esc(d.of)}">Go to ${esc(dev ? dev.name : "device")}</button><button class="btn" data-act="info" data-id="${esc(d.id)}">${SVG.info}More info</button><button class="btn danger" data-act="splitdel" data-id="${esc(d.id)}">✕ Back to the device</button></div></div>`;
+    }
     if (d.loose) {
       const acts = [];
       if (st === "approx") acts.push(`<button class="btn primary" data-act="confirm">Confirm position</button>`);
@@ -1941,11 +2277,12 @@ class DeviceFloorplanPanel extends HTMLElement {
       return `<div class="details"><div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
         <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc(d.entity_id)} · entity without a device</div></div>${close}</div>
         <div class="note">Placed on its own: the card shows this entity at this spot.${st === "unplaced" ? " Click on the plan to put it there, or drag it from the list." : ""}</div>
-        <div class="acts">${acts.join("")}</div></div>`;
+        <div class="acts">${acts.join("")}</div>${onPlan ? this._lightSectionHtml(d) : ""}</div>`;
     }
     const badges = d.conns.map((c) => `<span class="badge" style="color:${(CONN[c] || CONN.other).color};background:color-mix(in srgb, ${(CONN[c] || CONN.other).color} 14%, transparent)">${(CONN[c] || CONN.other).label}</span>`).join(" ");
     const stLabel = { placed: "✓ Confirmed position", approx: "◌ Approximate position", unplaced: "Not on the plan yet", hiddenroom: "Its room is hidden on this plan", skipped: "Skipped · nothing changes in HA", elsewhere: `On ${(this._otherFloorPlan(d) || {}).name || "another floor"}` }[st];
     const acts = [];
+    const more = !!s.more;
     if (st === "approx") acts.push(`<button class="btn primary" data-act="confirm">Confirm position</button>`);
     if (st === "unplaced" || st === "hiddenroom") acts.push(`<button class="btn primary" data-act="placeit">Place on plan</button>`);
     if (st === "elsewhere") acts.push(`<button class="btn primary" data-act="movehere">Move to this floor</button>`);
@@ -1953,26 +2290,42 @@ class DeviceFloorplanPanel extends HTMLElement {
     acts.push(`<button class="btn" data-act="info" data-id="${esc(d.id)}">${SVG.info}More info</button>`);
     acts.push(`<button class="btn" data-act="devpage">Device page${SVG.ext}</button>`);
     if (onPlan) acts.push(`<button class="btn danger" data-act="remove">Remove from plan</button>`);
-    if (st !== "skipped") acts.push(`<button class="link" data-act="skipone">Skip this device</button>`);
+    const skipBtn = st !== "skipped" ? `<button class="link" style="align-self:flex-start;padding:0" data-act="skipone">Skip this device</button>` : "";
     let stack = "";
     if (onPlan) {
       const cl = this._clusters().find((c) => c.m.some((m) => m.d.id === d.id));
       if (cl && cl.m.length > 1) {
         const others = cl.m.filter((m) => m.d.id !== d.id).map((m) => m.d.name).join(", ");
-        stack = `<div class="note">Shares this spot with ${esc(others)}. <button class="link" data-act="front">Bring to front</button><button class="link" data-act="back">Send to back</button></div>`;
+        const same = cl.m.filter((m) => m.d.id !== d.id && this._canBond(d.id, m.d.id));
+        stack = `<div class="note">Same spot as ${esc(others)} · not bonded. <button class="link" data-act="front">Bring to front</button><button class="link" data-act="back">Send to back</button>${same.length ? `<button class="link" data-act="bondask" data-id="${esc(same[0].d.id)}">Bond with ${esc(same[0].d.name)}…</button>` : ""}</div>`;
       }
     }
     const bnd = this._bondOf(d.id);
-    const bondNote = bnd && onPlan ? `<div class="note">🔗 <b>Bonded</b> with ${esc(bnd[1].filter((m) => m !== d.id).map((m) => (this.byId.get(m) || {}).name || m).join(", "))}: one marker, switched on and off together on the card. <button class="link" data-act="unbond">Unbond</button></div>` : "";
-    const bondHint = !bnd && onPlan && this._bondKind(d) ? `<div style="font-size:12px;color:var(--df-sec)">Tip: drag another ${this._bondKind(d) === "light" ? "light" : this._bondKind(d) === "cover" ? "cover" : "switch"} onto this one and hold to bond them.</div>` : "";
-    const merged = d.merged.length ? `<div class="note">One dot for one device: <b>${esc(d.merged.join(", "))}</b> ${d.merged.length > 1 ? "are" : "is"} merged in automatically (connected via this device, no entities of its own).</div>` : "";
+    const back = bnd && onPlan ? `<button class="link back" data-act="bondback">‹ Back to bond “${esc(this._bondName(bnd))}”</button>` : "";
+    const bondNote = "";
+    const phIn = Object.values((this.work && this.work.phantoms) || {}).filter((ph) => (ph.members || []).includes(d.id));
+    const phNote = phIn.length && onPlan ? `<div class="note">Part of phantom ${phIn.map((ph) => `<b>${esc(ph.name || "Phantom")}</b>`).join(", ")} ${this._tip("phantom")}</div>` : "";
+    const bondHint = !bnd && onPlan && st !== "skipped" ? `<div style="font-size:12px;color:var(--df-sec)">Tip: drag another device onto this one if they are one thing (like bulbs in one lamp) ${this._tip("bond")}</div>` : "";
+    const merged = d.merged.length ? `<div style="font-size:12px;color:var(--df-sec)" title="${esc(d.merged.join(", "))}">Includes its twin device${d.merged.length > 1 ? "s" : ""}</div>` : "";
     // Parts (#28): printer + AMS, NAS + drives… one row, one marker.
+    // Automatic bonds (were "parts", #28/#60): printer + AMS, NAS + drives… one device, one marker.
     let parts = "";
     if (d.parts && d.parts.length) {
-      parts = `<div class="note parts"><div><b>Includes ${d.parts.length} part${d.parts.length > 1 ? "s" : ""}</b> · they follow this device and their entities count for it</div>
-        ${d.parts.map((p) => `<div>· ${esc(p.name)}${p.model ? ` <span style="color:var(--df-sec)">(${esc(p.model)})</span>` : ""}<button class="link" data-act="partown" data-id="${esc(p.id)}">Show as its own device</button></div>`).join("")}</div>`;
+      parts = `<div class="note parts"><div class="bh"><span class="bcount">×${d.parts.length + 1}</span><b>Bonded automatically</b>${this._tip("autobond")}</div>
+        <div style="color:var(--df-sec)">One device on the plan and the card; their entities count for it.</div>
+        ${d.parts.map((p) => `<div class="prow"><span class="pn"><b title="${esc(p.name)}">${esc(p.name)}</b>${p.model ? `<small>${esc(p.model)}</small>` : ""}</span><button class="btn" data-act="partown" data-id="${esc(p.id)}">Unbond</button></div>`).join("")}</div>`;
     } else if (d.part_override === "own") {
-      parts = `<div class="note">Shown as its own device (you split it from its parent). <button class="link" data-act="partauto" data-id="${esc(d.id)}">Make it a part again</button></div>`;
+      parts = `<div class="note">Unbonded: shown as its own device (it stays that way). <button class="link" data-act="partauto" data-id="${esc(d.id)}">Bond automatically again</button></div>`;
+    }
+    // Hubs and bridges (#65): what connects through what.
+    let conn = "";
+    if (!d.loose) {
+      const kids = this.devices.filter((x) => !x.loose && x.via === d.id);
+      const hub = d.via && this.byId.get(d.via);
+      const bits = [];
+      if (hub) bits.push(`Connected through <button class="link" style="padding:0" data-act="selid" data-id="${esc(hub.id)}">${esc(hub.name)}</button>`);
+      if (kids.length) bits.push(`${kids.length} device${kids.length > 1 ? "s connect" : " connects"} through it: ${kids.slice(0, 6).map((k) => esc(k.name)).join(", ")}${kids.length > 6 ? ` +${kids.length - 6}` : ""}`);
+      if (bits.length) conn = `<div style="font-size:12px;color:var(--df-sec)">${bits.join(" · ")}</div>`;
     }
     // What the marker shows (#34, #43): every entity of the device, grouped; "linked" only for
     // an entity from outside the device, and only while it is the chosen one.
@@ -2012,15 +2365,30 @@ class DeviceFloorplanPanel extends HTMLElement {
       ${now ? `<div style="font-size:12px;color:var(--df-sec);margin-top:-6px">Now: <b style="color:var(--primary-text-color);font-weight:500">${esc(now)}</b> · numbers and states show on the card</div>` : ""}
       ${picking ? `<label style="font-size:12px;color:var(--df-sec);display:flex;flex-direction:column;gap:4px">Any entity, also a helper: type its name or id<input class="ent" id="otherent" list="entlist" placeholder="binary_sensor.dryer_running" autocomplete="off"><datalist id="entlist">${entIds.map((x) => `<option value="${esc(x)}">${esc((this._hass.states[x].attributes || {}).friendly_name || "")}</option>`).join("")}</datalist></label>` : ""}
       <label class="chk"><input type="checkbox" data-act="onlymain" ${this.deviceOpts[d.id] && this.deviceOpts[d.id].only_main ? "checked" : ""}> The card uses only this entity</label>`;
-    // Separate spot for the box / radio (#23), e.g. a wall switch driving a ceiling lamp.
+    // Split device (#91): the device sits at its hardware; switchable entities can sit where they act.
     let box = "";
     if (onPlan) {
-      const pos = this.work.positions[d.id];
-      box = pos.box
-        ? `<div class="note">▣ The box / radio has its own spot (Network and Health views use it). <button class="link" data-act="boxdel">Remove</button></div>`
-        : s.placingBox === d.id
-          ? `<div class="note">Click on the plan where the box / radio is. <button class="link" data-act="boxcancel">Cancel</button></div>`
-          : `<button class="link" style="align-self:flex-start;padding:0" data-act="boxadd">📍 Box / radio is somewhere else</button>`;
+      const sw = this._switchables(d);
+      const spots = this._splitSpots(d.id);
+      if (sw.length) {
+        const open = spots.length || s.splitOpen === d.id;
+        if (!open) {
+          box = `<span style="display:flex;align-items:center;gap:6px"><button class="link" style="align-self:flex-start;padding:0" data-act="splitopen">📍 Split: it controls something elsewhere</button>${this._tip("split")}</span>${sw.length > 1 ? `<div style="font-size:12px;color:var(--df-sec)">It has ${sw.length} switches: each can sit where it acts.</div>` : ""}`;
+        } else {
+          const rows = sw.map((e) => {
+            const key = `entity:${e.entity_id}`;
+            const placed = spots.includes(key);
+            const placing = s.placingBox === `${d.id}|${e.entity_id}`;
+            const nm = (e.name && e.name !== e.entity_id ? e.name : null) || ((this._hass && this._hass.states[e.entity_id] && this._hass.states[e.entity_id].attributes.friendly_name) || e.entity_id);
+            const btn = placed
+              ? `<span class="pill ok">✓ placed</span><button class="small" data-act="locate" data-id="${esc(key)}" title="Show on plan" aria-label="Show on plan">${SVG.locate}</button><button class="small" data-act="splitdel" data-id="${esc(key)}" title="Back to the device" aria-label="Back to the device">✕</button>`
+              : placing ? `<span style="font-size:12px">Click on the plan…</span><button class="link" data-act="boxcancel">Cancel</button>`
+                : `<button class="link" data-act="splitplace" data-id="${esc(e.entity_id)}">Place where it acts</button>`;
+            return `<div class="srow"><span class="snm" title="${esc(e.entity_id)}">${esc(nm)}</span>${btn}</div>`;
+          }).join("");
+          box = `<div class="note split"><div><b>Split device</b> ${this._tip("split")}</div><div style="color:var(--df-sec)">The device stays where its hardware is (Network, Health). What it switches can sit where it acts.</div>${rows}</div>`;
+        }
+      }
     }
     // One click to clean up software-heavy integrations (NAS, routers, cloud).
     let skipInt = "";
@@ -2029,11 +2397,351 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (same.length > 1) skipInt = `<button class="link" style="align-self:flex-start;padding:0" data-act="skipint" data-int="${esc(d.integration)}">Skip all ${same.length} not on the plan from ${esc(this._intName(d.integration))}</button>`;
     }
     const hint = st === "unplaced" || st === "hiddenroom" ? `<div style="font-size:12px;color:var(--df-sec)">Click on the plan to put it there, drag it from the list, use Auto-place, or skip it if you don't want it on the plan.</div>` : "";
-    return `<div class="details"><div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
+    const lightSec = onPlan && this._lightSectionHtml ? this._lightSectionHtml(d) : "";
+    const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
+    const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
+    return `<div class="details">${back}<div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
       <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${bondNote}${merged}${parts}${stack}${mainSel}${box}<div class="acts">${acts.join("")}</div>${skipInt}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+  }
+
+  // ------------------------------------------------------- light shapes (#74)
+  _realW() {
+    const p = this._plan();
+    const sc = this._scale();
+    return sc.x && p && p.width ? sc.x * p.width : null;
+  }
+
+  _defaultShape(type, lamp = true) {
+    const W = this._realW();
+    const m = (v, pct) => (W ? (v / W) * 100 : pct);
+    if (type === "spot") return lamp ? { type, r: m(0.8, 3.5) } : { type, r: m(0.5, 2.2) };
+    if (type === "strip") return { type, r: m(0.5, 2.5) };
+    if (type === "panel") return { type, w: m(1.2, 6) };
+    if (type === "wall") return { type, r: m(1.2, 5), a: 90 };
+    if (type === "none") return { type };
+    return { type: "bulb", r: m(1.5, 6) };
+  }
+
+  /** Type filter: its own group, and "Lights" also for anything with a light (wall switches with light channels). */
+  _inType(d, t) {
+    if (d.group === t) return true;
+    return t === "lights" && !d.split && (d.entities || []).some((x) => x.domain === "light");
+  }
+
+  /** Light entities of a device that are NOT placed elsewhere (#106). */
+  _ownLights(d) {
+    const spots = new Set(this._splitSpots(d.id).map((k) => k.slice(7)));
+    return (d.entities || []).filter((x) => x.domain === "light" && !spots.has(x.entity_id));
+  }
+
+  /** #115: an AC / thermostat on the plan (its own climate entity, or a split climate spot). */
+  _climateEnt(id) {
+    const d = this.byId.get(id);
+    if (!d) return null;
+    if (d.split || d.loose) return String(d.entity_id || "").startsWith("climate.") ? d.entity_id : null;
+    const spots = new Set(this._splitSpots(d.id).map((k) => k.slice(7)));
+    const e = (d.entities || []).find((x) => x.domain === "climate" && !spots.has(x.entity_id));
+    return e ? e.entity_id : null;
+  }
+
+  /** Can it cool (an AC)? Heat-only climates (radiators) get a warm glow on the card instead of a cone. */
+  _canCool(eid) {
+    const st = eid && this._hass && this._hass.states[eid];
+    const modes = (st && st.attributes.hvac_modes) || [];
+    return modes.includes("cool") || modes.includes("heat_cool") || modes.includes("dry") || modes.includes("fan_only");
+  }
+
+  /** The AC's air-flow cone: stored, or a default pointing into the room. */
+  _air(id) {
+    const pos = this.work.positions[id];
+    if (!pos) return null;
+    const W = this._realW();
+    const R = this._ratio();
+    const d = this.byId.get(id);
+    let a = 90;
+    const anc = d && d.area_id && this.work.anchors[d.area_id];
+    if (anc && (Math.abs(anc.x - pos.x) > 0.5 || Math.abs(anc.y - pos.y) > 0.5)) a = Math.round((Math.atan2((anc.y - pos.y) / R, anc.x - pos.x) * 180) / Math.PI);
+    const def = { a, r: W ? (2 / W) * 100 : 10, s: 60 };
+    if (pos.air && pos.air.type === "none") return { type: "none", ...def, x: pos.x, y: pos.y };
+    return { type: "cone", ...def, ...(pos.air || {}), x: pos.x, y: pos.y, auto: !pos.air };
+  }
+
+  _airSvg(c, sel) {
+    if (!c || c.type === "none") return "";
+    const R = this._ratio();
+    const pt = (deg, r) => [(c.x + Math.cos((deg * Math.PI) / 180) * r) * 10, (c.y + Math.sin((deg * Math.PI) / 180) * r * R) * 10];
+    const [x1, y1] = pt(c.a - c.s / 2, c.r);
+    const [x2, y2] = pt(c.a + c.s / 2, c.r);
+    return `<path d="M${c.x * 10},${c.y * 10} L${x1},${y1} A${c.r * 10},${c.r * R * 10} 0 0 1 ${x2},${y2} Z" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  _airSectionHtml(d) {
+    const eid = this.work.positions[d.id] && this._climateEnt(d.id);
+    if (!eid) return "";
+    if (!this._canCool(eid)) return `<div class="lsec air"><div class="lh">🔥 Heating on the plan</div><div style="font-size:12px;color:var(--df-sec)">Heat only (radiator, underfloor): the card shows a soft warm glow here while it heats.</div></div>`;
+    const c = this._air(d.id);
+    const W = this._realW();
+    const v = (pct) => (W ? ((pct * W) / 100).toFixed(1) : pct.toFixed(1));
+    const sp = c.s <= 40 ? "35" : c.s >= 80 ? "90" : "60";
+    return `<div class="lsec air"><div class="lh">🌬 Air flow on the plan<small>${c.auto ? "automatic" : "set by you"}</small></div>
+      <div class="lchips"><button class="${c.type === "cone" ? "on" : ""}" data-act="airtype" data-type="cone">Air flow</button><button class="${c.type === "none" ? "on" : ""}" data-act="airtype" data-type="none">None</button></div>
+      ${c.type === "cone" ? `<div class="lsz"><label>Reach <input id="airr" inputmode="decimal" value="${v(c.r)}"></label>${W ? "m" : "% of the plan"}<label>Spread <select id="airs"><option value="35" ${sp === "35" ? "selected" : ""}>Narrow</option><option value="60" ${sp === "60" ? "selected" : ""}>Normal</option><option value="90" ${sp === "90" ? "selected" : ""}>Wide</option></select></label></div>` : ""}
+      <div style="font-size:12px;color:var(--df-sec)">${c.type === "none" ? "No air flow on the card." : "Drag the blue handle on the plan to point it into the room. While cooling or heating, the card shows the air flowing (blue cool, orange heat), kept inside the room's shape."}</div></div>`;
+  }
+
+  /** Has this device (or its bond) a light? Light shapes live on the bond's leader (#84). */
+  _isLight(id) {
+    const b = this._bondOf(id);
+    const ids = b ? b[1] : [id];
+    return ids.some((m) => {
+      const d = this.byId.get(m);
+      if (!d) return false;
+      if (d.split) return d.entity_id.startsWith("light.") || d.as === "light";
+      if (d.loose) return String(d.entity_id || "").startsWith("light.");
+      const e = this.mainEntity[d.id] || d.main_entity;
+      const spots = new Set(this._splitSpots(d.id).map((k) => k.slice(7)));
+      return (e && e.startsWith("light.") && !spots.has(e)) || this._ownLights(d).length > 0;
+    });
+  }
+
+  /** A real lamp gets a bulb automatically; anything else starts with no shape (#84). */
+  _isLamp(id) {
+    const b = this._bondOf(id);
+    const ids = b ? b[1] : [id];
+    return ids.some((m) => {
+      const d = this.byId.get(m);
+      if (!d) return false;
+      if (d.split) return d.entity_id.startsWith("light.") || d.as === "light";
+      if (d.loose) return String(d.entity_id || "").startsWith("light.");
+      return d.group === "lights" && this._ownLights(d).length > 0;
+    });
+  }
+
+  _shape(id) {
+    const lead = this._bondLeader(id);
+    const pos = this.work.positions[lead];
+    if (!pos) return null;
+    const lamp = this._isLamp(id);
+    const s = pos.light && pos.light.type ? { ...this._defaultShape(pos.light.type, lamp), ...pos.light } : this._defaultShape(lamp ? "bulb" : "none");
+    if (s.type === "strip" && (s.x2 == null || s.y2 == null)) Object.assign(s, { x2: clamp(pos.x + 8, 0, 100), y2: pos.y });
+    if (s.type === "panel" && s.h == null) s.h = s.w * this._ratio();
+    return { ...s, x: pos.x, y: pos.y, auto: !pos.light, lead };
+  }
+
+  _ratio() {
+    const p = this._plan();
+    return p && p.width && p.height ? p.width / p.height : 1.6;
+  }
+
+  _shapeSvg(s, cls) {
+    const R = this._ratio();
+    const lc = lightCss(s.color); // #112: preview the chosen colour
+    const fill = lc ? `fill="${lc}" fill-opacity="${cls === "sel" ? ".28" : ".14"}"` : `fill="rgba(245,158,11,${cls === "sel" ? ".14" : ".06"})"`;
+    const st = cls === "sel" ? `${fill} stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 4"` : `${fill} stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3 4" opacity=".7"`;
+    const ve = `vector-effect="non-scaling-stroke"`;
+    if (s.type === "none") return "";
+    if (s.type === "strip") return `<line x1="${s.x * 10}" y1="${s.y * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" stroke="rgba(245,158,11,.35)" stroke-width="${Math.max(4, s.r * 6)}" stroke-linecap="round"/><line x1="${s.x * 10}" y1="${s.y * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" ${st} ${ve}/>`;
+    if (s.type === "panel") return `<rect x="${(s.x - s.w / 2) * 10}" y="${(s.y - s.h / 2) * 10}" width="${s.w * 10}" height="${s.h * 10}" rx="4" ${st} ${ve}/>`;
+    if (s.type === "wall") {
+      const a = ((s.a ?? 90) * Math.PI) / 180;
+      const rx = s.r * 10;
+      const ry = s.r * R * 10;
+      const p0 = [s.x * 10 + Math.cos(a - Math.PI / 2) * rx, s.y * 10 + Math.sin(a - Math.PI / 2) * ry];
+      const p1 = [s.x * 10 + Math.cos(a + Math.PI / 2) * rx, s.y * 10 + Math.sin(a + Math.PI / 2) * ry];
+      return `<path d="M${p0[0]},${p0[1]} A${rx},${ry} 0 0 1 ${p1[0]},${p1[1]} Z" ${st} ${ve}/>`;
+    }
+    return `<ellipse cx="${s.x * 10}" cy="${s.y * 10}" rx="${s.r * 10}" ry="${s.r * R * 10}" ${st} ${ve}/>`;
+  }
+
+  /** Handles for the selected light's shape (drag on the plan). */
+  _shapeHandles(s) {
+    const R = this._ratio();
+    if (!s || s.type === "none") return "";
+    if (s.type === "strip") return `<span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag the end of the strip"></span>`;
+    if (s.type === "panel") return `<span class="lhd" data-lh="corner" data-x="${s.x + s.w / 2}" data-y="${s.y + s.h / 2}" title="Drag to size the panel"></span>`;
+    if (s.type === "wall") {
+      const a = ((s.a ?? 90) * Math.PI) / 180;
+      return `<span class="lhd" data-lh="wall" data-x="${s.x + Math.cos(a) * s.r}" data-y="${s.y + Math.sin(a) * s.r * R}" title="Drag: size and direction"></span>`;
+    }
+    return `<span class="lhd" data-lh="r" data-x="${s.x + s.r}" data-y="${s.y}" title="Drag to size the light"></span>`;
+  }
+
+  /** #112: colour for lights that don't report one (smart bulbs: Auto = their real colour). */
+  _lightColourHtml(s) {
+    const col = s.color || "auto";
+    const k = col.startsWith("k:") ? Number(col.slice(2)) : 3000;
+    const hex = col.startsWith("#") ? col : "#ffd27f";
+    return `<div class="lcol"><span>Colour</span><button class="${col === "auto" ? "on" : ""}" data-act="lightauto" title="Use the real colour of smart lights. Plain lights glow warm white.">Auto</button>
+      <input type="range" id="lightk" min="2200" max="6500" step="100" value="${k}" class="${col.startsWith("k:") ? "on" : ""}" aria-label="Warm to cool white" title="Pick a white: warm ↔ cool">
+      <input type="color" id="lighthex" value="${hex}" class="${col.startsWith("#") ? "on" : ""}" aria-label="Custom colour" title="Pick any colour"></div>`;
+  }
+
+  _lightSectionHtml(d) {
+    if (!this.work.positions[d.id] || !this._isLight(d.id)) return "";
+    const s = this._shape(d.id);
+    const W = this._realW();
+    const v = (pct) => (W ? ((pct * W) / 100).toFixed(1) : pct.toFixed(1));
+    const u = W ? "m" : "% of the plan";
+    const types = [["bulb", "Bulb"], ["spot", "Spot"], ["strip", "Strip"], ["panel", "Panel"], ["wall", "Wall lamp"], ["none", "None"]];
+    let size = "";
+    if (s.type === "panel") size = `<label>Width <input id="lightw" inputmode="decimal" value="${v(s.w)}"></label><label>Height <input id="lighth" inputmode="decimal" value="${v((s.h / this._ratio()))}"></label>${u}`;
+    else if (s.type !== "none") size = `<label>${s.type === "strip" ? "Glow width" : "Radius"} <input id="lightr" inputmode="decimal" value="${v(s.r)}"></label>${u}`;
+    return `<div class="lsec"><div class="lh">💡 Light on the plan<small>${s.auto ? "automatic" : "set by you"}</small></div>
+      <div class="lchips">${types.map(([k, l]) => `<button class="${s.type === k && !(s.auto && k !== "bulb") ? "on" : ""}" data-act="lighttype" data-type="${k}">${l}</button>`).join("")}</div>
+      ${size ? `<div class="lsz">${size}</div>` : ""}
+      ${s.type === "none" ? "" : this._lightColourHtml(s)}
+      <div style="font-size:12px;color:var(--df-sec)">${s.type === "none" ? "No light pool on the card." : "Drag the orange handle on the plan. The card draws a soft light pool here when the light is on."}${this._bondOf(d.id) ? " One shape for the whole bond." : ""}</div></div>`;
+  }
+
+  _extraCtlHtml() {
+    if (this.s.tool !== "place") return "";
+    return `<button class="ovbtn ${this.s.nightPrev ? "on" : ""}" data-act="nightprev" aria-pressed="${!!this.s.nightPrev}" title="See it at night: all light shapes glow as if on" aria-label="See it at night">${SVG.moon}</button>`;
+  }
+
+  _extraLayerRows() {
+    const on = this.s.layers.lightshapes === true;
+    const sh = this.s.layers.roomshapes !== false;
+    const hasShapes = this.work && Object.keys(this.work.shapes || {}).length;
+    return `${hasShapes ? `<button class="lrow ${sh ? "" : "off"}" data-act="layer" data-key="roomshapes" aria-pressed="${sh}"><span class="eye">${SVG.eye}</span><span class="l">Room shapes</span></button>` : ""}<button class="lrow ${on ? "" : "off"}" data-act="layer" data-key="lightshapes" aria-pressed="${on}"><span class="eye">${SVG.eye}</span><span class="l">Light shapes</span></button>`;
+  }
+
+  /** Night preview and light-shape outlines in the SVG layer. */
+  _lightSvg() {
+    if (!this.work) return "";
+    const s = this.s;
+    const lights = Object.keys(this.work.positions).filter((id) => this.byId.get(id) && !this.skipped.has(id) && this._bondLeader(id) === id && this._isLight(id));
+    let out = "";
+    if (s.nightPrev) {
+      const R = this._ratio();
+      out += `<defs><radialGradient id="lglow"><stop offset="0" stop-color="rgb(255,196,120)" stop-opacity=".95"/><stop offset=".55" stop-color="rgb(255,180,90)" stop-opacity=".45"/><stop offset="1" stop-color="rgb(255,170,80)" stop-opacity="0"/></radialGradient></defs><rect x="0" y="0" width="1000" height="1000" fill="rgba(10,16,38,.72)"/>`;
+      for (const id of lights) {
+        const sh = this._shape(id);
+        if (!sh || sh.type === "none") continue;
+        const ells = sh.type === "strip" ? [0, 1, 2, 3, 4].map((i) => ({ x: sh.x + ((sh.x2 - sh.x) * i) / 4, y: sh.y + ((sh.y2 - sh.y) * i) / 4, rx: sh.r, ry: sh.r * R }))
+          : sh.type === "panel" ? [{ x: sh.x, y: sh.y, rx: sh.w * 0.8, ry: sh.h * 0.8 }]
+            : sh.type === "wall" ? [{ x: sh.x + Math.cos(((sh.a ?? 90) * Math.PI) / 180) * sh.r * 0.45, y: sh.y + Math.sin(((sh.a ?? 90) * Math.PI) / 180) * sh.r * 0.45 * R, rx: sh.r * 0.9, ry: sh.r * 0.9 * R }]
+              : [{ x: sh.x, y: sh.y, rx: sh.r, ry: sh.r * R }];
+        for (const e of ells) out += `<ellipse cx="${e.x * 10}" cy="${e.y * 10}" rx="${e.rx * 10}" ry="${e.ry * 10}" fill="url(#lglow)" style="mix-blend-mode:screen"/>`;
+      }
+    }
+    const selLead = s.sel && this.work.positions[s.sel] && this._isLight(s.sel) ? this._bondLeader(s.sel) : null;
+    if (s.layers.lightshapes === true) for (const id of lights) if (id !== selLead) out += this._shapeSvg(this._shape(id), "");
+    if (selLead) out += this._shapeSvg(this._shape(selLead), "sel");
+    if (s.sel && this.work.positions[s.sel] && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) out += this._airSvg(this._air(s.sel), true);
+    return out;
+  }
+
+  // ------------------------------------------------------- bonds & phantoms (#56–#62)
+  _tip(key) {
+    if (this.s.guide === false) return "";
+    const T = {
+      bond: ["Bond", "Several physical devices on the same spot, treated as one device: one marker on the card, switched together, value combined (2 of 3 on, lowest battery). Unbond any time.", "bonds"],
+      autobond: ["Bonded automatically", "This device is connected through the other one, comes from the same integration, has no network of its own and its name starts with the other's name or model. Unbond it if you want them separate.", "bonds"],
+      phantom: ["Phantom", "One combined value from devices anywhere in your home, shown like a device: average temperature, any window open, motion anywhere. Its devices stay where they are.", "phantoms"],
+      split: ["Split device", "The device sits where its hardware is; each light or switch it controls can sit where it acts. Network and Health show the device.", "split"],
+      stack: ["Same spot", "Devices on the same spot stay separate devices. Bond them only if they are one thing.", "bonds"],
+    }[key];
+    if (!T) return "";
+    const on = this.s.itip === key;
+    return `<span class="itipw"><button class="itip ${on ? "on" : ""}" data-act="itip" data-key="${key}" aria-label="What is ${esc(T[0])}?" aria-expanded="${on}">i</button>${on ? `<span class="ipop" role="note"><b>${esc(T[0])}</b>${esc(T[1])} <a href="${DOCS}together/${T[2]}" target="_blank" rel="noopener">Learn more</a><button class="x" data-act="itip" data-key="${key}" aria-label="Close">✕</button></span>` : ""}</span>`;
+  }
+
+  _bondMeta(bid) {
+    return ((this.work && this.work.bond_meta) || {})[bid] || {};
+  }
+
+  _commonPrefix(names) {
+    if (names.length < 2) return "";
+    let p = names[0];
+    for (const n of names) while (p && !n.startsWith(p)) p = p.slice(0, -1);
+    if (names.every((n) => n.length === p.length || /[\s\-_·.,]/.test(n[p.length]))) return p;
+    const m = p.match(/^(.*[\s\-_·.,])/);
+    return m ? m[1] : "";
+  }
+
+  _shortNames(names) {
+    const p = this._commonPrefix(names);
+    if (p.trim().length < 3) return names.slice();
+    return names.map((n) => n.slice(p.length).replace(/^[\s\-_·.,]+/, "").trim() || n);
+  }
+
+  _bondName(b) {
+    const meta = this._bondMeta(b[0]);
+    if (meta.name) return meta.name;
+    const names = b[1].filter((m) => this.work.positions[m]).map((m) => (this.byId.get(m) || {}).name || m);
+    const p = this._commonPrefix(names).replace(/[\s\-_·.,]+$/, "").trim();
+    return p.length >= 3 ? `${p} ×${names.length}` : names[0] || "Bond";
+  }
+
+  _bondMeaning(ids) {
+    const doms = ids.map((m) => { const d = this.byId.get(m); const e = d && (this.mainEntity[d.id] || d.main_entity); return e ? e.split(".")[0] : ""; });
+    const dcs = ids.map((m) => { const d = this.byId.get(m); const e = d && (this.mainEntity[d.id] || d.main_entity); const so = e && this._hass && this._hass.states[e]; return (so && so.attributes.device_class) || ""; });
+    if (doms.every((x) => ["light", "switch", "fan", "media_player", "cover", "valve"].includes(x))) return "Switched together on the card · shows “2 of 3 on”";
+    if (dcs.every((x) => ["motion", "occupancy", "presence"].includes(x))) return "Detected if any of them detects";
+    if (dcs.every((x) => ["door", "window", "opening", "garage_door"].includes(x))) return "Open if any of them is open";
+    if (dcs.every((x) => ["temperature", "humidity"].includes(x))) return "One value: the average (the card can show lowest, highest or one)";
+    return "One marker on the card; tap does what the first device does";
+  }
+
+  _memberRow(m, actOut, label) {
+    const d = this.byId.get(m);
+    const v = d ? this._ringVars(d) : { c1: "var(--df-sec)" };
+    const ent = d && (this.mainEntity[d.id] || d.main_entity);
+    const so = ent && this._hass ? this._hass.states[ent] : null;
+    const state = so ? (this._hass.formatEntityState ? this._hass.formatEntityState(so) : so.state) : "";
+    return `<div class="mem"><span class="cring" style="--c1:${v.c1}">${d ? this._iconHtml(d) : "?"}</span><button class="link" data-act="memopen" data-id="${esc(m)}" title="${esc(d ? d.name : m)}">${esc(label)}</button><span class="mst">${esc(state)}</span><button class="small" data-act="${actOut}" data-id="${esc(m)}" aria-label="Take ${esc(d ? d.name : m)} out" title="Take out">${SVG.close}</button></div>`;
+  }
+
+  _bondCardHtml(b) {
+    const s = this.s;
+    const ids = b[1].filter((m) => this.work.positions[m]);
+    const meta = this._bondMeta(b[0]);
+    const names = ids.map((m) => (this.byId.get(m) || {}).name || m);
+    const short = this._shortNames(names);
+    const lead = this.byId.get(ids[0]);
+    const more = !!s.more;
+    const moreBox = ""; // tap and "2 of 3" moved to the card (Edit markers)
+    return `<div class="details bondcard"><div class="top"><span class="ico" style="width:36px;height:36px">${meta.icon ? `<ha-icon icon="${esc(meta.icon)}"></ha-icon>` : lead ? this._iconHtml(lead) : SVG.link}</span>
+      <div style="flex:1;min-width:0"><input class="nmin" id="bondname" data-bond="${esc(b[0])}" value="${esc(this._bondName(b))}" aria-label="Bond name" maxlength="60"><div class="sub bh"><span class="bcount">×${ids.length}</span>Bonded · one device ${this._tip("bond")}</div></div>
+      <button class="small" data-act="desel" aria-label="Close">${SVG.close}</button></div>
+      <div style="font-size:12px;color:var(--df-sec)">${esc(this._bondMeaning(ids))}</div>
+      <div class="mems">${ids.map((m, i) => this._memberRow(m, "bout", short[i])).join("")}</div>
+      <div style="font-size:12px;color:var(--df-sec)">Add more: drag a device onto this marker.</div>
+      ${this._lightSectionHtml(this.byId.get(ids[0]) || { id: ids[0] })}
+      <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button><button class="btn danger" data-act="remove">Remove from plan</button></div>${moreBox}</div>`;
+  }
+
+  /** #103: which entities of a member count (default: all its readings). */
+  _phUsesHtml(pid, ph, m) {
+    const d = this.byId.get(m);
+    if (!d || d.loose) return "";
+    const cands = (d.entities || []).filter((e) => ["sensor", "binary_sensor", "climate"].includes(e.domain));
+    if (cands.length < 2) return "";
+    const uses = (ph.uses || {})[m] || [];
+    const open = this.s.phUses === m;
+    const label = uses.length ? `${uses.length} of ${cands.length}` : "All readings";
+    const list = open ? `<div class="uses">${cands.map((e) => `<label class="chk"><input type="checkbox" data-act="phuse" data-ph="${esc(pid)}" data-m="${esc(m)}" data-e="${esc(e.entity_id)}" ${!uses.length || uses.includes(e.entity_id) ? "checked" : ""}> ${esc(e.name && e.name !== e.entity_id ? e.name : e.entity_id)} <small>${esc(e.domain)}</small></label>`).join("")}</div>` : "";
+    return `<div class="usesrow"><button class="link" data-act="phusesopen" data-id="${esc(m)}">Uses: ${esc(label)} ${open ? "▴" : "▾"}</button>${list}</div>`;
+  }
+
+  _phantomCardHtml(pid) {
+    const ph = (this.work.phantoms || {})[pid];
+    if (!ph) return "";
+    const ids = (ph.members || []).filter((m) => this.work.positions[m]);
+    const names = ids.map((m) => (this.byId.get(m) || {}).name || m);
+    const vsel = ph.value || "average";
+    return `<div class="details phcard"><div class="top"><span class="ico" style="width:36px;height:36px"><ha-icon icon="${esc(ph.icon || "dfp:phantom")}"></ha-icon></span>
+      <div style="flex:1;min-width:0"><input class="nmin" id="phname" data-ph="${esc(pid)}" value="${esc(ph.name || "Phantom")}" aria-label="Phantom name" maxlength="60"><div class="sub bh"><span class="bcount ph">${ids.length}</span>Phantom · combined value ${this._tip("phantom")}</div></div>
+      <button class="small" data-act="desel" aria-label="Close">${SVG.close}</button></div>
+      ${ids.length < 2 ? `<div class="note"><b>Drag devices that are already on the plan onto this phantom.</b> They join it and jump back to their own spot. With 2 or more it's ready: move it wherever you want it shown.</div>` : ""}
+      ${ids.length ? `<div style="font-size:12px;font-weight:500">Combined devices</div><div class="mems">${ids.map((m, i) => this._memberRow(m, "phout", names[i]) + this._phUsesHtml(pid, ph, m)).join("")}</div>` : ""}
+      <label class="fl">Value on the card (numbers)<select data-act="phvalue"><option value="average" ${vsel === "average" ? "selected" : ""}>Average</option><option value="min" ${vsel === "min" ? "selected" : ""}>Lowest</option><option value="max" ${vsel === "max" ? "selected" : ""}>Highest</option><option value="one" ${vsel === "one" ? "selected" : ""}>One device</option></select></label>
+      ${vsel === "one" ? `<label class="fl">Which device<select data-act="phone">${ids.map((m, i) => `<option value="${esc(m)}" ${ph.one === m ? "selected" : ""}>${esc(names[i])}</option>`).join("")}</select></label>` : ""}
+      <div style="font-size:12px;color:var(--df-sec)">Motion: detected if any · doors and windows: open if any. The card can show it with its own popup and graph.</div>
+      <div class="acts"><button class="btn danger" data-act="phdel">Delete phantom</button></div></div>`;
   }
 
   _toastHtml() {
@@ -2064,6 +2772,14 @@ class DeviceFloorplanPanel extends HTMLElement {
       const n = dlg.ids.length;
       return wrap(`<h2>Hide ${esc(a ? a.name : "this room")}?</h2><p>${n} device${n > 1 ? "s" : ""} from ${esc(a ? a.name : "this room")} ${n > 1 ? "are" : "is"} already on the plan. Keep ${n > 1 ? "them" : "it"} there, or take ${n > 1 ? "them" : "it"} off the plan too?</p>
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn" data-act="hideroom" data-keep="1">Keep ${n > 1 ? "them" : "it"}</button><button class="btn primary" data-act="hideroom" data-keep="0">Remove ${n > 1 ? "them" : "it"}</button></div>`, 480);
+    }
+    if (dlg.type === "bondask") {
+      const A = this.byId.get(dlg.a) || { name: "This device" };
+      const B = this.byId.get(dlg.b) || { name: "the other device" };
+      return `<div class="modal" data-act="modalbg"><div class="dialog bondask" role="dialog" aria-modal="true" style="max-width:480px"><h2>${esc(A.name)} is now on the same spot as ${esc(B.name)}</h2>
+        <p>Are they one thing (like bulbs in one lamp), or just placed close together?</p>
+        <div class="acts" style="flex-wrap:wrap"><button class="btn" data-act="bondno">Keep separate – just the same spot</button><button class="btn primary" data-act="bondyes">Bond them – one device on the card</button></div>
+        <p style="font-size:12px;color:var(--df-sec);margin:4px 0 0">ⓘ A bond shows as one marker and is switched together. You can unbond any time.</p></div></div>`;
     }
     if (dlg.type === "ready") return wrap(this._readyHtml(), 580);
     if (dlg.type === "added") return wrap(this._addedHtml(), 520);
@@ -2114,14 +2830,15 @@ class DeviceFloorplanPanel extends HTMLElement {
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="opendash" data-path="${esc(dash.path)}">Open dashboard (${esc(dash.title)})</button>${preview}<button class="btn" data-act="toadddash">+ Add to another dashboard</button></div>
         <details class="box"><summary style="cursor:pointer">What's in Home Assistant</summary>${haBox.replace("<b>What's in Home Assistant</b><br>", "")}</details>
         <p>${later}</p>
-        <div class="acts"><button class="btn" data-act="closedlg">Keep editing</button></div>`;
+        <div class="acts"><button class="btn" data-act="closedlg">Done</button></div>`;
     }
     return `<h2 class="okttl">${SVG.okcircle}Your ${esc(p.name)} plan is ready to use</h2>
       <div class="stat"><span><b>${placed}</b> device${placed === 1 ? "" : "s"} placed</span>${approx ? `<span><b>${approx}</b> approximate</span>` : ""}<span style="color:var(--df-sec)">${notYet} not placed yet</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="toadddash">Add to dashboard</button>${preview}</div>
+      <div style="font-size:13px;color:var(--df-sec)">Already have a floorplan card? Edit it and tick this floor under <b>Floors</b>.</div>
       <div class="box">${haBox}</div>
       <p>${later}</p>
-      <div class="acts"><button class="btn" data-act="closedlg">Keep editing</button></div>`;
+      <div class="acts"><button class="btn" data-act="closedlg">Done</button></div>`;
   }
 
   _addedHtml() {
@@ -2276,6 +2993,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     const root = this.shadowRoot;
     root.addEventListener("click", (e) => this._onClick(e));
     root.addEventListener("change", (e) => this._onChange(e));
+    root.addEventListener("dblclick", (e) => {
+      const c = e.target.closest && e.target.closest("[data-shc]");
+      const pts = c && this.s.shapeEdit && (this.work.shapes || {})[this.s.shapeEdit];
+      if (!pts || pts.length <= 3) return;
+      e.preventDefault();
+      this._change(() => pts.splice(Number(c.dataset.shc), 1));
+    });
     root.addEventListener("input", (e) => this._onInput(e));
     root.addEventListener("pointerdown", (e) => this._onDown(e));
     root.addEventListener("pointermove", (e) => this._onMove(e));
@@ -2346,6 +3070,22 @@ class DeviceFloorplanPanel extends HTMLElement {
     } else if (t.id === "otherent") {
       const v = t.value.trim();
       if (this._hass && this._hass.states[v] && this.s.sel) this._setMain(this.s.sel, v, true);
+    } else if (t.id === "bondname" || t.id === "bondicon") {
+      const b = this._bondOf(this.s.sel);
+      if (!b) return;
+      const meta = { ...this._bondMeta(b[0]) };
+      const k = t.id === "bondname" ? "name" : "icon";
+      const v = t.value.trim();
+      if (v && (k === "name" || v.includes(":"))) meta[k] = v;
+      else delete meta[k];
+      this.work.bond_meta = { ...(this.work.bond_meta || {}), [b[0]]: meta };
+      this._scheduleSave();
+    } else if (t.id === "phname") {
+      const ph = (this.work.phantoms || {})[t.dataset.ph];
+      if (ph) {
+        ph.name = t.value.trim() || "Phantom";
+        this._scheduleSave();
+      }
     } else if (t.id === "rname") {
       this.s.dialog.name = t.value;
     } else if (t.id === "fname" || t.id === "flevel") {
@@ -2361,6 +3101,93 @@ class DeviceFloorplanPanel extends HTMLElement {
       const fl = t.value.startsWith("floor:") && this.floors.find((x) => `floor:${x.floor_id}` === t.value);
       if (fl && (!this.s.form.name || this.floors.some((x) => x.name === this.s.form.name))) this.s.form.name = fl.name;
       this._render();
+      return;
+    }
+    if (t.id === "bondname" || t.id === "bondicon" || t.id === "phname") return this._render();
+    if (act === "phuse") {
+      const ph = (this.work.phantoms || {})[t.dataset.ph];
+      const m = t.dataset.m;
+      const d = this.byId.get(m);
+      if (!ph || !d) return;
+      const all = (d.entities || []).filter((e) => ["sensor", "binary_sensor", "climate"].includes(e.domain)).map((e) => e.entity_id);
+      const box = t.closest(".uses");
+      const checked = [...box.querySelectorAll("input[data-act=phuse]")].filter((x) => x.checked).map((x) => x.dataset.e);
+      this._change(() => {
+        const u = { ...(ph.uses || {}) };
+        if (!checked.length || checked.length === all.length) delete u[m];
+        else u[m] = checked;
+        if (Object.keys(u).length) ph.uses = u;
+        else delete ph.uses;
+      });
+      return;
+    }
+    if (act === "splitas") {
+      const key = this.s.sel;
+      if (this.work.positions[key]) this._change(() => {
+        if (t.value) this.work.positions[key].as = t.value;
+        else delete this.work.positions[key].as;
+      });
+      return;
+    }
+    if (t.id === "airr" || t.id === "airs") {
+      const pos = this.work.positions[this.s.sel];
+      if (!pos) return;
+      const cur = this._air(this.s.sel);
+      const v = parseFloat(String(t.value).replace(",", "."));
+      if (!(v > 0)) return this._render();
+      const W = this._realW();
+      this._change(() => {
+        pos.air = { a: cur.a, r: cur.r, s: cur.s, ...(t.id === "airr" ? { r: W ? (v / W) * 100 : v } : { s: v }) };
+      });
+      return;
+    }
+    if (t.id === "lightk" || t.id === "lighthex") {
+      const lead = this._bondLeader(this.s.sel);
+      const pos = this.work.positions[lead];
+      if (!pos) return;
+      const cur = this._shape(lead);
+      this._change(() => {
+        pos.light = { ...(pos.light || { type: cur.type }), type: cur.type, color: t.id === "lightk" ? `k:${t.value}` : t.value };
+      });
+      return;
+    }
+    if (t.id === "lightr" || t.id === "lightw" || t.id === "lighth") {
+      const lead = this._bondLeader(this.s.sel);
+      const pos = this.work.positions[lead];
+      const v = parseFloat(String(t.value).replace(",", "."));
+      if (!pos || !(v > 0)) return this._render();
+      const W = this._realW();
+      const pct = W ? (v / W) * 100 : v;
+      const cur = this._shape(lead);
+      this._change(() => {
+        const l = { ...(pos.light || { type: cur.type }), type: cur.type };
+        if (t.id === "lightr") l.r = pct;
+        if (t.id === "lightw") { l.w = pct; if (l.h == null) l.h = cur.h; }
+        if (t.id === "lighth") { l.h = pct * this._ratio(); if (l.w == null) l.w = cur.w; }
+        if (cur.type === "strip" && l.x2 == null) Object.assign(l, { x2: cur.x2, y2: cur.y2 });
+        pos.light = l;
+      });
+      return;
+    }
+    if (act === "bondtap" || act === "bondshow") {
+      const b = this._bondOf(this.s.sel);
+      if (!b) return;
+      const meta = { ...this._bondMeta(b[0]) };
+      const k = act === "bondtap" ? "tap" : "show";
+      if (t.value) meta[k] = t.value;
+      else delete meta[k];
+      this._change(() => (this.work.bond_meta = { ...(this.work.bond_meta || {}), [b[0]]: meta }));
+      return;
+    }
+    if (act === "phvalue" || act === "phone") {
+      const ph = (this.work.phantoms || {})[String(this.s.sel).slice(3)];
+      if (!ph) return;
+      this._change(() => {
+        if (act === "phvalue") {
+          ph.value = t.value;
+          if (t.value === "one" && !ph.one) ph.one = (ph.members || [])[0];
+        } else ph.one = t.value;
+      });
       return;
     }
     if (t.id === "file") return this._uploadFile(this._plan(), t.files && t.files[0]);
@@ -2454,9 +3281,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!el) return;
     const act = el.dataset.act;
     if (this.s.menu && e.target.closest(".menu")) this.s.menu = null;
-    if (["colorby", "names", "groupby", "allfloors", "queue", "guidebox", "mainent", "onlymain", "setupchk", "setupauto", "formimg", "dashkey", "dashwhere", "dashview", "replacedev"].includes(act)) return;
+    if (["colorby", "names", "groupby", "allfloors", "queue", "guidebox", "mainent", "onlymain", "setupchk", "setupauto", "formimg", "dashkey", "dashwhere", "dashview", "replacedev", "bondtap", "bondshow", "phvalue", "phone"].includes(act)) return;
     if (act === "modalbg") {
-      if (e.target === el) this._closeDialog();
+      if (e.target === el && !(this.s.dialog && this.s.dialog.type === "bondask")) this._closeDialog();
       return;
     }
     const s = this.s;
@@ -2588,7 +3415,8 @@ class DeviceFloorplanPanel extends HTMLElement {
         this._render();
         break;
       case "layer":
-        s.layers = { ...s.layers, [el.dataset.key]: s.layers[el.dataset.key] === false };
+        if (el.dataset.key === "lightshapes") s.layers = { ...s.layers, lightshapes: s.layers.lightshapes !== true };
+        else s.layers = { ...s.layers, [el.dataset.key]: s.layers[el.dataset.key] === false };
         lsSet("layers", s.layers);
         s.layersOpen = true;
         this._render();
@@ -2772,8 +3600,71 @@ class DeviceFloorplanPanel extends HTMLElement {
         await this._ws("devices/options", { device_id: id, part: act === "partown" ? "own" : null }).catch((err) => this._saveError(err));
         this.deviceOpts[id] = { ...(this.deviceOpts[id] || {}), part: act === "partown" ? "own" : undefined };
         await this._reloadDevices();
-        this._toast(act === "partown" ? "Shown as its own device" : "It's a part again: it follows its parent", false);
+        if (act === "partown" && s.sel && this.work && this.work.positions[s.sel] && !this.work.positions[id]) {
+          // Unbonded: it stays on the same spot as its own device (#62).
+          const pp = this.work.positions[s.sel];
+          this._change(() => (this.work.positions[id] = { x: pp.x, y: pp.y, ...(pp.approx ? { approx: true } : {}) }));
+        }
+        this._toast(act === "partown" ? "Unbonded: its own device on the same spot (it stays unbonded)" : "Bonded automatically again: one device with its parent", false);
         break;
+      case "shapeedit": {
+        const aid = el.dataset.id;
+        if (s.shapeEdit === aid) { s.shapeEdit = null; this._render(); break; }
+        s.shapeEdit = aid;
+        if (!(this.work.shapes || {})[aid]) this._change(() => { this.work.shapes = { ...(this.work.shapes || {}), [aid]: this._shapeRect(aid) }; });
+        else this._render();
+        break;
+      }
+      case "shapereset":
+        if (s.shapeEdit) this._change(() => (this.work.shapes[s.shapeEdit] = this._shapeRect(s.shapeEdit)));
+        break;
+      case "shapedel":
+        if (s.shapeEdit) {
+          const aid = s.shapeEdit;
+          s.shapeEdit = null;
+          this._change(() => delete this.work.shapes[aid]);
+        }
+        break;
+      case "shapedone":
+        s.shapeEdit = null;
+        this._render();
+        break;
+      case "phusesopen":
+        s.phUses = s.phUses === el.dataset.id ? null : el.dataset.id;
+        this._render();
+        break;
+      case "airtype": {
+        const pos = this.work.positions[s.sel];
+        if (!pos) break;
+        const cur = this._air(s.sel);
+        this._change(() => (pos.air = el.dataset.type === "none" ? { type: "none" } : { a: cur.a, r: cur.r, s: cur.s }));
+        break;
+      }
+      case "lightauto": {
+        const lead = this._bondLeader(s.sel);
+        const pos = this.work.positions[lead];
+        if (pos && pos.light) this._change(() => delete pos.light.color);
+        break;
+      }
+      case "splitopen":
+        s.splitOpen = s.sel;
+        this._render();
+        break;
+      case "splitplace":
+        s.placingBox = `${s.sel}|${el.dataset.id}`;
+        s.placing = null;
+        this._render();
+        break;
+      case "splitdel": {
+        const key = el.dataset.id;
+        const of = this.work.positions[key] && this.work.positions[key].of;
+        this._change(() => delete this.work.positions[key]);
+        const it = this.byId.get(key);
+        if (it && it.split) { this.byId.delete(key); this.devices = this.devices.filter((x) => x !== it); }
+        if (s.sel === key) s.sel = of || null;
+        this._toast("Back to the device: it shows at the device's spot");
+        break;
+      }
       case "boxadd":
         s.placingBox = s.sel;
         s.placing = null;
@@ -2866,6 +3757,132 @@ class DeviceFloorplanPanel extends HTMLElement {
         this._toast("Unbonded: it has its own marker again");
         break;
       }
+      case "bout": {
+        const b = this._bondOf(id);
+        const d = this.byId.get(id);
+        this._change(() => this._unbond(id));
+        if (b && !this._bondOf(s.sel)) s.memberView = null;
+        if (s.sel === id && this._bondOf(b ? b[1].find((m) => m !== id) : null)) s.sel = this._bondLeader(b[1].find((m) => m !== id));
+        this._render();
+        this._toast(`${d ? d.name : "Device"} left the bond · same spot, its own device`);
+        break;
+      }
+      case "unbondall": {
+        const b = this._bondOf(s.sel);
+        if (!b) break;
+        this._change(() => {
+          delete this.work.bonds[b[0]];
+          if (this.work.bond_meta) delete this.work.bond_meta[b[0]];
+        });
+        s.memberView = null;
+        this._render();
+        this._toast(`Unbonded: ${b[1].length} devices, each on its own, same spot`);
+        break;
+      }
+      case "bondask":
+        s.dialog = { type: "bondask", a: s.sel, b: id };
+        this._render();
+        break;
+      case "bondyes": {
+        const dl = s.dialog;
+        s.dialog = null;
+        if (!dl) break;
+        const target = this._bondLeader(dl.b);
+        const ids = (this._bondOf(dl.a) || [null, [dl.a]])[1].filter((m) => m !== target && this.work.positions[m]);
+        this._change(() => {
+          for (const m of ids) this._bond(m, target);
+        });
+        s.sel = this._bondLeader(target);
+        s.memberView = null;
+        const n = ((this._bondOf(target) || [null, []])[1]).length;
+        this._render();
+        this._toast(`Bonded: ${n} together · one device on the card`);
+        break;
+      }
+      case "bondno":
+        s.dialog = null;
+        this._render();
+        this._toast("Kept separate: same spot, not bonded", false);
+        break;
+      case "bondback":
+        s.memberView = null;
+        s.sel = this._bondLeader(s.sel);
+        this._render();
+        break;
+      case "memopen":
+        s.sel = id;
+        s.memberView = id;
+        this._render();
+        break;
+      case "selid":
+        if (this.byId.get(id)) {
+          s.sel = id;
+          s.memberView = null;
+          this._render();
+        }
+        break;
+      case "more":
+        s.more = !s.more;
+        lsSet("more", s.more);
+        this._render();
+        break;
+      case "itip":
+        s.itip = s.itip === el.dataset.key ? null : el.dataset.key;
+        this._render();
+        break;
+      case "stackpick":
+        s.stack = null;
+        s.sel = id;
+        s.memberView = null;
+        this._render();
+        break;
+      case "stackfan":
+        s.stack = null;
+        s.fan = id;
+        this._render();
+        break;
+      case "nightprev":
+        s.nightPrev = !s.nightPrev;
+        this._render();
+        break;
+      case "lighttype": {
+        const lead = this._bondLeader(s.sel);
+        const pos = this.work.positions[lead];
+        if (!pos) break;
+        const t = el.dataset.type;
+        const keep = pos.light && pos.light.type === t ? pos.light : this._defaultShape(t, this._isLamp(s.sel));
+        this._change(() => {
+          pos.light = { ...keep, type: t };
+          if (t === "strip" && pos.light.x2 == null) Object.assign(pos.light, { x2: clamp(pos.x + 8, 0, 100), y2: pos.y });
+          if (t === "panel" && pos.light.h == null) pos.light.h = pos.light.w * this._ratio();
+        });
+        break;
+      }
+      case "phnew": {
+        const pid = `p${Date.now().toString(36)}`;
+        const n = Object.keys(this.work.phantoms || {}).length + 1;
+        const x = clamp((50 - s.tx) / s.z, 4, 96);
+        const y = clamp((50 - s.ty) / s.z, 4, 96);
+        this._change(() => (this.work.phantoms = { ...(this.work.phantoms || {}), [pid]: { name: n > 1 ? `Phantom ${n}` : "Phantom", x, y, members: [] } }));
+        s.sel = `ph:${pid}`;
+        this._render();
+        this._toast("New phantom: drag devices that are already on the plan onto it", false);
+        break;
+      }
+      case "phout": {
+        const ph = (this.work.phantoms || {})[String(s.sel).slice(3)];
+        if (ph) this._change(() => (ph.members = (ph.members || []).filter((m) => m !== id)));
+        break;
+      }
+      case "phdel": {
+        const pid = String(s.sel).slice(3);
+        const ph = (this.work.phantoms || {})[pid];
+        this._change(() => delete this.work.phantoms[pid]);
+        s.sel = null;
+        this._render();
+        this._toast(`Phantom ${ph ? ph.name : ""} deleted · its devices are not touched`);
+        break;
+      }
       case "confirm":
         this._change(() => {
           delete this.work.positions[s.sel].approx;
@@ -2882,7 +3899,19 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "remove": {
         const d = this.byId.get(s.sel);
         const sel = s.sel;
+        const wb = this._bondOf(sel);
+        if (wb && s.memberView !== sel) {
+          this._change(() => {
+            for (const m of wb[1]) delete this.work.positions[m];
+            delete this.work.bonds[wb[0]];
+          });
+          s.sel = null;
+          this._render();
+          this._toast(`${this._bondName(wb)} taken off the plan`);
+          break;
+        }
         this._change(() => {
+          for (const k of this._splitSpots(sel)) delete this.work.positions[k];
           this._unbond(sel);
           delete this.work.positions[sel];
         });
@@ -2990,8 +4019,8 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _canBond(a, b) {
     if (!a || !b || a === b) return false;
-    const ka = this._bondKind(this.byId.get(a));
-    return !!ka && ka === this._bondKind(this.byId.get(b)) && !(this._bondOf(a) && this._bondOf(a) === this._bondOf(b));
+    if (!this.byId.get(a) || !this.byId.get(b)) return false;
+    return !(this._bondOf(a) && this._bondOf(a) === this._bondOf(b));
   }
 
   /** Put `id` into the bond of `target` (creating it) at the target's spot. */
@@ -3006,7 +4035,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (tb) bonds[tb[0]].push(id);
     else bonds[`b${Date.now().toString(36)}`] = [target, id];
     const tp = this.work.positions[target];
-    this.work.positions[id] = { x: tp.x, y: tp.y, ...(tp.approx ? { approx: true } : {}) };
+    this._moveTo(id, tp.x, tp.y, !!tp.approx);
   }
 
   _unbond(id) {
@@ -3014,9 +4043,10 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!b) return;
     const bonds = this.work.bonds;
     bonds[b[0]] = b[1].filter((m) => m !== id);
-    if (bonds[b[0]].length < 2) delete bonds[b[0]];
-    const pos = this.work.positions[id];
-    if (pos) Object.assign(pos, { x: clamp(pos.x + 3, 1, 99), y: clamp(pos.y + 3, 1, 99) });
+    if (bonds[b[0]].length < 2) {
+      delete bonds[b[0]];
+      if (this.work.bond_meta) delete this.work.bond_meta[b[0]];
+    }
   }
 
   /** All members follow the leader's position. */
@@ -3144,10 +4174,18 @@ class DeviceFloorplanPanel extends HTMLElement {
     });
   }
 
+  /** Move a spot, keeping what it is (split spot of a device, acts as, light shape, air flow, layer). */
+  _moveTo(id, x, y, approx = false) {
+    const old = this.work.positions[id] || {};
+    const keep = {};
+    for (const k of ["of", "as", "light", "air", "z"]) if (old[k] != null) keep[k] = old[k];
+    this.work.positions[id] = { ...keep, x, y, ...(approx ? { approx: true } : {}) };
+  }
+
   _placeAt(id, p, approx = false) {
     const d = this.byId.get(id);
     if (!approx) (this._fresh || (this._fresh = new Set())).add(id);
-    this.work.positions[id] = { x: Math.round(p.x * 1000) / 1000, y: Math.round(p.y * 1000) / 1000, ...(approx ? { approx: true } : {}) };
+    this._moveTo(id, Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000, approx);
     if (d) this._markSeen([id]);
   }
 
@@ -3251,8 +4289,15 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   // ------------------------------------------------------------- pointer
   _onDown(e) {
+    const grip = e.target.closest && e.target.closest("[data-shgrip]");
+    if (grip) {
+      const box = grip.closest(".shbox");
+      this._gesture = { kind: "shbox", start: { x: e.clientX, y: e.clientY }, x0: box.offsetLeft, y0: box.offsetTop, el: box, moved: false };
+      e.preventDefault();
+      return;
+    }
     if (!this._vp || !this._vp.contains(e.target) || e.button > 0) return;
-    if (e.target.closest(".mbox") || e.target.closest(".refpop")) return;
+    if (e.target.closest(".mbox") || e.target.closest(".refpop") || e.target.closest(".stackpop")) return;
     const s = this.s;
     this._pointers = this._pointers || new Map();
     this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -3279,12 +4324,34 @@ class DeviceFloorplanPanel extends HTMLElement {
     const cl = !modal && e.target.closest("[data-cluster]");
     const pin = !modal && e.target.closest("[data-pin]");
     const bx = !modal && e.target.closest("[data-box]");
+    const phm = !modal && e.target.closest("[data-ph]");
+    const lhd = !modal && e.target.closest("[data-lh]");
     const start = { x: e.clientX, y: e.clientY };
+    // Room shape (#111): corners, edge "+", toolbox grip.
+    const shc = e.target.closest("[data-shc]");
+    const shp = e.target.closest("[data-shp]");
+    if ((shc || shp) && s.shapeEdit) {
+      e.preventDefault();
+      const pts = this.work.shapes[s.shapeEdit];
+      const snap = this._snap();
+      let i = shc ? Number(shc.dataset.shc) : Number(shp.dataset.shp) + 1;
+      if (shp) {
+        const a = pts[i - 1];
+        const b = pts[i % pts.length];
+        pts.splice(i, 0, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, ...(a[2] ? [1] : [])]);
+      }
+      this._gesture = { kind: "shc", i, start, moved: !!shp, snap };
+      if (shp) this._render();
+      return;
+    }
     if (rh) this._gesture = { kind: "rh", i: Number(rh.dataset.rh), end: rh.dataset.end, start, moved: false, snap: this._snap() };
     else if (rl) this._gesture = { kind: "rl", i: Number(rl.dataset.refl), start, moved: false, snap: this._snap(), orig: clone(this.work.refs[Number(rl.dataset.refl)]), p0: this._pt(e) };
     else if (mh) this._gesture = { kind: "mh", which: mh.dataset.mh, start, moved: false };
     else if (pin) this._gesture = { kind: "pin", id: pin.dataset.pin, el: pin, start, moved: false, snap: this._snap() };
     else if (bx) this._gesture = { kind: "box", id: bx.dataset.box, el: bx, start, moved: false, snap: this._snap() };
+    else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", id: this.s.sel, start, moved: false, snap: this._snap() };
+    else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
+    else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
     else if (cl) this._gesture = { kind: "cluster", id: cl.dataset.cluster, start, moved: false };
     else this._gesture = { kind: "bg", start, moved: false, tx: s.tx, ty: s.ty };
@@ -3364,6 +4431,59 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       g.el.style.opacity = "";
     }
+    if (g.kind === "ah") {
+      const p = this._pt(e);
+      const pos = this.work.positions[g.id];
+      if (!pos) return;
+      const R = this._ratio();
+      const cur = this._air(g.id);
+      pos.air = { a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI), r: Math.max(1, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), s: cur.s };
+      this._renderOverlay();
+      return;
+    }
+    if (g.kind === "lh") {
+      const p = this._pt(e);
+      const pos = this.work.positions[g.id];
+      if (!pos) return;
+      const cur = this._shape(g.id);
+      const R = this._ratio();
+      const l = { ...(pos.light || {}), type: cur.type };
+      if (g.which === "r") l.r = Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R));
+      if (g.which === "end") Object.assign(l, { x2: p.x, y2: p.y, r: l.r ?? cur.r });
+      if (g.which === "corner") Object.assign(l, { w: Math.max(1, Math.abs(p.x - pos.x) * 2), h: Math.max(1, Math.abs(p.y - pos.y) * 2) });
+      if (g.which === "wall") Object.assign(l, { r: Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI) });
+      pos.light = l;
+      this._renderOverlay();
+      return;
+    }
+    if (g.kind === "ph") {
+      const p = this._pt(e);
+      const ph = (this.work.phantoms || {})[g.id];
+      if (!ph) return;
+      ph.x = p.x;
+      ph.y = p.y;
+      g.el.dataset.x = p.x;
+      g.el.dataset.y = p.y;
+      g.el.classList.add("dragging");
+      this._layout();
+      return;
+    }
+    if (g.kind === "shbox") {
+      const x = g.x0 + e.clientX - g.start.x;
+      const y = g.y0 + e.clientY - g.start.y;
+      g.el.style.left = `${x}px`;
+      g.el.style.top = `${y}px`;
+      s.shapeBox = { x, y };
+      return;
+    }
+    if (g.kind === "shc") {
+      const pts = this.work.shapes[s.shapeEdit];
+      if (!pts) return;
+      const p = this._shapeSnap(pts, g.i, this._pt(e), e.altKey);
+      pts[g.i] = [Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000, ...(pts[g.i][2] ? [1] : [])];
+      this._render();
+      return;
+    }
     if (g.kind === "box") {
       const p = this._pt(e);
       this.work.positions[g.id].box = { x: p.x, y: p.y };
@@ -3373,7 +4493,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (g.kind === "mk") {
-      // Hold over a marker of the same kind to bond (#40).
+      // Over another marker: drop = same spot, then "Bond them?" (#62); over a phantom: join it.
       this._bondHover(g, e.clientX, e.clientY);
       const p = this._pt(e);
       this.work.positions[g.id] = { ...this.work.positions[g.id], x: p.x, y: p.y };
@@ -3446,17 +4566,58 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     clearTimeout(this._bondT);
-    if (g.kind === "mk" && g.moved && g.bondTo && !g.out) {
-      const target = this._bondLeader(g.bondTo);
-      this._restore(clone(g.snap));
-      this._pushUndo(g.snap);
-      this._bond(g.id, target);
-      this._scheduleSave();
-      const n = (this._bondOf(target) || [null, []])[1].length;
+    if (g.kind === "ah" || g.kind === "lh") {
+      if (g.moved) {
+        this._pushUndo(g.snap);
+        this._scheduleSave();
+      }
       this._render();
-      this._toast(`Bonded: ${n} together, one marker · switched together on the card`);
       return;
     }
+    if (g.kind === "ph") {
+      if (g.moved) {
+        this._pushUndo(g.snap);
+        this._scheduleSave();
+      }
+      s.sel = `ph:${g.id}`;
+      s.memberView = null;
+      this._render();
+      return;
+    }
+    if (g.kind === "mk" && g.moved && g.dropTo && !g.out) {
+      this._clearDrop();
+      const own = (this._bondOf(g.id) || [null, [g.id]])[1].filter((m) => this.work.positions[m]);
+      const d = this.byId.get(g.id);
+      if (g.dropTo.kind === "ph") {
+        // Joins the phantom and jumps back to its own spot.
+        this._restore(clone(g.snap));
+        this._pushUndo(g.snap);
+        const ph = this.work.phantoms[g.dropTo.id];
+        ph.members = [...new Set([...(ph.members || []), ...own])];
+        this._scheduleSave();
+        s.sel = `ph:${g.dropTo.id}`;
+        this._render();
+        this._toast(`${d ? d.name : "Device"} added to ${ph.name || "the phantom"} · it stays where it is`);
+        return;
+      }
+      const target = this._bondLeader(g.dropTo.id);
+      const tp = this.work.positions[target];
+      this._pushUndo(g.snap);
+      for (const m of own) {
+        const q = this.work.positions[m];
+        q.x = tp.x;
+        q.y = tp.y;
+        if (tp.approx) q.approx = true;
+        else delete q.approx;
+      }
+      this._markSeen([g.id]);
+      this._scheduleSave();
+      if (s.sel && s.sel !== g.id) s.sel = null;
+      if (this._canBond(g.id, target)) s.dialog = { type: "bondask", a: g.id, b: target };
+      this._render();
+      return;
+    }
+    this._clearDrop();
     if ((g.kind === "mk" || g.kind === "pin") && g.moved && g.out) {
       this._dropHint(null);
       this._restore(clone(g.snap));
@@ -3493,9 +4654,20 @@ class DeviceFloorplanPanel extends HTMLElement {
         this._render();
       } else {
         s.sel = g.id;
+        s.memberView = null;
+        s.stack = null;
         s.placing = null;
         this._render();
       }
+      return;
+    }
+    if (g.kind === "shbox") return;
+    if (g.kind === "shc") {
+      if (g.moved) {
+        this._pushUndo(g.snap);
+        this._scheduleSave();
+      }
+      this._shSnapped = false;
       return;
     }
     if (g.kind === "box") {
@@ -3521,7 +4693,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     if (g.kind === "cluster") {
       if (!g.moved) {
-        s.fan = g.id;
+        s.stack = s.stack === g.id ? null : g.id;
         this._render();
       }
       return;
@@ -3533,34 +4705,39 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
   }
 
-  /** Track "held over another marker"; after a moment it shows Bond (#40). */
+  /** Which marker the dragged device is over: a device (same spot) or a phantom (join it). */
   _bondHover(g, cx, cy) {
     const el = this.shadowRoot.elementFromPoint ? this.shadowRoot.elementFromPoint(cx, cy) : null;
-    const mk = el && el.closest ? el.closest("[data-mk]") : null;
-    const tid = mk && mk.dataset.mk !== g.id ? mk.dataset.mk : null;
-    const ok = tid && this._canBond(g.id, tid);
-    if (!ok) {
-      if (g.hoverT) this.shadowRoot.querySelectorAll(".mk.bondhint").forEach((x) => x.classList.remove("bondhint"));
-      g.hoverT = null;
-      g.bondTo = null;
-      return;
+    const mk = el && el.closest ? el.closest("[data-mk],[data-cluster],[data-ph]") : null;
+    let to = null;
+    if (mk && mk.dataset.ph !== undefined) {
+      if (this.work.positions[g.id]) to = { kind: "ph", id: mk.dataset.ph };
+    } else if (mk) {
+      const id = mk.dataset.mk || mk.dataset.cluster;
+      const gb = this._bondOf(g.id);
+      if (id && id !== g.id && !(gb && gb[1].includes(id))) to = { kind: "mk", id };
     }
-    if (g.hoverT !== tid) {
-      g.hoverT = tid;
-      g.hoverSince = Date.now();
-      g.bondTo = null;
-      clearTimeout(this._bondT);
-      this._bondT = setTimeout(() => {
-        if (g.hoverT === tid && (this._gesture === g || this._listHover === g)) {
-          g.bondTo = tid;
-          const t2 = this.shadowRoot.querySelector(`[data-mk="${CSS.escape(tid)}"]`);
-          if (t2) {
-            t2.classList.add("bondhint");
-            const tip = t2.querySelector(".tip");
-            if (tip) tip.textContent = "Drop to bond";
-          }
-        }
-      }, 650);
+    const key = to ? `${to.kind}:${to.id}` : "";
+    if (g.dropKey === key) return;
+    this._clearDrop();
+    g.dropKey = key;
+    g.dropTo = to;
+    g.bondTo = to && to.kind === "mk" ? to.id : null;
+    if (to) {
+      mk.classList.add("droptgt");
+      const t = mk.querySelector(".tip");
+      if (t) {
+        mk._tip0 = t.innerHTML;
+        t.textContent = to.kind === "ph" ? "Drop to add it to this phantom" : "Drop here: same spot";
+      }
+    }
+  }
+
+  _clearDrop() {
+    for (const x of this.shadowRoot.querySelectorAll(".mk.droptgt")) {
+      x.classList.remove("droptgt");
+      const t = x.querySelector(".tip");
+      if (t && x._tip0 !== undefined) t.innerHTML = x._tip0;
     }
   }
 
@@ -3593,8 +4770,10 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (s.placingBox) {
-      const id = s.placingBox;
-      if (this.work.positions[id]) this._change(() => (this.work.positions[id].box = { x: Math.round(p.x * 1000) / 1000, y: Math.round(p.y * 1000) / 1000 }));
+      const [id, eid] = s.placingBox.split("|");
+      const pt = { x: Math.round(p.x * 1000) / 1000, y: Math.round(p.y * 1000) / 1000 };
+      if (this.work.positions[id] && eid) this._change(() => (this.work.positions[`entity:${eid}`] = { ...pt, of: id }));
+      else if (this.work.positions[id]) this._change(() => (this.work.positions[id].box = pt));
       s.placingBox = null;
       this._render();
       return;
@@ -3631,9 +4810,12 @@ class DeviceFloorplanPanel extends HTMLElement {
       }, 50);
       return;
     }
-    if (s.sel || s.fan) {
+    if (s.sel || s.fan || s.stack || s.itip) {
       s.sel = null;
       s.fan = null;
+      s.stack = null;
+      s.itip = null;
+      s.memberView = null;
       this._render();
     }
   }
@@ -3682,7 +4864,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         ghost.innerHTML = `<span class="pin dragpin">${SVG.pin}${esc(a ? a.name : "")}</span>`;
         const el = ghost.firstElementChild;
         const r = el.getBoundingClientRect();
-        e.dataTransfer.setDragImage(el, 7, r.height);
+        e.dataTransfer.setDragImage(el, r.width / 2, r.height / 2);
       } else {
         const d = this.byId.get(row.dataset.dev);
         const v = d ? this._ringVars(d) : { c1: "var(--df-primary)" };
@@ -3714,14 +4896,19 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!d) return;
     const st = this._status(d);
     if (st === "skipped") return;
-    if (lh && lh.bondTo && st !== "elsewhere" && this._canBond(d.id, lh.bondTo)) {
+    this._clearDrop();
+    if (lh && lh.bondTo && st !== "elsewhere" && this.work.positions[this._bondLeader(lh.bondTo)]) {
       const target = this._bondLeader(lh.bondTo);
-      this._change(() => this._bond(d.id, target));
+      const tp = this.work.positions[target];
+      this._change(() => {
+        this._unbond(d.id);
+        this._moveTo(d.id, tp.x, tp.y, !!tp.approx);
+      });
       this._markSeen([d.id]);
       if (this.s.placing === d.id) this.s.placing = null;
-      const n = (this._bondOf(target) || [null, []])[1].length;
+      this.s.sel = null;
+      if (this._canBond(d.id, target)) this.s.dialog = { type: "bondask", a: d.id, b: target };
       this._render();
-      this._toast(`Bonded: ${n} together, one marker · switched together on the card`);
       return;
     }
     if (st === "elsewhere") {
@@ -4260,7 +5447,9 @@ class DeviceFloorplanPanel extends HTMLElement {
             refs: this.work.refs,
             hidden_rooms: this.work.hidden_rooms.map((a) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a })),
             anchors: Object.entries(this.work.anchors).map(([a, p]) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a, x: p.x, y: p.y })),
-            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0 })),
+            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0, ...(r.pos.box ? { box: r.pos.box } : {}), ...(r.pos.light ? { light: r.pos.light } : {}) })),
+            bonds: Object.entries(this.work.bonds || {}).map(([id, m]) => ({ id, members: m, ...((this.work.bond_meta || {})[id] || {}) })),
+            phantoms: Object.entries(this.work.phantoms || {}).map(([id, ph]) => ({ id, ...ph })),
           },
           image,
         };
@@ -4364,6 +5553,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       // Map devices: same id, else Zigbee IEEE, else MAC, else exact name.
       const positions = {};
+      const idMap = {};
       let matched = 0;
       let missing = 0;
       for (const dv of P.devices || []) {
@@ -4376,7 +5566,24 @@ class DeviceFloorplanPanel extends HTMLElement {
           continue;
         }
         matched++;
-        positions[d.id] = { x: dv.x, y: dv.y, ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}) };
+        idMap[dv.device_id] = d.id;
+        positions[d.id] = { x: dv.x, y: dv.y, ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}), ...(dv.box ? { box: dv.box } : {}), ...(dv.light ? { light: dv.light } : {}) };
+      }
+      // Bonds and phantoms (0.5.0) follow their matched devices.
+      const bonds = {};
+      const bondMeta = {};
+      for (const b of P.bonds || []) {
+        const m = (b.members || []).map((x) => idMap[x]).filter(Boolean);
+        if (m.length < 2) continue;
+        bonds[b.id] = m;
+        const meta = {};
+        for (const k of ["name", "icon", "tap", "show"]) if (b[k]) meta[k] = b[k];
+        if (Object.keys(meta).length) bondMeta[b.id] = meta;
+      }
+      const phantoms = {};
+      for (const ph of P.phantoms || []) {
+        const { id, ...rest } = ph;
+        phantoms[id] = { ...rest, members: (ph.members || []).map((x) => idMap[x]).filter(Boolean), ...(ph.one ? { one: idMap[ph.one] } : {}) };
       }
       const areaFor = (a) => (this.areaById.get(a.area_id) ? a.area_id : (this.areas.find((x) => x.name === a.name) || {}).area_id);
       const anchors = {};
@@ -4385,7 +5592,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (id) anchors[id] = { x: a.x, y: a.y };
       }
       const hidden = (P.hidden_rooms || []).map(areaFor).filter(Boolean);
-      const res = await this._ws("plan/update", { plan_id: plan.id, positions, anchors, refs: (P.refs || []).slice(0, 2), hidden_rooms: hidden });
+      const res = await this._ws("plan/update", { plan_id: plan.id, positions, anchors, refs: (P.refs || []).slice(0, 2), hidden_rooms: hidden, bonds, bond_meta: bondMeta, phantoms });
       Object.assign(plan, res);
       this.plans.sort((a, b) => this._planOrder(a) - this._planOrder(b));
       this.s.dialog = null;

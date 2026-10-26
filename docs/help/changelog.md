@@ -1,5 +1,91 @@
 # Changelog
 
+## 0.6.0
+
+**Markers done right.** One device is one marker per overlay, you choose what it shows, and everything about markers is edited on the plan.
+
+**Dashboard card**
+
+- **One marker per device per overlay**: a presence sensor with many zones is one marker in Security (its other sensors in the popup).
+- **Leading entity + Also show**: per overlay, which entity leads (icon, colour, on/off, tap) and any extra readings as small lines under it (*Printing · 1 h 20 min left · AMS 38 %*).
+- **Marker Editor**: **✎ Edit markers** in the overlay button bar (dashboard edit mode, panel and masonry dashboards; saves right away), or **Edit card → Edit markers** (every dashboard). Pick an overlay, click a marker, change it for that overlay; ✕ on the selected marker hides it; the list shows *Hidden here* (↩ Show), *On this overlay* and *Not in this overlay* (+ Add in your own overlays). People are edited there too. The device list left the card editor.
+- **One look per kind**: ACs and thermostats are a climate chip everywhere (compact in Live and your own overlays, full in Comfort); readings, batteries and round markers look the same in every overlay.
+- **Custom overlays**: kinds in an order you choose; the first match leads, every other ticked kind becomes an extra line (batteries finally show). Or **Only devices I add**.
+- **Light colours**: markers of lights that are on take the bulb's real colour; **Glow only** option for Live and custom overlays.
+- **Lights stay in their room** when the room has a shape: overlapping shapes are one open space, a gap between shapes is a wall.
+- **Shutters darken the room by day**: a shaped room gets darker the more of its shutters or blinds are closed (Day & night option, on by default).
+- **Air flow for ACs**: while cooling or heating, air flows from the AC into the room (blue cool, orange heat), set in the Editor (direction, reach, spread); radiators get a warm glow while heating.
+- Phantoms count ACs' and thermostats' own temperature and humidity.
+
+**Floorplan Editor**
+
+- **Room shapes** in Mark rooms (optional): four corners, + for more, snapping, Alt for free angles; lights stay inside.
+- **Light colour** for plain lamps: Auto, a warm ↔ cool slider, or any colour.
+- **Split spots**: each has its own light shape and colour and **Acts as** (light, switch, fan); a wall switch never turns into a lamp; a relay shown as a light in Home Assistant moves its spot automatically.
+- **Phantoms**: choose which sensors of each member count.
+- Ready popup: **Done**, and a hint to add a floor to an existing card.
+- "The card uses only this entity" is gone: the card decides per overlay.
+
+**Guide**: card reference (one marker rule, Edit markers, custom overlays), room shapes, light colours, split and phantom pages. Best on PC and tablets; phones work but aren't optimised yet.
+
+## 0.5.1
+
+**Names in the Editor, looks on the card.** The Floorplan Editor is the home (where things are, what belongs together); the dashboard card decides how each marker looks and what it shows.
+
+**Floorplan Editor**
+
+- **Split devices, generalised**: the device sits where its hardware is; each switchable entity (light, switch, cover, fan, climate) can get its own spot with **Place where it acts**. A wall panel with two relays is now three places. Dashed lines in the Editor, ✕ to bring an entity back. Old *box* spots are converted automatically, nothing moves.
+- **No icons in the Editor**: icons are set on the card. Icons you set on bonds before are kept as the card's default.
+- **What a marker shows moved to the card** (*The marker shows*, *The card uses only this entity* and the *Now:* line are gone from the device card; your old choices stay as the card's default).
+- **Rooms**: all areas of the floor are listed, areas without devices under **Empty rooms**; **Create areas** and **How areas work ↗** when there are none. Room names are centred on their point everywhere (Mark rooms, Place devices, card); existing pins were moved once so names stay where you saw them.
+- **Light shapes**: automatic only for lamps; anything else with a light (printer chamber, TV backlight) can opt in, starting at *None*, with a small 0.5 m spot.
+- The open device or bond card **scrolls** inside the right column; automatic-bond rows are tidy (long names shortened, *Unbond* as a small button). *Includes its twin device* instead of a technical note with a MAC address.
+- **Show / Hide guide** in one place, next to the step tabs.
+- Search: an entity of a device says *part of this device · can sit where it acts*.
+
+**Dashboard card**
+
+- **Edit markers on the plan**: a **✎ Edit markers** button on the card while the dashboard is in edit mode (panel and masonry dashboards; saves straight to the dashboard), or **Edit markers on the plan** in the card editor (every dashboard). The card opens full-screen; click a marker: hide it in this overlay with one click, choose **what it shows** (per device or per overlay), icon, name, tap. The device list opens the same settings.
+- **Reading chips** look like the climate chip's numbers: temperature large, *💧 humidity* small under it.
+- **Phantoms look like any other marker or chip** in every overlay; no lines on the card, the popup lists the devices.
+- **No ×N badge on bonds** on the card (it is one device); automatic bonds are listed as *Name (bonded)* in the card editor too.
+- ACs without a humidity sensor no longer show *💧 0%*.
+- Split devices: each entity shows in one place; Network and Health show the device; hover a relay for *Through ‹device› · Wi-Fi*.
+
+**Chip card**
+
+- **Bonds as a value**: *On*, *2 of 3 on*, or the average for sensors; tap can **switch the bond**.
+
+**Guide**
+
+- New section **Bonds, phantoms & split devices** with an overview and a page each, with examples. *Changed your mind? Get skipped devices back* on *3 · Place devices*.
+
+## 0.5.0
+
+**Bond · Phantom · Split device** – three ideas that make the plan fit real homes. See [Concepts](/together/).
+
+- **Bonds of any kind, and deliberate**: drop a device onto another and it lands on the same spot; Device Floorplan then asks *Bond them – one device on the card* or *Keep separate – just the same spot* (no more hold-to-bond, it never bonds by itself). Same spot = grey count, click it for the list of devices there; bond = green ×N.
+- **Bond card**: name (e.g. *Dining lights*), what the bond means on the card, members with their state, ✕ per member (it stays on the same spot), **Unbond all**, and under *More options* its icon, tap and what the marker shows (*2 of 3*). Hover shows the members one per line.
+- **Parts are now automatic bonds** (*Bonded automatically*, **Unbond**; an unbonded device stays unbonded and keeps its spot).
+- **Phantoms**: a combined value from devices anywhere (average temperature of a room, any window open, motion anywhere). Phantom button on the plan, drag placed devices onto it (they stay where they are), phantom card with *Combined devices* and *Value on the card* (average, lowest, highest, one device).
+- **Split device**: the new name for *Box / radio is somewhere else*.
+- **Light shapes**: every light gets a shape (bulb, spot, strip, panel, wall lamp, none) with handles on the plan; automatic bulb by default; **See it at night** preview (moon button); Layers → *Light shapes*.
+- **Simpler device card**: the basics first, the rest under **More options ▾**; *Connected through…* for hubs and bridges; small **ⓘ** explanations (they hide with the guide).
+- Approximate markers get an **amber glow**, visible on any ring colour. Layers menu: **Bonds**, **Phantoms**, **Light shapes**.
+- JSON export / import now also carries split-device box spots, light shapes, bonds and phantoms.
+
+**Dashboard card**
+
+- **Several floors in one card**: floor tabs in the card editor, a **floor rail** right of the plan (never on top), swipe up / down, `floor:` in the action and `?floor=` in links.
+- **Markers scale with the card**: no more huge markers in narrow columns or the editor preview.
+- **Covers open their controls on tap**: open / stop / close and position; bonded covers each with *All*.
+- **Climate chip v2**: *Cooling* / *Heating* / *Dry* / *Fan* / *Idle* / *Off* with the mode colour, *Set 24°*, room temperature large, humidity under it; condensed on narrow cards.
+- **Network**: several connections at once, tap a role in the legend to hide it, **Refresh** with the update time (and every few minutes on its own), the **path** to the coordinator and **Connected devices** in the popup (also behind hubs and bridges).
+- **Bonds and phantoms on the card**: bonds with their name and icon, combined values (lights *2/3*, sensors average / lowest / highest / one, lowest battery, offline if any); phantoms as an extra, inverted marker or chip with a popup of all their devices and a 24 h graph.
+- **Day & night**: the plan darkens after sunset, gradually with the sun (warm dusk, soft blue dawn), or at fixed times, with the dark theme, always or never; lights that are on glow where they are, in their colour and brightness; per overlay, strength and style; quiet markers dimmed, active ones bright. **Light pools** in the Lights overlay also by day.
+- **People**: each person at the room they are in, from up to two room sensors (Bermuda, ESPresense, template…), matched by area name, id or alias; low confidence faded; *Home* row for people at home in an unknown room.
+- **Chip card** (`custom:device-floorplan-chip`): a chip for your top bar that switches the floorplan's overlay and **glows** while it shows; can show an entity's value or a phantom. See [Chip card](/reference/chip).
+
 ## 0.4.7 (beta-ready)
 
 - **Typing in the card editor works everywhere**: text fields (title, card ID, overlay names, custom overlay and scene names, room names, device names) no longer lose focus while you type, so HA's keyboard shortcuts (e.g. Assist) don't pop up anymore.

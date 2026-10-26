@@ -33,8 +33,8 @@ Known limits today:
 
 - Zigbee roles, link quality and links in the Network overlay need **ZHA** and an
   **admin** user (that's what Home Assistant allows).
-- Rooms are name pins, not outlines.
-- Bonds work for lights, switches and covers.
+- Rooms are name pins, not outlines (light pools don't stop at walls yet).
+- People need a room sensor per person (Bermuda, ESPresense, a template…).
 
 No floorplan yet? See
 [Turn your sketch into a floorplan in 10 minutes](docs/images/sketch.md).
@@ -64,15 +64,25 @@ No floorplan yet? See
   a floor tab has settings, rename, replace image, export, move and delete.
 - **“I'm ready”** appears as soon as the first device is placed: see what was
   created in HA, preview the live view and add it to a dashboard in one click.
-- **Dashboard card** `custom:device-floorplan-card` with live states.
+- **Dashboard card** `custom:device-floorplan-card` with live overlays, several floors,
+  a night look with glowing lights, people in their rooms, and a companion
+  **chip card** for your top bar.
 - **Export** a plan as CSV, JSON backup (re-importable, also on another HA) or
   PNG picture.
 - **Search finds everything**: names, rooms, models, entity names and ids, also
   skipped devices and helpers without a device (which can be placed on their own).
-- **What a marker shows** is any entity, also a helper (*Other entity…*); an
-  optional second spot for a device's box / radio (wall switch + ceiling lamp).
-- **Bond** lamps above one table (or two blinds): one marker, switched together on the card.
-- One dot per physical device (printer + AMS, NAS + drives become one), HA's own icons and more-info dialog, integration
+- **What a marker shows** is chosen on the card, per device or per overlay: click a
+  marker on the big plan in the card editor (*Edit markers on the plan*).
+- **Bond · Phantom · Split device** ([guide](docs/together/index.md)):
+  - **Bond**: several physical devices on one spot are one device (three bulbs in one
+    lamp): one marker, switched together, values combined. Device Floorplan asks
+    before it bonds; printers + AMS or NAS + drives are bonded automatically.
+  - **Phantom**: one combined value from devices anywhere (room temperature from two
+    thermometers, any window open), shown like a device; its devices stay where they are.
+  - **Split device**: the device sits where its hardware is, each light or switch it
+    controls can sit where it acts (a wall panel with two relays = three places).
+- **Light shapes** (bulb, spot, strip, panel, wall lamp) with a *see it at night* preview.
+- HA's own icons and more-info dialog, integration
   logos in the device list, undo/redo, auto-save, keyboard shortcuts.
 - **New devices**: placed next to their room automatically (optional), a
   notification tells you, and the `device_floorplan_new_device` event lets you
@@ -113,9 +123,9 @@ Each plan is a **device** (“Ground floor plan”) under Settings → Devices w
   `image_fallback_url`, `image_width`, `image_height`, `kind`, `floor_id`,
   `level`, `image_type`, `metres_per_px_x/y`, `real_width_m`, `real_height_m`,
   `approx_count`, `devices`
-  (`{device_id: {name, x, y, px, py, approx, z?, ieee?, mac?, main_entity, entities, roles, conns, group, box?, parts?}}`,
+  (`{device_id: {name, x, y, px, py, approx, z?, ieee?, mac?, via?, main_entity, entities, roles, conns, group, box?, light?, parts?}}`,
   x/y in % of the image; all entities of a device share its position),
-  `entities` (helpers / entities without a device placed on their own),
+  `entities` (helpers / entities without a device placed on their own), `bonds`, `phantoms`,
   `zigbee_devices` (the format of the Zigbee Floorplan Card) and `areas` (room pins).
 
 `sensor.device_floorplan_new_devices`: devices added since setup that are not
@@ -142,14 +152,17 @@ that folder. Planner data lives in `.storage/device_floorplan`.
 
 The easiest way: press **I'm ready → Add to dashboard** in the Floorplan Editor. The card shows
 your plan and its overlay buttons: **Plan · Live · Lights · Comfort · Security · Network · Health**,
-plus your own. Tap a light to switch it, a reading for its last 24 hours; hold for the details.
-Everything else (which overlays, where the buttons are, what each overlay shows, light scenes,
-rooms, tap behaviour, look, per-device icon / name / tap / overlays) is set in the card editor.
-Other cards can switch the overlay with the action `device_floorplan.show_overlay`. See [docs/reference/card.md](docs/reference/card.md).
+**People**, plus your own. Tap a light to switch it, a cover for its controls, a reading for its
+last 24 hours; hold for the details. Several floors get a floor rail next to the plan. At night
+the plan darkens and the lights that are on glow (follows the sun by default).
+Everything else (floors, which overlays, where the buttons are, what each overlay shows, light
+scenes, rooms, people, day & night, tap behaviour, look, per-device settings) is set in the card
+editor. Other cards can switch the overlay with the action `device_floorplan.show_overlay`, or use
+the **chip card** that glows for the active overlay. See [docs/reference/card.md](docs/reference/card.md).
 
 ```yaml
 type: custom:device-floorplan-card
-plan: ground_floor
+plans: [ground_floor, first_floor]
 ```
 
 ## Keyboard
@@ -173,8 +186,18 @@ Shortcuts don't fire while you type in a field.
 - [ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan): SVG-based
   interactive floorplans.
 
-## Changelog
+## Roadmap
 
+Next: polish of bonds, phantoms, the night look and people from your feedback; people on several
+floors. Later: room outlines, motion zones that fade, doors and covers drawn, a coverage map,
+Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
+[docs/help/roadmap.md](docs/help/roadmap.md).
+
+## Changelog
+- 0.6.0 – One marker per device per overlay with leading entity and extra readings, Marker Editor on the plan, room shapes (lights stay in their room), light colours and glow-only, custom overlays with ordered kinds.
+
+- 0.5.1 – Split devices generalised (place each switch where it acts), Edit markers on the plan (what each marker shows, per overlay), names in the Editor and looks on the card, empty rooms and area links, AC-style reading chips, chip card shows bonds.
+- 0.5.0 – Bond · Phantom · Split device, light shapes, several floors in one card, Day & night with glowing lights, People, chip card, cover controls, climate chip v2, Network upgrades.
 - 0.4.7 – beta-ready: typing in the card editor fixed, clearer editor order, Layers in the button bar, links apply every time, fewer redraws.
 - 0.4.6 – Lights overlay with scenes, reworked Network overlay, climate chips, rooms on the card, custom overlays, overlay buttons anywhere or hidden, switching overlays from other cards.
 - 0.4.5 – new dashboard card with overlays and a card editor where everything is adjustable.

@@ -239,6 +239,37 @@ def is_plan_device(device: dr.DeviceEntry) -> bool:
     return any(domain == DOMAIN for domain, _ in _pairs(device.identifiers))
 
 
+def replacement_entity(hass: HomeAssistant, entity_id: str) -> str | None:
+    """#106: the entity that replaced a hidden one via "Show as" (switch_as_x), if any."""
+    ent_reg = er.async_get(hass)
+    for entry in hass.config_entries.async_entries("switch_as_x"):
+        if (entry.options or {}).get("entity_id") != entity_id:
+            continue
+        for e in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+            return e.entity_id
+    return None
+
+
+def migrate_replaced(hass: HomeAssistant, data: FloorplanData) -> None:
+    """Move entity spots whose entity is now shown as another one (switch → light)."""
+    ent_reg = er.async_get(hass)
+    changed = False
+    for plan in data.plans.values():
+        pos_all = plan.get("positions", {})
+        for key in list(pos_all):
+            if not key.startswith("entity:"):
+                continue
+            ent = ent_reg.async_get(key[7:])
+            if ent is None or ent.hidden_by is None:
+                continue
+            new = replacement_entity(hass, key[7:])
+            if new and f"entity:{new}" not in pos_all:
+                pos_all[f"entity:{new}"] = pos_all.pop(key)
+                changed = True
+    if changed:
+        data._save()  # noqa: SLF001
+
+
 def default_main_entity(hass: HomeAssistant, data: FloorplanData, device_id: str) -> str | None:
     """The user's choice, else the best-ranked entity of the device."""
     chosen = data.main_entity.get(device_id)
@@ -326,7 +357,10 @@ def _group(entities: list[er.RegistryEntry], integrations: list[str] | None = No
             continue
         primary.setdefault(ent.domain, []).append(ent)
 
-    if "light" in primary:
+    # A lamp: lights and not much else (#84). A printer with a chamber light or a TV with a
+    # backlight is not a lamp; it can still get a light shape in the Editor.
+    sensors = len(primary.get("sensor", [])) + len(primary.get("binary_sensor", []))
+    if "light" in primary and sensors <= 4 and not {"media_player", "camera", "vacuum", "climate", "fan"} & primary.keys():
         return "lights"
     for domain, group in _GROUP_BY_DOMAIN:
         if domain in primary:
@@ -432,7 +466,7 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
                 "dc": e.device_class or e.original_device_class,
             }
             for e in ranked + sorted(part_entities, key=_entity_rank)
-            if e.entity_category is None
+            if e.entity_category is None and e.hidden_by is None
         ]
         if other_main and main:
             candidates.append({"entity_id": main, "name": entity_name(hass, main), "domain": main.split(".")[0], "other": True})
@@ -481,6 +515,7 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
                 for c in part_ids
             ],
             "search": search,
+            "via": device.via_device_id,
             "only_main": bool(opts.get("only_main")),
             "labels": sorted(getattr(device, "labels", ()) or ()),
         }
@@ -631,13 +666,20 @@ def build_plan_payload(
             eid = key[7:]
             if hass.states.get(eid) is None and ent_reg.async_get(eid) is None:
                 continue
+            of = pos.get("of")
+            if of and (data.skipped.get(of) or of not in plan.get("positions", {})):
+                continue  # its device is no longer on this plan
             entities_out[eid] = {
+                **({"of": of} if of else {}),
+                **({"as": pos["as"]} if pos.get("as") else {}),
                 "name": entity_name(hass, eid),
                 "x": x, "y": y, "px": px, "py": py,
                 "approx": approx,
                 "main_entity": eid,
                 "entities": [eid],
                 "roles": entity_roles(hass, [eid]),
+                **({"light": pos["light"]} if pos.get("light") else {}),
+                **({"air": pos["air"]} if pos.get("air") else {}),
             }
             continue
         if data.skipped.get(key) or key in part_of:
@@ -665,8 +707,21 @@ def build_plan_payload(
             ]
         if main and main not in all_ids:
             all_ids.insert(0, main)  # "Other entity…"
-        only_main = bool(data.device_opts.get(key, {}).get("only_main"))
-        ids = [main] if (only_main and main) else all_ids
+        # Split device (#91): each entity shows in one place; its own spot wins.
+        split = [e for e in all_ids if f"entity:{e}" in plan.get("positions", {}) and plan["positions"][f"entity:{e}"].get("of") == key]
+        if split:
+            all_ids = [e for e in all_ids if e not in split]
+            if main in split:
+                main = all_ids[0] if all_ids else None
+        # 0.6.0: "the card uses only this entity" is gone; the card picks per overlay (#100).
+        only_main = False
+        ids = all_ids
+        if split:
+            # Entities placed elsewhere never shape the device itself (#106).
+            try:
+                group = _group([e for e in entities if e.entity_id not in split], integrations)
+            except Exception:  # noqa: BLE001
+                pass
         item: dict[str, Any] = {
             "name": name,
             "area_id": device.area_id,
@@ -678,6 +733,8 @@ def build_plan_payload(
             "conns": conns,
             "group": group,
         }
+        if split:
+            item["split"] = split
         if part_ids:
             item["parts"] = [entries[c].name_by_user or entries[c].name or c for c in part_ids]
         if only_main:
@@ -688,6 +745,10 @@ def build_plan_payload(
             item["box"] = {"x": box["x"], "y": box["y"], "px": bpx, "py": bpy}
         if pos.get("z"):
             item["z"] = pos["z"]
+        if pos.get("light"):
+            item["light"] = pos["light"]
+        if pos.get("air"):
+            item["air"] = pos["air"]
         ieee = device_ieee(device)
         mac = device_mac(device)
         if ieee:
@@ -715,7 +776,10 @@ def build_plan_payload(
         areas[area_id] = {
             "name": area.name if area else area_id,
             "icon": area.icon if area else None,
+            # People (#67): a room sensor may report the name, the id or an alias.
+            **({"aliases": sorted(area.aliases)} if area and getattr(area, "aliases", None) else {}),
             "x": pos["x"], "y": pos["y"], "px": px, "py": py,
+            **({"shape": (plan.get("shapes") or {})[area_id]} if (plan.get("shapes") or {}).get(area_id) else {}),
         }
 
     # Bonds (#40): members share one position; the card shows one marker per bond.
@@ -732,12 +796,38 @@ def build_plan_payload(
             if item.get("main_entity"):
                 mains.append(item["main_entity"])
         domain = mains[0].split(".")[0] if mains else None
+        meta = (plan.get("bond_meta") or {}).get(bond_id, {})
         bonds[bond_id] = {
+            **({"name": meta["name"]} if meta.get("name") else {}),
+            **({"icon": meta["icon"]} if meta.get("icon") else {}),
+            **({"tap": meta["tap"]} if meta.get("tap") else {}),
+            **({"show": meta["show"]} if meta.get("show") else {}),
             "members": placed,
             "names": [(devices.get(m) or entities_out.get(m[7:]))["name"] for m in placed],
             "entities": mains,
             "domain": domain,
             "x": first["x"], "y": first["y"], "px": first["px"], "py": first["py"],
+        }
+
+    # Phantom devices (#60): members stay where they are; the phantom has its own free spot.
+    phantoms: dict[str, Any] = {}
+    for pid, ph in (plan.get("phantoms") or {}).items():
+        members = [m for m in ph.get("members", []) if m in devices or (m.startswith("entity:") and m[7:] in entities_out)]
+        px, py = to_px(ph.get("x", 50), ph.get("y", 50))
+        ents: list[str] = []
+        uses = ph.get("uses") or {}
+        for m in members:
+            item = devices.get(m) or entities_out.get(m[7:])
+            mine = uses.get(m) or item.get("entities") or [item.get("main_entity")]
+            ents += [e for e in mine if e and e not in ents]
+        phantoms[pid] = {
+            "name": ph.get("name") or "Phantom",
+            "icon": ph.get("icon"),
+            "x": ph.get("x", 50), "y": ph.get("y", 50), "px": px, "py": py,
+            "members": members,
+            "entities": ents,
+            "value": ph.get("value") or "average",
+            **({"one": ph["one"]} if ph.get("one") else {}),
         }
 
     real_w = round(width * scale["x"], 2) if scale["x"] and width else None
@@ -761,6 +851,7 @@ def build_plan_payload(
         "devices": devices,
         "entities": entities_out,
         "bonds": bonds,
+        "phantoms": phantoms,
         "zigbee_devices": zigbee,
         "areas": areas,
     }

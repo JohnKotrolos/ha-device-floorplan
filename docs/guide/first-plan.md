@@ -1,6 +1,10 @@
 # Your first plan
 
-This takes about ten minutes. Everything is saved automatically, so you can leave at any point and pick up where you left off.
+Everything is saved automatically, so you can leave at any point and pick up where you left off.
+
+::: tip Before you start
+Devices with an **area** (room) in Home Assistant can be auto-placed next to their room; areas on **floors** let each floor plan offer only its own devices. Neither is needed to place devices by hand. See [Install → Before you start](/guide/install#requirements).
+:::
 
 ## 1. Open the planner
 

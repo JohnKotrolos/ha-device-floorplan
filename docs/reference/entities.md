@@ -25,11 +25,12 @@ The attributes are kept out of the history database, so large plans don't fill y
 | `metres_per_px_x`, `metres_per_px_y` | Scale, when measured |
 | `real_width_m`, `real_height_m` | Size of the whole image in metres |
 | `approx_count` | Devices still approximate |
-| `devices` | `{device_id: {name, area_id, x, y, px, py, approx, z?, ieee?, mac?, main_entity, entities, roles, conns, group, box?, parts?, only_main?}}` with `x`/`y` in % of the image and `px`/`py` in pixels (details below) |
+| `devices` | `{device_id: {name, area_id, x, y, px, py, approx, z?, ieee?, mac?, via?, main_entity, entities, roles, conns, group, box?, light?, parts?, only_main?}}` with `x`/`y` in % of the image and `px`/`py` in pixels (details below). `box` = the split device's box spot; `light` = the light shape `{type, r?, w?, h?, x2?, y2?, a?}` (`r`/`w` in % of the image width, `h` in % of its height) |
 | `entities` | Entities without a device placed on their own: `{entity_id: {name, x, y, px, py, approx, main_entity, entities, roles}}` |
-| `bonds` | Bonded devices: `{bond_id: {members, names, entities, domain, x, y, px, py}}`; each member in `devices` also has `bond: <bond_id>` |
+| `bonds` | Bonded devices: `{bond_id: {name?, icon?, tap?, show?, members, names, entities, domain, x, y, px, py}}`; each member in `devices` also has `bond: <bond_id>` |
+| `phantoms` | Phantoms: `{phantom_id: {name, icon?, x, y, px, py, members, entities, value, one?}}`; `entities` = all entities of its devices, `value` = `average`, `min`, `max` or `one` |
 | `zigbee_devices` | `{ieee: {x, y, name}}`, the format of the Zigbee Floorplan Card |
-| `areas` | Room pins: `{area_id: {name, x, y, px, py}}` |
+| `areas` | Room pins: `{area_id: {name, icon, aliases?, x, y, px, py}}` |
 
 ### Devices and their entities
 

@@ -1,6 +1,6 @@
 # Turn your sketch into a floorplan in 10 minutes
 
-No floorplan? Draw one with a pencil and let an AI image tool turn it into a clean plan. It takes about 15 minutes.
+No floorplan? Draw one with a pencil and let an AI image tool turn it into a clean plan. It takes about 10 minutes.
 
 <div class="ba">
   <figure><img src="/guide/sketch.webp" alt="A pencil sketch of an apartment"><figcaption>Your sketch</figcaption></figure>
@@ -12,7 +12,7 @@ No floorplan? Draw one with a pencil and let an AI image tool turn it into a cle
 <ol class="howto">
 <li>
 
-**Draw your layout on white paper.** Use a dark pencil or pen. Include walls, doors, windows and room names, plus the big furniture if you like (bed, sofa, kitchen). Keep the proportions roughly right and write down measurements you know.
+**Draw your layout on white paper.** Use a dark pencil or pen. Include walls, doors, windows and room names, plus the big furniture if you like (bed, sofa, kitchen). Keep the proportions roughly right.
 
 ![Drawing the layout](/guide/drawing.webp){.shot}
 

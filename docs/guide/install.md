@@ -3,18 +3,29 @@
 ## Requirements
 
 - Home Assistant 2025.1 or newer.
-- An administrator account (the planner is for admins; the dashboard card works for everyone).
+- You set up your plans in the **Floorplan Editor** in the sidebar, which only Home Assistant administrators see (your own login usually is). The dashboard card works for everyone in your home, also users without admin rights.
+
+::: tip Before you start
+- **Devices in areas (rooms)**: Auto-place and the room filters use them. [Areas in Home Assistant](https://www.home-assistant.io/docs/organizing/areas/)
+- **Areas on floors**: each floor plan then offers only its own devices. [Floors in Home Assistant](https://www.home-assistant.io/docs/organizing/floors/)
+
+Neither is needed to place devices by hand.
+:::
 
 ## With HACS (custom repository)
 
 1. In HACS, open the ⋮ menu → **Custom repositories**.
-2. Add this repository's URL with type **Integration**.
+2. Add this repository's URL with type **Integration**:
+
+   ```
+   https://github.com/JohnKotrolos/ha-device-floorplan
+   ```
 3. Find **Device Floorplan** in HACS and download it.
 4. Restart Home Assistant.
 
 ## Manually
 
-1. Download the latest release and unzip it.
+1. Download the latest release from the [Releases page](https://github.com/JohnKotrolos/ha-device-floorplan/releases) and unzip it.
 2. Copy the folder `custom_components/device_floorplan` into your Home Assistant `config/custom_components/` folder.
 3. Restart Home Assistant.
 

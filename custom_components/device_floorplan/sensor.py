@@ -50,7 +50,7 @@ class PlanSensor(SensorEntity):
             "plan_id", "plan_name", "kind", "floor_id", "level", "image_type",
             "image_url", "image_fallback_url", "image_width", "image_height", "metres_per_px_x",
             "metres_per_px_y", "real_width_m", "real_height_m", "approx_count",
-            "devices", "entities", "bonds", "zigbee_devices", "areas",
+            "devices", "entities", "bonds", "phantoms", "zigbee_devices", "areas",
         }
     )
 

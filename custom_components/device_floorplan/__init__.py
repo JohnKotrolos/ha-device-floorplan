@@ -74,7 +74,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         # Cards with this card_id (on every screen) switch to the overlay (#47).
         hass.bus.async_fire(
             EVENT_SHOW_OVERLAY,
-            {"card_id": call.data["card_id"], "overlay": call.data["overlay"]},
+            {
+                "card_id": call.data["card_id"],
+                "overlay": call.data.get("overlay"),
+                "floor": call.data.get("floor"),
+            },
         )
 
     hass.services.async_register(
@@ -82,7 +86,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         SERVICE_SHOW_OVERLAY,
         _show_overlay,
         schema=vol.Schema(
-            {vol.Required("card_id"): cv.string, vol.Required("overlay"): cv.string}
+            vol.All(
+                {
+                    vol.Required("card_id"): cv.string,
+                    vol.Optional("overlay"): cv.string,
+                    vol.Optional("floor"): cv.string,
+                },
+                cv.has_at_least_one_key("overlay", "floor"),
+            )
         ),
     )
     return True
@@ -91,6 +102,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = FloorplanData(hass)
     await data.async_load()
+    from .devices import default_main_entity  # noqa: PLC0415
+    data.migrate_split(lambda dev: default_main_entity(hass, data, dev))  # 0.5.1, #91
+    from .devices import migrate_replaced  # noqa: PLC0415
+    try:
+        migrate_replaced(hass, data)  # 0.6.0, #106
+    except Exception:  # noqa: BLE001
+        pass
     await hass.async_add_executor_job(
         lambda: data.images_path.mkdir(parents=True, exist_ok=True)
     )

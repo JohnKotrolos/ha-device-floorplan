@@ -100,6 +100,9 @@ class FloorplanData:
         plan.setdefault("hidden_rooms", [])
         plan.setdefault("sort", 0)
         plan.setdefault("bonds", {})
+        plan.setdefault("bond_meta", {})
+        plan.setdefault("phantoms", {})
+        plan.setdefault("shapes", {})
 
     @callback
     def _save(self) -> None:
@@ -177,6 +180,10 @@ class FloorplanData:
             "hidden_rooms": plan.get("hidden_rooms", []),
             "sort": plan.get("sort", 0),
             "bonds": plan.get("bonds", {}),
+            "bond_meta": plan.get("bond_meta", {}),
+            "phantoms": plan.get("phantoms", {}),
+            "anchors_centered": bool(plan.get("anchors_centered")),
+            "shapes": plan.get("shapes", {}),
             "device_id": self.plan_device_id(plan_id),
             "image_entity": self.entity_id_for(plan_id, "image"),
             "sensor_entity": self.entity_id_for(plan_id, "sensor"),
@@ -329,6 +336,20 @@ class FloorplanData:
                 key: {"x": round(float(p["x"]), 3), "y": round(float(p["y"]), 3)}
                 for key, p in changes["anchors"].items()
             }
+        if "shapes" in changes:
+            # #111: room shapes, {area_id: [[x, y], ...]} in percent, 3..40 corners.
+            shapes = {}
+            for aid, pts in (changes["shapes"] or {}).items():
+                if not isinstance(pts, list) or len(pts) < 3:
+                    continue
+                # A third value 1 = the edge from this corner to the next is open (no wall): light passes.
+                shapes[str(aid)] = [
+                    [round(min(100.0, max(0.0, float(p[0]))), 3), round(min(100.0, max(0.0, float(p[1]))), 3)] + ([1] if len(p) > 2 and p[2] else [])
+                    for p in pts[:40]
+                ]
+            plan["shapes"] = shapes
+        if "anchors_centered" in changes:
+            plan["anchors_centered"] = bool(changes["anchors_centered"])
         if "sort" in changes:
             plan["sort"] = int(changes["sort"])
         if "hidden_rooms" in changes:
@@ -340,6 +361,39 @@ class FloorplanData:
                 for k, v in changes["bonds"].items()
                 if isinstance(v, list) and len(v) >= 2
             }
+        if "bond_meta" in changes:
+            # Name / icon / card behaviour of a bond (#56); only for bonds that exist.
+            meta = {}
+            for k, v in (changes["bond_meta"] or {}).items():
+                if str(k) not in plan.get("bonds", {}) or not isinstance(v, dict):
+                    continue
+                m = {kk: str(vv)[:80] for kk, vv in v.items() if kk in ("name", "icon", "tap", "show") and vv}
+                if m:
+                    meta[str(k)] = m
+            plan["bond_meta"] = meta
+        if "phantoms" in changes:
+            # Phantom devices (#60): a combined value from devices anywhere, own free spot.
+            ph = {}
+            for k, v in (changes["phantoms"] or {}).items():
+                if not isinstance(v, dict):
+                    continue
+                entry = {
+                    "name": str(v.get("name") or "Phantom")[:60],
+                    "x": round(min(100.0, max(0.0, float(v.get("x", 50)))), 3),
+                    "y": round(min(100.0, max(0.0, float(v.get("y", 50)))), 3),
+                    "members": [str(m) for m in (v.get("members") or [])][:24],
+                }
+                for kk in ("icon", "value", "one"):
+                    if v.get(kk):
+                        entry[kk] = str(v[kk])[:80]
+                uses = v.get("uses")
+                if isinstance(uses, dict):
+                    # #103: which entities of a member count (empty/missing = all its readings).
+                    u = {str(m): [str(e) for e in es][:12] for m, es in uses.items() if isinstance(es, list) and es and str(m) in entry["members"]}
+                    if u:
+                        entry["uses"] = u
+                ph[str(k)] = entry
+            plan["phantoms"] = ph
         if "refs" in changes:
             plan["refs"] = [
                 {
@@ -452,6 +506,31 @@ class FloorplanData:
         async_dispatcher_send(self.hass, SIGNAL_DEVICES_CHANGED)
 
     @callback
+    @callback
+    def migrate_split(self, main_of) -> bool:
+        """0.5.1 (#91): box spot -> device spot, old device spot -> spot of its main entity."""
+        changed = False
+        for plan in self.plans.values():
+            pos_all = plan.get("positions", {})
+            for key in list(pos_all):
+                pos = pos_all[key]
+                box = pos.get("box") if isinstance(pos, dict) else None
+                if not box or key.startswith("entity:"):
+                    continue
+                main = main_of(key)
+                new = {k: v for k, v in pos.items() if k not in ("box", "light")}
+                new["x"], new["y"] = box["x"], box["y"]
+                pos_all[key] = new
+                if main and f"entity:{main}" not in pos_all:
+                    spot = {"x": pos["x"], "y": pos["y"], "of": key}
+                    if pos.get("light"):
+                        spot["light"] = pos["light"]
+                    pos_all[f"entity:{main}"] = spot
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
     def set_main_entity(self, device_id: str, entity_id: str | None) -> None:
         if entity_id:
             self.main_entity[device_id] = entity_id
@@ -536,6 +615,29 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         entry["approx"] = True
     if pos.get("z"):
         entry["z"] = int(pos["z"])
+    light = pos.get("light")
+    if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "none"):
+        # Light shape on the plan (#74), in percent of the image (x / y axes).
+        clean: dict[str, Any] = {"type": light["type"]}
+        for k in ("r", "x2", "y2", "w", "h", "a"):
+            if light.get(k) is not None:
+                clean[k] = round(float(light[k]), 3)
+        col = light.get("color")
+        if isinstance(col, str) and col and col != "auto":
+            entry_col = col.strip()[:12]  # #112: "k:<kelvin>" or "#rrggbb"
+            clean["color"] = entry_col
+        entry["light"] = clean
+    if pos.get("of"):
+        entry["of"] = str(pos["of"])  # split device (#91): this entity acts here
+    if pos.get("as") in ("light", "switch", "fan", "other"):
+        entry["as"] = pos["as"]  # #105: what a split spot acts as on the card
+    air = pos.get("air")
+    if isinstance(air, dict):
+        # #115: AC air flow cone: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.
+        if air.get("type") == "none":
+            entry["air"] = {"type": "none"}
+        else:
+            entry["air"] = {k: round(float(air[k]), 2) for k in ("a", "r", "s") if air.get(k) is not None}
     box = pos.get("box")
     if box:
         entry["box"] = {

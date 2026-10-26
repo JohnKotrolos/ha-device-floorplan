@@ -1,57 +1,87 @@
 # 3 · Place devices
 
+Pick a device, put it where it really is. The list on the right is your to-do list; the plan fills up as you go.
+
 ## The device list
 
-**Devices to place** shows the devices on your list, grouped by room (or by type or connection). Each row has the integration's logo, the battery level when there is one, and ⓘ for Home Assistant's more-info dialog. Placed devices are dimmed and show a green **✓ on plan** pill (amber **◌ approx** while approximate), just like the rooms.
+<div class="legend">
+  <div><img src="/legend/onplan.webp" alt=""><b>On plan</b><span>Placed and confirmed. The row is dimmed.</span></div>
+  <div><img src="/legend/approx.webp" alt=""><b>Approx</b><span>Auto-placed: right room, not the exact spot yet.</span></div>
+  <div><img src="/legend/chips.webp" alt=""><b>Type · Connection · Status</b><span>Filters: choose what you work on. <i>7 left</i> or ✓ shows progress.</span></div>
+  <div><img src="/legend/collapse.webp" alt=""><b>▴</b><span>Hides search and filters; one line shows what's active.</span></div>
+  <div><img src="/legend/info.webp" alt=""><b>ⓘ</b><span>Home Assistant's details of the device.</span></div>
+  <div><img src="/legend/ready.webp" alt=""><b>I'm ready · 37 placed</b><span>Appears after the first device: put the plan on a dashboard.</span></div>
+</div>
 
-- **Search finds everything.** Type a name, room, model, manufacturer, an entity name or an entity id (paste `binary_sensor.dryer_running`). While you search, filters, skipped devices, hidden rooms and other floors are ignored: every match is shown with its status and the action right there. A device found through one of its entities shows *matches: …* under its name.
-- **Type**, **Connection** and **Status** filters choose what you work on. In each filter, **All · None** at the top selects everything or nothing; the **✕** on an active filter clears just that one. *Clear filters* resets them all. Devices already on the plan that don't match stay visible, faded, so you can see how full a room is (switch them off under Layers → *Devices outside the filter*).
-- The **▴** next to the title hides search and filters; one line then shows what is active (*Zigbee · 5 types · 38 shown*) and the list gets the room.
-- **Group by** Room, Type or Connection.
-- **Devices from all floors** shows devices of other floors too (only on floor plans).
+**Search finds everything**: a name, room, model, manufacturer, an entity name or an entity id (paste `binary_sensor.dryer_running`). While you search, filters, skipped devices, hidden rooms and other floors are ignored, and every match shows its status and action.
+
+::: details More about the list
+- In each filter, **All · None** selects everything or nothing; the **✕** on an active filter clears just that one; *Clear filters* resets them all. Placed devices that don't match stay visible, faded (switch them off under Layers → *Devices outside the filter*).
+- **Group by** Room, Type or Connection. **Devices from all floors** shows devices of other floors too (floor plans only).
+- With a filter or search active, **Skip the N not on the plan** skips all shown devices that aren't placed. Placed devices are never skipped this way; every skip can be undone.
+:::
 
 ## Three ways to place
 
 | Way | How |
 |---|---|
-| **Auto-place** | Puts all devices shown in the list next to their room pin, marked *approximate*. It respects your filters. |
-| **Click to place** | Click a device in the list, then click on the plan. With *then next* ticked, the next device is picked. |
-| **Drag** | Drag a row from the list onto the plan, or drag a marker on the plan. |
+| **Auto-place** | All devices shown in the list go next to their room pin, marked *approximate*. Respects your filters. |
+| **Click to place** | Click a device in the list, then the plan. With *then next* ticked, the next device is picked. |
+| **Drag** | Drag a row onto the plan, or a marker on the plan. |
 
-Placing doesn't open the device's details, so the next device is right there: the new marker flashes and a message says *✓ … placed · Undo*.
-
-**Taking a device off the plan:** drag its marker back onto the list (it lights up *Drop to remove from plan*). Dropped anywhere else outside the plan, the marker snaps back. Room pins work the same way in the Rooms step.
-
-**Zoomed in?** Drag the plan to move around, in every step. A click (without moving) still places or measures. **+** and **−** zoom around the selected device or measuring point.
+Placing doesn't open the device's card, so the next device is right there: the new marker flashes and a message says *✓ … placed · Undo*. **Off the plan:** drag the marker back onto the list. **Zoomed in?** Drag the plan to move around; a click still places.
 
 ![After Auto-place](/screens/place-auto.webp){.shot}
 
-## Approximate and confirmed
+## On the plan
 
-Auto-placed devices have a **dashed ring**: they are in the right room but not at the exact spot. Dragging a device, nudging it with the arrow keys, or pressing **Confirm position** makes it solid.
+<div class="legend">
+  <div><img src="/legend/marker.webp" alt=""><b>Marker</b><span>Ring colour = connection (Zigbee orange, Wi-Fi blue…).</span></div>
+  <div><img src="/legend/two.webp" alt=""><b>Two connections</b><span>Double ring.</span></div>
+  <div><img src="/legend/approx-marker.webp" alt=""><b>Approximate</b><span>Dashed ring with an amber glow. Drag it, nudge it with the arrow keys or press <i>Confirm position</i>.</span></div>
+  <div><img src="/legend/stack.webp" alt=""><b>Same spot</b><span>Grey count. Click it for the list of devices there.</span></div>
+  <div><img src="/legend/bond-badge.webp" alt=""><b>Bond</b><span>Green ×N: several devices that are one thing.</span></div>
+  <div><img src="/legend/phantom.webp" alt=""><b>Phantom</b><span>A combined value from several devices.</span></div>
+</div>
 
-## Device details
+## Same spot or bond?
 
-Click a marker (or a placed device in the list) to open its details at the top of the list. For a device that isn't placed yet, click its row once to place it, a second time (or **Details** in the blue bar) for its details:
+Drop a device onto another one and it lands on **exactly the same spot**. Then a question appears and stays until you answer:
 
-![A selected device](/screens/place-selected.webp){.shot}
+![Bond them?](/screens/bond-ask.webp){.shot}
 
-- **Confirm position**, **Remove from plan**, **Skip this device**.
-- **More info** and **Device page**.
-- *The marker shows*: the entity used for the icon, the state and a tap in the card. All entities of the device are listed, grouped (with a filter box for devices with many entities); *Now:* shows the current value. Choose another entity of the device, or **Other entity…** for any entity in Home Assistant, a helper too (e.g. a *Dryer running* template next to the dryer's plug). **The card uses only this entity** hides the device's other entities from the card (no switching the plug from the dashboard).
-- **📍 Box / radio is somewhere else**: for a device in two places, e.g. a wall switch that drives a ceiling lamp. Place the device where it does its job (the lamp); click this and then the wall to add a small ▣ spot for the box. The card's network and health views use that spot.
-- **Skip all N not on the plan from ‹integration›**: one click for software-heavy integrations (NAS, router, cloud services). Undo is in the message.
-- When devices share a spot: **Bring to front** / **Send to back**. Click a stacked marker (with a count) to fan the devices out.
+- **Keep separate – just the same spot**: two devices, a grey count. Two wall switches on one plate that drive different lamps.
+- **Bond them – one device on the card**: one marker, a green ×N. Three bulbs in one lamp.
 
-## Bond devices
+Changed your mind? *Bond with …* in a device's card asks again; the bond card has ✕ per member and **Unbond all**. All of it with Undo. More in [Bonds](/together/bonds).
 
-Several lamps above one table, two blinds on one window: **bond** them so they are one marker, switched together on the card. Drag one onto the other on the plan (or from the list) and **hold** for a moment until the ring turns green and says *Drop to bond*. A quick drop without holding only stacks them. Only the same kind bonds: lights with lights, switches/plugs together, covers together. The details show *Bonded with …* and **Unbond**. Bonding lives only in Device Floorplan and its card; nothing is added to Home Assistant.
+## The device card
+
+Click a marker (or a placed device in the list) to open its card above the list. It starts simple:
+
+![A device card](/screens/place-selected.webp){.shot}
+
+- Name, room, connection, status, **Confirm position**, **More info**, **Device page**, **Remove from plan**.
+- *Connected through …* / *N devices connect through it* for hubs and bridges.
+- **💡 Light on the plan** for anything with a light: see [Light shapes](/using/light-shapes).
+- **📍 Split: it controls something elsewhere**: a relay behind the wall switch whose lamp is on the ceiling, a panel with two relays. See [Split devices](/together/split).
+- **More options ▾** (remembered): **Skip this device**, and **Skip all N not on the plan from ‹integration›** for software-heavy integrations (NAS, router, cloud).
+
+What a marker shows, its icon and its tap are set on the dashboard card, not here: *names in the Editor, looks on the card*. See [Edit markers on the plan](/reference/card#edit-markers-on-the-plan).
+
+A **bond** opens the bond card, a **phantom** the phantom card: see [Bonds, phantoms & split devices](/together/).
+
+## Changed your mind? Get skipped devices back
+
+Skipping changes nothing in Home Assistant, and it's easy to undo:
+
+1. **Search** finds skipped devices too: open one and press **Add to plan**, or drag its row onto the plan.
+2. The **Status** filter → **Skipped** lists them all.
+3. **⋮** (top right) → **Choose devices again…** adds whole categories back. Devices already on the plan stay where they are.
 
 ## Helpers and entities without a device
 
-Some real appliances have no device in Home Assistant, for example air conditioners from SmartIR or IR-controlled lamps and fans. When such an entity (climate, light, cover, fan, switch, lock, media player, vacuum…) has an area, it is **listed like a device**: in its room, under its type, and Auto-place works.
-
-Template sensors and other helpers without a device are only found by the search; they appear under **Entities without a device**. Drag one onto the plan, or click it and then the plan: it gets its own marker and the card shows that entity at that spot. Once placed, it stays in the list.
+Real appliances without a device in Home Assistant (SmartIR air conditioners, IR lamps and fans) are **listed like devices** when the entity has an area. Template sensors and other helpers are found by the search, under **Entities without a device**: drag one onto the plan and the card shows it at that spot.
 
 ## Statuses
 
@@ -64,10 +94,6 @@ Template sensors and other helpers without a device are only found by the search
 | New | Added to Home Assistant since your last visit. |
 | Skipped | Not wanted on any plan. Nothing changes in Home Assistant. |
 
-With a filter or search active, **Skip the N not on the plan** skips all shown devices that aren't placed. Devices already on the plan are never skipped this way, and every skip can be undone.
+## One marker per physical device
 
-## One dot per physical device
-
-A device that is "connected via" another device and has no entities of its own (for example the Bluetooth side of an ESP32) is merged into it. The marker gets a double ring when a device has two connections.
-
-**Parts.** Some integrations split one physical thing into several HA devices: a 3D printer with its AMS and external spool, a NAS with its drives, volume and Surveillance Station. A device counts as a *part* when it is connected via a device of the same integration, has no connection of its own and its name starts with the parent's name. Parts don't get their own row or marker: the parent shows *+2 parts*, and its details list them. Hubs and bridges are not affected (a Zigbee coordinator's or Hue bridge's devices have their own radio or their own name). If the guess is wrong, **Show as its own device** in the details splits a part off; *Make it a part again* undoes it.
+A device that is "connected via" another device and has no entities of its own (the Bluetooth side of an ESP32) is merged into it (its card says *Includes its twin device*). Devices that belong to another one, like a printer's filament unit or a NAS's drives, are [bonded automatically](/together/bonds): one row, one marker, a green ×N, *Unbond* if the guess is wrong. Hubs and bridges are not affected.

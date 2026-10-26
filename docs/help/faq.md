@@ -8,7 +8,7 @@ Draw one with a pencil and turn it into a clean plan: [Turn your sketch into a f
 
 Type its name, or the entity id of one of its entities, in the search: the search finds every device, also skipped ones, devices in hidden rooms and on other floors, and entities without a device.
 
-- It may be **skipped**: set the Status filter to *Skipped* and press **Add to plan** in its details.
+- It may be **skipped**: set the Status filter to *Skipped* and press **Add to plan** in its details, or use **⋮ → Choose devices again…** to bring back whole categories. See [Get skipped devices back](/using/devices#changed-your-mind-get-skipped-devices-back).
 - Its area is on **another floor**: tick *Devices from all floors*.
 - Its **room is hidden** on this plan: look in the *Hidden rooms* group at the bottom of the list.
 - **Disabled** devices are never listed, and devices "connected via" another device without entities of their own are merged into that device.
@@ -16,7 +16,19 @@ Type its name, or the entity id of one of its entities, in the search: the searc
 
 ## My printer / NAS shows up as one device
 
-That's on purpose: its AMS, drives or other *parts* follow it (see [Parts](/using/devices#one-dot-per-physical-device)). Use **Show as its own device** in the details if one of them really stands somewhere else.
+That's on purpose: its AMS, drives and the like are [bonded automatically](/together/bonds) (green ×N). Use **Unbond** in its card if one of them really stands somewhere else; it stays unbonded.
+
+## I dropped a device on another one and now there's a question
+
+Device Floorplan asks whether they are one thing (**Bond them**: one marker on the card, switched together) or just on the same spot (**Keep separate**). It never bonds by itself. See [Same spot or bond?](/using/devices#same-spot-or-bond)
+
+## The plan gets dark in the evening
+
+That's the card's **Day & night** look: it follows the sun by default and only in Plan, Live, Lights and People. Change it or turn it off in the card editor → **Day & night**. Without the Sun integration the fixed times (20:00–07:00) are used; add **Sun** under *Settings → Devices & services → Add integration* for a gradual change.
+
+## A person isn't shown on the card
+
+People appear only when they are **home** and their room sensor reports a room that has a pin on the plan (by name, area id or alias). At home without a known room they are in the **Home** row under the plan; away they are not shown. Check the room sensor's state in *Developer tools → States*.
 
 ## My air conditioners (SmartIR) or cloud appliances are missing
 
@@ -32,7 +44,7 @@ Auto-place only places devices that are shown in the list, not yet placed, and w
 
 ## The card shows "Plan not found"
 
-The `plan:` in the card must be the plan id (e.g. `ground_floor`), not the name. You find it in the sensor's `plan_id` attribute.
+The `plan:` (or each entry of `plans:`) in the card must be the plan id (e.g. `ground_floor`), not the name. You find it in the sensor's `plan_id` attribute, or pick the floors in the card editor.
 
 ## The card says "Custom element doesn't exist"
 
@@ -57,3 +69,13 @@ See [Horizontal and vertical disagree](/using/measure#horizontal-and-vertical-di
 ## Something else
 
 Open an issue on GitHub with your Home Assistant version, the Device Floorplan version and what you expected to happen. Screenshots help a lot.
+
+
+## Does it work on phones?
+
+Best on PC (the Floorplan Editor and card editing) and tablets or wall panels (the card). Phones work but aren't optimised yet.
+
+
+## My wireless button doesn't show in Live
+
+Buttons and remotes only send events to Home Assistant (an automation does the switching), so they have nothing to show in Live. They appear in **Network** and **Health** (battery). Place them where they are, and the lights they control where the lights are. See [Buttons and remotes](/together/split#buttons-and-remotes-are-not-split-devices).

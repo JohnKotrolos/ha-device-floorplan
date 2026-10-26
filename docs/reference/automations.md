@@ -27,14 +27,17 @@ Example: notify which devices are still approximate.
 
 ## Action: `device_floorplan.show_overlay`
 
-Switches every [dashboard card](card.md) with this **Card ID** to an overlay, on every screen showing it.
+Switches every [dashboard card](card.md) with this **Card ID** to an overlay and / or a floor, on every screen showing it.
 
 ```yaml
 action: device_floorplan.show_overlay
 data:
   card_id: hall          # the Card ID set in the card editor
-  overlay: security      # plan, live, lights, comfort, security, network, health, custom1…, or reset
+  overlay: security      # plan, live, lights, comfort, security, network, health, people, custom1…, or reset
+  floor: first_floor     # optional: plan id, floor name or level (cards with several floors)
 ```
+
+At least one of `overlay` and `floor` is needed. [Chip cards](chip.md) on those screens glow for the new overlay.
 
 See [Switch the overlay from other cards](card.md#switch-the-overlay-from-other-cards) for buttons and chips.
 

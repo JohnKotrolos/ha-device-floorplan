@@ -16,7 +16,7 @@ The editor has a header with your floors, the three steps, a guide box, the plan
 
 The numbered steps **1 Measure · 2 Mark rooms · 3 Place devices** turn into a green ✓ when done. You can click them in any order.
 
-The green box explains the current step and offers *Skip* or *Next*. **Hide guide** turns it off (it is remembered); bring it back with **Show guide** or from the ⋮ menu. Every step opens with the whole plan visible.
+The green box explains the current step and offers *Skip* or *Next*. **Hide guide** / **Show guide** next to the step tabs turns it off and on (it is remembered; also in the ⋮ menu). Every step opens with the whole plan visible.
 
 ## The plan
 
@@ -24,11 +24,15 @@ Controls sit on the plan itself, in the corners:
 
 | Corner | Control |
 |---|---|
-| Top right | **Layers**: show or hide measurements, rooms and devices. See [Layers](/using/layers). |
+| Top right | **Layers**: show or hide measurements, rooms, devices, bonds, phantoms and light shapes. See [Editor layers](/using/layers). In the Place step also the **phantom** button and the **moon** (see it at night). |
 | Bottom right | **Zoom**: − / + in 25 % steps, **Fit** for 100 %. (The mouse wheel scrolls the page; it doesn't zoom.) |
 | Bottom left | **Scale bar**, once the plan is measured. |
 
 Drag an empty spot to pan when zoomed in. Markers keep their size when you zoom.
+
+## Bonds, phantoms and split devices
+
+Drop a device onto another and the Editor asks whether they are one thing (**bond**) or just on the same spot. The phantom button creates a **phantom**, a combined value from several devices. A device in two places is a **split device**. All three are explained in [Concepts](/together/); the small **ⓘ** next to them in the device cards gives a short reminder.
 
 ## The list
 

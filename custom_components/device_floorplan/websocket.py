@@ -23,6 +23,10 @@ _POSITION = {
     vol.Optional("approx"): cv.boolean,
     vol.Optional("z"): vol.Coerce(int),
     vol.Optional("box"): vol.Any(None, {vol.Required("x"): _PCT, vol.Required("y"): _PCT}),
+    vol.Optional("light"): vol.Any(None, dict),
+    vol.Optional("air"): vol.Any(None, dict),
+    vol.Optional("of"): vol.Any(None, str),  # split device (#91): entity spot of this device
+    vol.Optional("as"): vol.Any(None, vol.In(("light", "switch", "fan", "other"))),
 }
 _ANCHOR = {vol.Required("x"): _PCT, vol.Required("y"): _PCT}
 _REF = {
@@ -137,10 +141,14 @@ def ws_plan_create(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Optional("image_type"): vol.In(IMAGE_KINDS),
         vol.Optional("positions"): {cv.string: _POSITION},
         vol.Optional("bonds"): {cv.string: [cv.string]},
+        vol.Optional("bond_meta"): {cv.string: dict},
+        vol.Optional("phantoms"): {cv.string: dict},
         vol.Optional("anchors"): {cv.string: _ANCHOR},
         vol.Optional("refs"): [_REF],
         vol.Optional("hidden_rooms"): [cv.string],
         vol.Optional("sort"): vol.Coerce(int),
+        vol.Optional("anchors_centered"): cv.boolean,
+        vol.Optional("shapes"): {cv.string: [[vol.Coerce(float)]]},
     }
 )
 @callback
@@ -331,7 +339,11 @@ def ws_overlay_subscribe(hass: HomeAssistant, connection, msg) -> None:
         connection.send_message(
             websocket_api.event_message(
                 msg["id"],
-                {"card_id": event.data.get("card_id"), "overlay": event.data.get("overlay")},
+                {
+                    "card_id": event.data.get("card_id"),
+                    "overlay": event.data.get("overlay"),
+                    "floor": event.data.get("floor"),
+                },
             )
         )
 

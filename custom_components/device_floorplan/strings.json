@@ -47,7 +47,7 @@
     },
     "show_overlay": {
       "name": "Show overlay",
-      "description": "Switches every Device Floorplan card with this card ID to an overlay, on every screen.",
+      "description": "Switches every Device Floorplan card with this card ID to an overlay and/or a floor, on every screen.",
       "fields": {
         "card_id": {
           "name": "Card ID",
@@ -56,6 +56,10 @@
         "overlay": {
           "name": "Overlay",
           "description": "plan, live, lights, comfort, security, network, health, a custom overlay's ID, or reset (back to the card's default)."
+        },
+        "floor": {
+          "name": "Floor",
+          "description": "Optional: the plan id (or HA floor id) of the floor to show, for cards with several floors."
         }
       }
     }

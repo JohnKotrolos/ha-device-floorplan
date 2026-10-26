@@ -13,7 +13,12 @@ show_overlay:
       selector:
         text:
     overlay:
-      required: true
+      required: false
       example: comfort
+      selector:
+        text:
+    floor:
+      required: false
+      example: first_floor
       selector:
         text:

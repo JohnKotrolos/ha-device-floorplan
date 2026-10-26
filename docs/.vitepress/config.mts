@@ -34,11 +34,21 @@ export default defineConfig({
           { text: "1 · Measure", link: "/using/measure" },
           { text: "2 · Mark rooms", link: "/using/rooms" },
           { text: "3 · Place devices", link: "/using/devices" },
-          { text: "Layers", link: "/using/layers" },
+          { text: "Light shapes", link: "/using/light-shapes" },
+          { text: "Editor layers", link: "/using/layers" },
           { text: "Floors and plans", link: "/using/floors" },
           { text: "New and removed devices", link: "/using/new-devices" },
           { text: "I'm ready: put it on a dashboard", link: "/using/ready" },
           { text: "Export and import", link: "/using/export" },
+        ],
+      },
+      {
+        text: "Bonds, phantoms & split devices",
+        items: [
+          { text: "Overview", link: "/together/" },
+          { text: "Bonds", link: "/together/bonds" },
+          { text: "Phantom devices", link: "/together/phantoms" },
+          { text: "Split devices", link: "/together/split" },
         ],
       },
       {
@@ -53,6 +63,7 @@ export default defineConfig({
         text: "Reference",
         items: [
           { text: "Dashboard card", link: "/reference/card" },
+          { text: "Chip card", link: "/reference/chip" },
           { text: "Entities and attributes", link: "/reference/entities" },
           { text: "Actions, events and blueprint", link: "/reference/automations" },
           { text: "Keyboard shortcuts", link: "/reference/keyboard" },
@@ -64,6 +75,7 @@ export default defineConfig({
         items: [
           { text: "FAQ and troubleshooting", link: "/help/faq" },
           { text: "Changelog", link: "/help/changelog" },
+          { text: "Roadmap", link: "/help/roadmap" },
         ],
       },
     ],
