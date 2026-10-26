@@ -15,7 +15,7 @@ The card shows your plan and its **overlay buttons**. That's all there is to do 
 | Overlay | What it shows |
 |---|---|
 | **Plan** | The plan with your room names. |
-| **Live** | **What is happening at home right now**: lights that are on (just their glow), switches and plugs that are on, open covers, ACs that run, motion (pulsing when detected), open doors and windows, unlocked locks, media playing, appliances running. Things that are off are hidden (option: faint), lights can show as markers instead of glow. |
+| **Live** | **What is happening at home right now**: lights that are on (just their glow), switches and plugs that are on, covers while they move, ACs that run, motion (pulsing when detected), open doors and windows, unlocked locks, media playing, appliances running. Things that are off are hidden (option: faint), lights can show as markers instead of glow. Shutters appear only while they move; doors, windows and shutters with a drawn [opening](/using/openings) show as bars instead of markers. |
 | **Lights** | Only lights (and switches or plugs that run lights), with a soft **light pool** where each lamp shines. Tap to switch; **All off** (asks first), **All on** and your own **light scenes** below the plan. |
 | **Comfort** | Room temperature and humidity per sensor, as calm chips (*21.0 °C · 69.6 %*). ACs and thermostats get a [climate chip](#climate-chips). |
 | **Security** | Doors and windows, motion, locks, alarm panels, smoke / leak / gas sensors and cameras. Alerts are highlighted. |
@@ -91,13 +91,18 @@ Card editor → **Day & night**:
 
 | Setting | Default | What it does |
 |---|---|---|
-| **Day & night** | Follow the sun | **Follow the sun**: gradual, from the sun's elevation (warm dusk, soft blue dawn, full night below −6°). **Fixed times**: night from *Night starts* to *Night ends*, with a 30-minute fade. **Follow Home Assistant's dark theme**. **Always night**. **Off**. |
+| **Day & night** | Follow the sun | **Follow the sun**: daylight until sunset, then gradually darker until the sun is 6° below the horizon (and the other way round at dawn). **Fixed times**: night from *Night starts* to *Night ends*, with a 30-minute fade. **Follow Home Assistant's dark theme**. **Always night**. **Off**. |
 | **Night starts / ends** | 20:00 / 07:00 | For *Fixed times*, and for *Follow the sun* while the Sun integration is missing. |
 | **Use the night look in** | Plan, Live, Lights, People | Readability first: Comfort, Security, Network and Health stay in daylight unless you add them. Custom overlays can be added too. |
 | **How dark the night gets** | 70 % | |
 | **Style** | Moonlight | Deep blue, or *Dim* (darker, neutral). |
 | **Dim quiet markers at night** | On | Markers that are off or idle get softer; active ones (a lamp on, motion, an open door) stay bright. |
-| **Closed shutters darken their room by day** | On | A room with a [shape](../using/rooms.md) gets darker the more of its shutters, blinds or curtains are closed: one window fully closed makes it quite dark (never black), 2 of 5 closed makes it a little dark. Uses each cover's position when it has one. Garage doors and gates don't count. |
+| **Closed shutters darken their room by day** | On | A room with a [shape](../using/rooms.md) gets darker the more of its shutters, blinds or curtains are closed: one window fully closed makes it quite dark (never black), 2 of 5 closed makes it a little dark. Electric shutters count with their position, manual ones with their contact sensor (open or closed). What counts as a shutter is set in the Editor ([openings](/using/openings)). |
+| **Warm dusk and dawn colours** | Off | With *Follow the sun*: a warm tint at dusk and a soft blue one at dawn while it changes. |
+
+When **every room on the plan has a [shape](../using/rooms.md)**, only the inside of the home darkens at night: walls and everything outside keep their colour, so the card stays calm next to your other cards.
+
+Doors, windows and shutters with a drawn [opening](/using/openings) show as bars in **Live** and **Security**: a light blue bar for an open door or window, a white outlined bar for an open shutter (electric ones filled as far as they are closed, fading out a moment after closing). Tap a bar for its details and controls.
 
 Room names turn light at night and stay readable; markers and chips are never darkened by the night layer. The shape of each light pool comes from the Floorplan Editor ([light shapes](/using/light-shapes)); without one, a lamp is a bulb of about 1.5 m. In the **Lights** overlay the pools also show during the day, softer.
 

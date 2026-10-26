@@ -35,6 +35,7 @@ export default defineConfig({
           { text: "2 · Mark rooms", link: "/using/rooms" },
           { text: "3 · Place devices", link: "/using/devices" },
           { text: "Light shapes", link: "/using/light-shapes" },
+          { text: "Doors, windows and shutters", link: "/using/openings" },
           { text: "Editor layers", link: "/using/layers" },
           { text: "Floors and plans", link: "/using/floors" },
           { text: "New and removed devices", link: "/using/new-devices" },

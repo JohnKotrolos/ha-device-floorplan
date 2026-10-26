@@ -12,6 +12,23 @@
 Neither is needed to place devices by hand.
 :::
 
+### Requirements by feature
+
+Everything works with Home Assistant alone; a few extras need a data source.
+
+| Feature | Needs |
+|---|---|
+| Auto-place, room filters | Devices assigned to areas |
+| One plan per floor | Areas assigned to floors |
+| Interactive Zigbee map (roles, links, link quality) | ZHA. With Zigbee2MQTT you get each device's signal from its *linkquality* sensor. |
+| Signal in popups (dBm, %, LQI) | The device's signal sensor enabled |
+| People in their rooms | A room sensor per person (Bermuda, ESPresense, a template…) |
+| Lights stay in their room, night only inside the home, shutters darken a room | [Room shapes](/using/rooms) |
+| Night look following the sun | The Sun integration (otherwise fixed times are used) |
+| Real light colours | Bulbs that report their colour; plain lamps get a colour in the Editor |
+| AC air flow | A climate entity on the device |
+| Bars for doors, windows and shutters | A door / window contact or a cover, and the [opening drawn](/using/openings) |
+
 ## With HACS (custom repository)
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)

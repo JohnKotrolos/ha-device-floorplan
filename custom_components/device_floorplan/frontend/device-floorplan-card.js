@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.6.0).
+ * Device Floorplan – dashboard card (v0.7.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.6.0";
+const CARD_VERSION = "0.7.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -153,12 +153,18 @@ const TOGGLE_DOMAINS = new Set(["light", "switch", "fan", "input_boolean", "cove
 
 const cesc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const live = (st) => !!st && st.state !== "unavailable" && st.state !== "unknown";
+/** Re-render a shadow root but keep what other cards put in it (card-mod's <card-mod> style). */
+function setShadow(el, html) {
+  const keep = [...el.shadowRoot.children].filter((n) => n.localName === "card-mod");
+  el.shadowRoot.innerHTML = html;
+  for (const n of keep) el.shadowRoot.appendChild(n);
+}
 const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
 
 // ---- Night look and light pools (#74): pure CSS over the one plan image.
-const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["plan", "live", "lights", "people"], dim_quiet: true, shutters: true };
+const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["plan", "live", "lights", "people"], dim_quiet: true, shutters: true, warm_dusk: false };
 
 /** 0 = day … 1 = night for fixed times, with a 30 minute fade around each time. */
 function timesFactor(start, end, now) {
@@ -268,6 +274,32 @@ function poolSvg(pools, mode) {
   return `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}')`;
 }
 
+/** #119: white room shapes on transparent, as a CSS mask (single quotes: goes into style="…"). */
+function shapesSvg(shapes) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">${shapes.map((sh) => `<polygon fill="#fff" points="${sh.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>`).join("")}</svg>`;
+  return `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}')`;
+}
+
+/** 0.7.0: is this entity a door / window / shutter? "cover" or "contact". */
+function openKind(eid, st) {
+  const dom = domainOf(eid);
+  if (dom === "cover") return "cover";
+  if (dom === "binary_sensor" && st && ["door", "window", "opening", "garage_door"].includes(st.attributes.device_class)) return "contact";
+  return null;
+}
+
+/** 0.7.0: door, window or shutter: chosen in the Editor, else from the device class and the name. */
+function guessOpenAs(eid, hass, name, chosen) {
+  if (["door", "window", "shutter"].includes(chosen)) return chosen;
+  const st = eid && hass && hass.states[eid];
+  const dc = (st && st.attributes.device_class) || "";
+  const n = `${eid || ""} ${name || ""} ${(st && st.attributes.friendly_name) || ""}`.toLowerCase();
+  if (/shutter|roller|blind|rolet|ρολ|jalous|persian|store|tapparell|persiana/.test(n)) return "shutter";
+  if (domainOf(eid) === "cover") return ["door", "garage", "gate"].includes(dc) ? "door" : dc === "window" ? "window" : "shutter";
+  if (["door", "garage_door"].includes(dc)) return "door";
+  return "window";
+}
+
 function shapeEllipses(x, y, s, ratio) {
   const r = Number(s.r) || 6;
   if (s.type === "strip" && s.x2 != null && s.y2 != null) {
@@ -299,7 +331,16 @@ function defaultShape(type, realW) {
 
 /** Phantom summary for chips outside the plan (#73): combined value from its entities. */
 function phantomSummary(hass, ph) {
-  const ents = (ph && ph.entities) || [];
+  const all = (ph && ph.entities) || [];
+  // #126: lights, switches, doors and motion count by each member's main entity, as on the card;
+  // readings still use every temperature / humidity sensor of the members.
+  const mains = (ph && ph.mains) || [];
+  const mk = mains.map((e) => kindOf(e, hass.states[e]));
+  const switching = mains.filter((e, i) => ["light", "switch", "fan"].includes(mk[i]));
+  if (mains.length && switching.length && !mk.some((k) => ["temperature", "humidity", "opening", "motion"].includes(k))) {
+    return `${switching.filter((e) => (hass.states[e] || {}).state === "on").length} of ${switching.length} on`;
+  }
+  const ents = mains.length && mk.some((k) => ["opening", "motion"].includes(k)) ? mains : all;
   const by = (k) => ents.filter((e) => kindOf(e, hass.states[e]) === k);
   const avg = (list) => {
     const v = list.map((e) => hass.states[e]).filter((s) => live(s) && num(s.state)).map((s) => Number(s.state));
@@ -448,6 +489,13 @@ ha-card.dock-right { flex-direction: row; }
 .wrap { position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding: 8px 8px 0; min-height:120px; }
 .box { position:relative; width: min(100%, calc((100vh - var(--dfc-chrome, 170px)) * var(--ratio))); aspect-ratio: var(--ratio); }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
+.obar { position:absolute; height:7px; padding:0; margin:0; border:0; border-radius:4px; transform-origin:0 50%; cursor:pointer; z-index:2; box-sizing:border-box; overflow:hidden; background:transparent; }
+.obar.door { background:#4fc3f7; box-shadow:0 0 8px rgba(79,195,247,.85); }
+.obar.shut { border:2px solid #fff; box-shadow:0 0 6px rgba(0,0,0,.45); }
+.obar.shut i { display:block; height:100%; background:#fff; }
+.obar.fade { animation: dfcBarFade 2.6s linear forwards; }
+@keyframes dfcBarFade { 0%, 75% { opacity:1; } 100% { opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .obar.fade { animation-duration:.01s; } }
 .box svg.air, .box svg.shade { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .nglow { mix-blend-mode: soft-light; }
 .nglow.day { mix-blend-mode: multiply; opacity:.85; filter: saturate(1.6); }
@@ -1006,8 +1054,10 @@ class DeviceFloorplanCard extends HTMLElement {
     else if (mode === "dark") f = hass.themes && hass.themes.darkMode ? 1 : 0;
     else if (mode === "sun") {
       const e = Number(sun.attributes.elevation);
-      f = e >= 6 ? 0 : e <= -6 ? 1 : (6 - e) / 12;
-      if (f > 0 && f < 1) tint = sun.attributes.rising ? "dawn" : "dusk";
+      // #120: day until sunset, full night 6° below the horizon (civil dusk).
+      f = e >= 0 ? 0 : e <= -6 ? 1 : -e / 6;
+      // #121: no warm dusk stage unless asked for.
+      if (n.warm_dusk && f > 0 && f < 1) tint = sun.attributes.rising ? "dawn" : "dusk";
     } else if (mode === "times") f = timesFactor(n.start, n.end, new Date());
     return { f: Math.round(f * 20) / 20, tint, mode };
   }
@@ -1107,33 +1157,107 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   /** #117: by day, a room gets darker the more of its shutters / blinds are closed (needs a room shape). */
+  /** 0.7.0: every door / window / shutter spot on the plan (devices and entity spots, bonded too). */
+  _openSpots(a) {
+    const hass = this._hass;
+    if (this._osA === a && this._osH === hass) return this._os;
+    const out = [];
+    const add = (id, d, eid) => {
+      const st = hass.states[eid];
+      if (!st || !openKind(eid, st)) return;
+      out.push({ id, eid, st, kind: openKind(eid, st), as: guessOpenAs(eid, hass, d.name, d.as), x: d.x, y: d.y, area_id: d.area_id, opening: d.opening });
+    };
+    for (const [id, d] of Object.entries(a.devices || {})) {
+      const ents = d.entities || [];
+      const eid = ents.find((e) => domainOf(e) === "cover" && hass.states[e]) || ents.find((e) => openKind(e, hass.states[e]) === "contact");
+      if (eid) add(id, d, eid);
+    }
+    for (const [eid, d] of Object.entries(a.entities || {})) add(`entity:${eid}`, d, eid);
+    this._osA = a;
+    this._osH = hass;
+    this._os = out;
+    return out;
+  }
+
+  /** Entities that have a bar drawn: their markers step aside in Live. */
+  _barEnts() {
+    const a = this._a;
+    if (!a || !this._hass) return new Set();
+    return new Set(this._openSpots(a).filter((o) => o.opening).map((o) => o.eid));
+  }
+
+  /** How far open, 0…1 (null = unknown). */
+  _openFrac(o) {
+    const st = o.st;
+    if (!live(st)) return null;
+    if (o.kind === "contact") return st.state === "on" ? 1 : 0;
+    const p = st.attributes.current_position;
+    if (num(p)) return Math.max(0, Math.min(1, Number(p) / 100));
+    return st.state === "closed" ? 0 : 1;
+  }
+
+  /** 0.7.0: doors and windows as a light blue bar while open; shutters as a white outlined bar,
+   *  filled as far as they are closed (electric), fading out 2.5 s after closing. */
+  _barsHtml(a) {
+    const ov = this._overlay;
+    if (!["live", "security"].includes(ov)) return "";
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const now = Date.now();
+    this._shutT = this._shutT || {};
+    this._shutPrev = this._shutPrev || {};
+    let html = "";
+    for (const o of this._openSpots(a)) {
+      if (!o.opening) continue;
+      const f = this._openFrac(o);
+      const closed = f === 0;
+      if (this._shutPrev[o.eid] === false && closed) this._shutT[o.eid] = now;
+      this._shutPrev[o.eid] = f == null ? undefined : closed;
+      if (f == null) continue;
+      const { x1, y1, x2, y2 } = o.opening;
+      const len = Math.hypot(x2 - x1, (y2 - y1) / ratio);
+      const ang = (Math.atan2((y2 - y1) / ratio, x2 - x1) * 180) / Math.PI;
+      const geo = `left:${x1}%;top:${y1}%;width:${len.toFixed(3)}%;transform:translateY(-50%) rotate(${ang.toFixed(2)}deg)`;
+      const label = `${o.st.attributes.friendly_name || o.eid}: ${this._hass.formatEntityState ? this._hass.formatEntityState(o.st) : o.st.state}`;
+      let cls = "";
+      let fill = 0;
+      if (o.as !== "shutter") {
+        if (closed) continue;
+        cls = "door";
+      } else if (closed) {
+        const t = this._shutT[o.eid];
+        if (!t || now - t > 2600) continue;
+        cls = "shut fade";
+        fill = 1;
+        html += `<button class="obar ${cls}" data-bar="${cesc(o.eid)}" aria-label="${cesc(label)}" style="${geo};animation-delay:-${now - t}ms"><i style="width:100%"></i></button>`;
+        continue;
+      } else {
+        cls = "shut";
+        fill = o.kind === "cover" ? 1 - f : 0;
+      }
+      html += `<button class="obar ${cls}" data-bar="${cesc(o.eid)}" aria-label="${cesc(label)}" style="${geo}">${fill > 0.01 ? `<i style="width:${(fill * 100).toFixed(1)}%"></i>` : ""}</button>`;
+    }
+    return html;
+  }
+
+  /** #117: by day, a room gets darker the more of its shutters / blinds are closed (needs a room shape).
+   *  0.7.0: contacts on manual shutters count too (open / closed). */
   _shadeHtml(a, n, ns) {
     if (n.shutters === false || !(n.overlays || []).includes(this._overlay)) return "";
     const day = 1 - (ns.f || 0);
     if (day <= 0.05) return "";
-    const hass = this._hass;
     const areas = a.areas || {};
     const shaped = Object.keys(areas).filter((k) => areas[k].shape && areas[k].shape.length >= 3);
     if (!shaped.length) return "";
     const rooms = {};
-    const seen = new Set();
-    for (const item of this._items(a)) {
-      if (item.phantom) continue;
-      const covers = [item.main_entity, ...(item.entities || [])].filter((e, i, arr) => e && arr.indexOf(e) === i && domainOf(e) === "cover" && hass.states[e]);
-      for (const e of covers) {
-        if (seen.has(e)) continue;
-        seen.add(e);
-        const st = hass.states[e];
-        const dc = st.attributes.device_class;
-        if (["garage", "gate", "door", "damper"].includes(dc)) continue;
-        let aid = item.area_id && areas[item.area_id] && areas[item.area_id].shape ? item.area_id : null;
-        if (!aid) aid = shaped.find((k) => inPoly(item.x, item.y, areas[k].shape)) || null;
-        if (!aid) continue;
-        const pos = st.attributes.current_position;
-        const open = num(pos) ? Number(pos) / 100 : st.state === "closed" ? 0 : ["open", "opening", "closing"].includes(st.state) ? 1 : null;
-        if (open == null) continue;
-        (rooms[aid] = rooms[aid] || []).push(open);
-      }
+    for (const o of this._openSpots(a)) {
+      if (o.as !== "shutter") continue;
+      let aid = o.area_id && areas[o.area_id] && areas[o.area_id].shape ? o.area_id : null;
+      if (!aid) aid = shaped.find((k) => inPoly(o.x, o.y, areas[k].shape)) || null;
+      if (!aid && o.opening) aid = shaped.find((k) => inPoly((o.opening.x1 + o.opening.x2) / 2, (o.opening.y1 + o.opening.y2) / 2, areas[k].shape)) || null;
+      if (!aid) continue;
+      const open = this._openFrac(o);
+      if (open == null) continue;
+      (rooms[aid] = rooms[aid] || []).push(open);
     }
     let polys = "";
     for (const [aid, opens] of Object.entries(rooms)) {
@@ -1159,9 +1283,16 @@ class DeviceFloorplanCard extends HTMLElement {
     if (on) {
       const base = n.style === "dim" ? `rgba(0,0,0,${(0.82 * k).toFixed(3)})` : `rgba(10,16,38,${(0.86 * k).toFixed(3)})`;
       const mk = pools.length ? poolSvg(pools, "mask") : "";
-      const mask = mk ? `-webkit-mask-image:${mk};mask-image:${mk};-webkit-mask-size:100% 100%;mask-size:100% 100%;` : "";
+      // #119: with room shapes, only the inside of the home darkens; walls and outside keep their colour.
+      // Only when every room on the plan has a shape (else the unshaped rooms would stay bright).
+      const rooms = Object.values(a.areas || {}).filter((x) => x.x != null || x.shape);
+      const shapes = rooms.every((x) => Array.isArray(x.shape) && x.shape.length >= 3) ? rooms.map((x) => x.shape) : [];
+      const sm = shapes.length ? shapesSvg(shapes) : "";
+      const layers = [sm, mk].filter(Boolean);
+      const both = layers.length === 2 ? "-webkit-mask-composite:source-in;mask-composite:intersect;" : "";
+      const mask = layers.length ? `-webkit-mask-image:${layers.join(",")};mask-image:${layers.join(",")};-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;${both}` : "";
       html += `<div class="night" style="background:${base};${mask}"></div>`;
-      if (ns.tint) html += `<div class="ntint" style="background:${ns.tint === "dusk" ? "rgba(255,140,60," : "rgba(120,160,255,"}${(0.2 * Math.sin(Math.PI * ns.f)).toFixed(3)})"></div>`;
+      if (ns.tint) html += `<div class="ntint" style="background:${ns.tint === "dusk" ? "rgba(255,140,60," : "rgba(120,160,255,"}${(0.2 * Math.sin(Math.PI * ns.f)).toFixed(3)});${sm ? `-webkit-mask-image:${sm};mask-image:${sm};-webkit-mask-size:100% 100%;mask-size:100% 100%;` : ""}"></div>`;
     }
     if (pools.length) {
       const g = poolSvg(pools, "glow");
@@ -1459,7 +1590,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // Split device (#91): Network and Health show the device at its hardware spot only.
     if (item.of && (ov === "network" || ov === "health")) return [];
     // #105: a split spot that "acts as" a light / switch / fan.
-    if (item.as && item.as !== "other") item = { ...item, actsAs: item.as };
+    if (["light", "switch", "fan"].includes(item.as)) item = { ...item, actsAs: item.as };
     const allowed = this._allowed(item);
     const cx = this._cx || { hubs: new Set(), zha: {} };
     const kindOfE = (e) => (item.actsAs && e === item.main_entity ? { light: "light", switch: "switch", fan: "fan" }[item.actsAs] : kindOf(e, hass.states[e]));
@@ -1481,6 +1612,12 @@ class DeviceFloorplanCard extends HTMLElement {
       const kind = kindOfE(lead);
       // Live = what is happening now: things that are off are hidden (option: faint).
       const hideOff = !q && (opts.show_off || "hidden") === "hidden";
+      // 0.7.0: a drawn opening is its own signal (the bar); shutters show only while moving.
+      if (!q && this._barEnts().has(lead)) return [];
+      if (!q && openKind(lead, hass.states[lead]) && guessOpenAs(lead, hass, item.name, item.as) === "shutter") {
+        const st0 = hass.states[lead];
+        if (!(domainOf(lead) === "cover" && st0 && ["opening", "closing"].includes(st0.state))) return [];
+      }
       if (kind === "climate") {
         const cst = hass.states[lead];
         if (hideOff && (!cst || !live(cst) || cst.state === "off")) return [];
@@ -1969,7 +2106,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const roomVars = dark ? "--dfc-roomfg:#fff; --dfc-roomhalo: rgba(0,0,0,.85);" : "--dfc-roomfg:#263238; --dfc-roomhalo: rgba(255,255,255,.95);";
     const style = `<style>${CARD_CSS}</style>`;
     if (!sensor) {
-      this.shadowRoot.innerHTML = `${style}<ha-card><div class="msg">Plan “${cesc(this._floor || c.plan)}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.</div></ha-card>`;
+      setShadow(this, `${style}<ha-card><div class="msg">Plan “${cesc(this._floor || c.plan)}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.</div></ha-card>`);
       return;
     }
     const a = sensor.attributes;
@@ -1991,10 +2128,12 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "network") this._loadZha();
     this._netTimer(ov === "network");
     const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    this._a = a;
     const specs = this._markers(a);
     this._specs = new Map(specs.map((s) => [s.key, s]));
-    this._a = a;
     const watch = new Set();
+    // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
+    for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov !== "plan") for (const item of this._items(a)) if (!this._hidden(item, ov)) for (const e of this._reads(item, ov)) watch.add(e);
     for (const s of specs) for (const e of s.ents || []) watch.add(e);
     if (ov === "lights") for (const sc of this._lights().scenes || []) for (const e of sc.lights || []) watch.add(e);
@@ -2040,17 +2179,17 @@ class DeviceFloorplanCard extends HTMLElement {
     const scale = this._scale || 1;
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
     const boxCls = `${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
-    this.shadowRoot.innerHTML = `${style}<ha-card class="dock-${pos} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    setShadow(this, `${style}<ha-card class="dock-${pos} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
         <div class="wrap ${names} ${hasRail ? "hasrail" : ""}"><div class="box ${boxCls}" style="--ratio:${ratio}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._nightHtml(a)}${this._airHtml(a)}
+          ${this._nightHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}
           ${this._roomsHtml(a)}
           <svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${people.plan}${emptyMsg}
         </div>${hasRail ? this._railHtml(floors, layersOn) : ""}</div>${people.row}
         ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
-      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`;
+      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
       el.stateObj = this._hass.states[el.dataset.ent];
@@ -2604,6 +2743,8 @@ class DeviceFloorplanCard extends HTMLElement {
     if (fl) return this._setFloor(fl.dataset.floor);
     const stp = t.closest("[data-step]");
     if (stp) return this._stepFloor(Number(stp.dataset.step));
+    const bar = t.closest("[data-bar]");
+    if (bar) return this._moreInfo(bar.dataset.bar);
     const cv = t.closest("[data-cov]");
     if (cv) return this._coverCmd(cv.dataset.cov, cv.dataset.cmd);
     const hlk = t.closest("[data-hl]");
@@ -3521,9 +3662,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "style", selector: { select: { options: [{ value: "moon", label: "Moonlight (deep blue)" }, { value: "dim", label: "Dim (darker, neutral)" }], mode: "dropdown" } } },
         { name: "dim_quiet", selector: { boolean: {} } },
         { name: "shutters", selector: { boolean: {} } },
+        { name: "warm_dusk", selector: { boolean: {} } },
       ],
       { ...NIGHT_DEFAULT, ...(this._config.night || {}) },
-      { mode: "Day & night", start: "Night starts (fixed times, also used without the Sun)", end: "Night ends", overlays: "Use the night look in", strength: "How dark the night gets", style: "Style", dim_quiet: "Dim quiet markers at night (active ones stay bright)", shutters: "Closed shutters darken their room by day (rooms with a shape)" },
+      { mode: "Day & night", start: "Night starts (fixed times, also used without the Sun)", end: "Night ends", overlays: "Use the night look in", strength: "How dark the night gets", style: "Style", dim_quiet: "Dim quiet markers at night (active ones stay bright)", shutters: "Closed shutters darken their room by day (rooms with a shape)", warm_dusk: "Warm dusk and dawn colours (follows the sun)" },
       (v) => {
         const nv = { ...v };
         for (const k of ["start", "end"]) if (nv[k]) nv[k] = String(nv[k]).slice(0, 5);
@@ -4265,7 +4407,12 @@ class DeviceFloorplanChip extends HTMLElement {
     if (!c.phantom || !this._hass) return null;
     const [plan, pid] = String(c.phantom).split(":");
     const s = planSensors(this._hass).find((x) => x.attributes.plan_id === plan);
-    return s && s.attributes.phantoms ? s.attributes.phantoms[pid] || null : null;
+    const ph = s && s.attributes.phantoms ? s.attributes.phantoms[pid] || null : null;
+    if (!ph) return null;
+    // #126: like the card, a member counts with its main entity (not every entity of its device).
+    const devs = s.attributes.devices || {};
+    const mains = (ph.members || []).map((m) => (String(m).startsWith("entity:") ? String(m).slice(7) : (devs[m] || {}).main_entity)).filter(Boolean);
+    return { ...ph, mains };
   }
 
   /** #96: a bond ("plan_id:bond_id") as the value source. */
@@ -4319,7 +4466,7 @@ class DeviceFloorplanChip extends HTMLElement {
     const key = [label, icon, val, on].join("|");
     if (!force && key === this._key) return;
     this._key = key;
-    this.shadowRoot.innerHTML = `<style>
+    setShadow(this, `<style>
       :host { display:block; }
       ha-card { height:100%; border-radius: var(--ha-card-border-radius, 12px); transition: box-shadow .25s, background .25s; }
       button { width:100%; height:100%; min-height:44px; border:0; background:transparent; color: var(--primary-text-color); font: inherit; display:flex; align-items:center; gap:8px; padding: 8px 12px; cursor:pointer; text-align:left; border-radius: inherit; }
@@ -4329,7 +4476,7 @@ class DeviceFloorplanChip extends HTMLElement {
       .v { font-size:12px; color: var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       ha-card.on { background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color, #fff)); box-shadow: 0 0 0 2px var(--primary-color), 0 0 14px 2px color-mix(in srgb, var(--primary-color) 45%, transparent); }
       ha-card.on ha-icon { color: var(--primary-color); }
-    </style><ha-card class="${on ? "on" : ""}"><button aria-pressed="${on}" aria-label="${cesc([label, val].filter(Boolean).join(": "))}"><ha-icon icon="${cesc(icon)}"></ha-icon><span class="t"><span class="l">${cesc(label)}</span>${val ? `<span class="v">${cesc(val)}</span>` : ""}</span></button></ha-card>`;
+    </style><ha-card class="${on ? "on" : ""}"><button aria-pressed="${on}" aria-label="${cesc([label, val].filter(Boolean).join(": "))}"><ha-icon icon="${cesc(icon)}"></ha-icon><span class="t"><span class="l">${cesc(label)}</span>${val ? `<span class="v">${cesc(val)}</span>` : ""}</span></button></ha-card>`);
   }
 
   _tap() {

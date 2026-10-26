@@ -629,8 +629,12 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         entry["light"] = clean
     if pos.get("of"):
         entry["of"] = str(pos["of"])  # split device (#91): this entity acts here
-    if pos.get("as") in ("light", "switch", "fan", "other"):
-        entry["as"] = pos["as"]  # #105: what a split spot acts as on the card
+    if pos.get("as") in ("light", "switch", "fan", "other", "door", "window", "shutter"):
+        entry["as"] = pos["as"]  # #105: what a split spot acts as; 0.7.0: door / window / shutter
+    op = pos.get("opening")
+    if isinstance(op, dict) and all(op.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
+        # 0.7.0: the opening (door, window, shutter) drawn on the plan as a bar, in % of the image.
+        entry["opening"] = {k: round(min(100.0, max(0.0, float(op[k]))), 3) for k in ("x1", "y1", "x2", "y2")}
     air = pos.get("air")
     if isinstance(air, dict):
         # #115: AC air flow cone: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.

@@ -37,6 +37,9 @@ VIRTUAL_INTEGRATIONS = {
     "google_air_quality", "tod", "history_stats", "utility_meter", "hacs",
     "icloud", "glances", "xiaozhi_mcp", "bermuda_global",
 }
+# Always software, even when they bring lights or media players (browser_mod: one device per
+# browser, with a "screen" light and a media player; a new one appears for every new browser).
+ALWAYS_VIRTUAL = {"browser_mod", "hacs", "ha_mcp_tools", "mcp_server", "spoolman", "places"}
 NETWORK_INTEGRATIONS = {
     "esphome", "shelly", "tuya", "tuya_local", "tasmota", "wled", "tplink",
     "cast", "sonos", "fritz", "mobile_app", "xiaomi_miio", "xiaomi_miot",
@@ -104,10 +107,11 @@ _GROUP_BY_DOMAIN = (
 )
 
 # Which entity represents a device (icon, state, more-info).
+# #122: what defines a device comes first (an AC with a dozen feature switches is a climate).
 _MAIN_DOMAINS = (
-    "light", "switch", "cover", "climate", "fan", "lock", "media_player",
-    "vacuum", "camera", "alarm_control_panel", "humidifier", "water_heater",
-    "valve", "lawn_mower", "siren", "binary_sensor", "sensor", "event",
+    "climate", "cover", "lock", "vacuum", "media_player", "alarm_control_panel",
+    "water_heater", "humidifier", "lawn_mower", "valve", "fan",
+    "light", "switch", "camera", "siren", "binary_sensor", "sensor", "event",
     "number", "select", "button", "update",
 )
 _GOOD_BINARY = {"door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "moisture", "smoke", "gas"}
@@ -332,7 +336,7 @@ def _connections(
         found.add("network")
     if dr.CONNECTION_BLUETOOTH in conns or BLE_INTEGRATIONS.intersection(integrations):
         found.add("bluetooth")
-    virtual = bool(
+    virtual = bool(ALWAYS_VIRTUAL.intersection(integrations[:1])) or bool(
         not found
         and not (domains and domains & PHYSICAL_DOMAINS - {"switch"})
         and (
@@ -680,6 +684,7 @@ def build_plan_payload(
                 "roles": entity_roles(hass, [eid]),
                 **({"light": pos["light"]} if pos.get("light") else {}),
                 **({"air": pos["air"]} if pos.get("air") else {}),
+                **({"opening": pos["opening"]} if pos.get("opening") else {}),
             }
             continue
         if data.skipped.get(key) or key in part_of:
@@ -749,6 +754,10 @@ def build_plan_payload(
             item["light"] = pos["light"]
         if pos.get("air"):
             item["air"] = pos["air"]
+        if pos.get("opening"):
+            item["opening"] = pos["opening"]
+        if pos.get("as"):
+            item["as"] = pos["as"]
         ieee = device_ieee(device)
         mac = device_mac(device)
         if ieee:

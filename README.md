@@ -98,6 +98,9 @@ No floorplan yet? See
   night* preview.
 - **AC air flow**: an animated flow in the direction the unit blows, coloured for
   cooling, heating or drying.
+- **Doors, windows and shutters as bars**: draw where an opening is; the card shows a
+  light blue bar while a door or window is open, a white bar for an open shutter (filled
+  as far as an electric one is closed), and closed shutters darken their room by day.
 - **Day & night**: at night the plan darkens and lights glow; by day a room gets
   darker the more of its shutters are closed.
 - HA's own icons and more-info dialog, integration
@@ -216,4 +219,5 @@ Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
 
 ## Changelog
 
+- 0.7.0 – Doors, windows and shutters as bars on the plan; night look only inside the home; fixes (AC main entity, chip phantom value, Browser Mod devices, card-mod).
 - 0.6.0 – First public release (beta). See the [changelog](https://johnkotrolos.github.io/ha-device-floorplan/help/changelog).

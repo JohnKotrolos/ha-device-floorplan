@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -425,6 +425,8 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .details .uses { display:flex; flex-direction:column; gap:2px; margin-top:4px; }
 .details .uses small { color: var(--df-sec); }
 .ahd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #4fa3ff; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.ohd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #26c6da; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.details .lsec.opn { border-color: color-mix(in srgb, #26c6da 45%, transparent); background: color-mix(in srgb, #26c6da 8%, var(--df-card)); }
 .details .lsec.air { border-color: color-mix(in srgb, #4fa3ff 45%, transparent); background: color-mix(in srgb, #4fa3ff 8%, var(--df-card)); }
 .details .lcol { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--df-sec); }
 .details .lcol button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:12px; padding:2px 10px; font: inherit; cursor:pointer; }
@@ -562,6 +564,17 @@ details.box summary { font-weight:500; }
   .side { flex: 1 1 42%; width:auto; }
 }
 `;
+
+/** 0.7.0: door, window or shutter, from the device class and the name. */
+function guessOpenAs(eid, hass, name) {
+  const st = eid && hass && hass.states[eid];
+  const dc = (st && st.attributes.device_class) || "";
+  const n = `${eid || ""} ${name || ""} ${(st && st.attributes.friendly_name) || ""}`.toLowerCase();
+  if (/shutter|roller|blind|rolet|ρολ|jalous|persian|store|tapparell|persiana/.test(n)) return "shutter";
+  if (String(eid || "").startsWith("cover.")) return ["door", "garage", "gate"].includes(dc) ? "door" : dc === "window" ? "window" : "shutter";
+  if (["door", "garage_door"].includes(dc)) return "door";
+  return "window";
+}
 
 class DeviceFloorplanPanel extends HTMLElement {
   constructor() {
@@ -1703,6 +1716,11 @@ class DeviceFloorplanPanel extends HTMLElement {
         const c = this._air(s.sel);
         if (c.type === "cone") parts.push(`<span class="ahd" data-ah="1" data-x="${c.x + Math.cos((c.a * Math.PI) / 180) * c.r}" data-y="${c.y + Math.sin((c.a * Math.PI) / 180) * c.r * this._ratio()}" title="Drag: direction and reach of the air flow"></span>`);
       }
+      // 0.7.0: the selected opening's two ends.
+      if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening) {
+        const o = this.work.positions[s.sel].opening;
+        parts.push(`<span class="ohd" data-oh="1" data-x="${o.x1}" data-y="${o.y1}" title="Drag: one end of the opening (Alt: free angle)"></span><span class="ohd" data-oh="2" data-x="${o.x2}" data-y="${o.y2}" title="Drag: the other end of the opening (Alt: free angle)"></span>`);
+      }
       // Phantoms (#60): bigger, inverted, dashed; members stay where they are.
       if (s.layers.phantoms !== false || String(s.sel).startsWith("ph:")) {
         for (const [pid, ph] of Object.entries(this.work.phantoms || {})) {
@@ -2265,7 +2283,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc(d.entity_id)} · part of ${esc(dev ? dev.name : "a device")}</div></div>${close}</div>
         <div class="note">Split device: ${esc(dev ? dev.name : "the device")} sits where its hardware is, this ${esc(d.entity_id.split(".")[0])} shows here, where it acts. ${this._tip("split")}</div>
         ${d.entity_id.startsWith("light.") ? "" : `<label class="fl">Acts as<select data-act="splitas"><option value="">${esc(d.entity_id.split(".")[0])} (as in Home Assistant)</option>${[["light", "Light"], ["switch", "Switch"], ["fan", "Fan"], ["other", "Other"]].map(([k, l]) => `<option value="${k}" ${d.as === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>`}
-        ${this._lightSectionHtml(d)}${this._airSectionHtml(d)}
+        ${this._lightSectionHtml(d)}${this._airSectionHtml(d)}${this._openSectionHtml(d)}
         <div class="acts"><button class="btn" data-act="selid" data-id="${esc(d.of)}">Go to ${esc(dev ? dev.name : "device")}</button><button class="btn" data-act="info" data-id="${esc(d.id)}">${SVG.info}More info</button><button class="btn danger" data-act="splitdel" data-id="${esc(d.id)}">✕ Back to the device</button></div></div>`;
     }
     if (d.loose) {
@@ -2404,7 +2422,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -2490,6 +2508,42 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div class="lchips"><button class="${c.type === "cone" ? "on" : ""}" data-act="airtype" data-type="cone">Air flow</button><button class="${c.type === "none" ? "on" : ""}" data-act="airtype" data-type="none">None</button></div>
       ${c.type === "cone" ? `<div class="lsz"><label>Reach <input id="airr" inputmode="decimal" value="${v(c.r)}"></label>${W ? "m" : "% of the plan"}<label>Spread <select id="airs"><option value="35" ${sp === "35" ? "selected" : ""}>Narrow</option><option value="60" ${sp === "60" ? "selected" : ""}>Normal</option><option value="90" ${sp === "90" ? "selected" : ""}>Wide</option></select></label></div>` : ""}
       <div style="font-size:12px;color:var(--df-sec)">${c.type === "none" ? "No air flow on the card." : "Drag the blue handle on the plan to point it into the room. While cooling or heating, the card shows the air flowing (blue cool, orange heat), kept inside the room's shape."}</div></div>`;
+  }
+
+  /** 0.7.0: the door / window / shutter of this spot: a cover, or a door/window contact. */
+  _openingEnt(id) {
+    const d = this.byId.get(id);
+    if (!d || !this._hass) return null;
+    const ok = (eid) => {
+      const dom = String(eid || "").split(".")[0];
+      if (dom === "cover") return true;
+      const st = this._hass.states[eid];
+      return dom === "binary_sensor" && st && ["door", "window", "opening", "garage_door"].includes(st.attributes.device_class);
+    };
+    if (d.split || d.loose) return ok(d.entity_id) ? d.entity_id : null;
+    const spots = new Set(this._splitSpots(d.id).map((k) => k.slice(7)));
+    const ents = (d.entities || []).map((x) => x.entity_id).filter((e) => !spots.has(e));
+    return ents.find((e) => e.startsWith("cover.") && ok(e)) || ents.find(ok) || null;
+  }
+
+  /** Door, window or shutter: chosen, else guessed from the device class and name. */
+  _openAs(id) {
+    const pos = this.work.positions[id] || {};
+    if (["door", "window", "shutter"].includes(pos.as)) return pos.as;
+    return guessOpenAs(this._openingEnt(id), this._hass, (this.byId.get(id) || {}).name);
+  }
+
+  _openSectionHtml(d) {
+    const pos = this.work.positions[d.id];
+    const eid = pos && this._openingEnt(d.id);
+    if (!eid) return "";
+    const as = this._openAs(d.id);
+    const chips = [["door", "Door"], ["window", "Window"], ["shutter", "Shutter"]].map(([k, l]) => `<button class="${as === k ? "on" : ""}" data-act="openas" data-as="${k}">${l}</button>`).join("");
+    const what = as === "shutter" ? (eid.startsWith("cover.") ? "a white bar filled as far as it's closed; fully closed it fades away and the room gets darker by day" : "a white outlined bar while open; closed, the bar goes away and the room gets darker by day") : "a light blue bar while open, nothing while closed";
+    return `<div class="lsec opn"><div class="lh">🪟 Opening on the plan<small>${["door", "window", "shutter"].includes(pos.as) ? "set by you" : "automatic"}</small></div>
+      <div class="lchips">${chips}</div>
+      <div class="lchips">${pos.opening ? `<button data-act="opendel">Remove the bar</button>` : `<button class="on" data-act="opendraw">Draw it on the plan</button>`}</div>
+      <div style="font-size:12px;color:var(--df-sec)">${pos.opening ? `Drag the two ends along the wall (they snap straight, Alt for any angle). On the card: ${what}.` : `Mark where the ${as} is: the card then shows ${what}, instead of a marker.`}</div></div>`;
   }
 
   /** Has this device (or its bond) a light? Light shapes live on the bond's leader (#84). */
@@ -2631,6 +2685,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (s.layers.lightshapes === true) for (const id of lights) if (id !== selLead) out += this._shapeSvg(this._shape(id), "");
     if (selLead) out += this._shapeSvg(this._shape(selLead), "sel");
     if (s.sel && this.work.positions[s.sel] && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) out += this._airSvg(this._air(s.sel), true);
+    // 0.7.0: openings (doors, windows, shutters): all faint, the selected one bold.
+    for (const [id, pos] of Object.entries(this.work.positions)) {
+      const o = pos.opening;
+      if (!o) continue;
+      const sel = id === s.sel;
+      const col = this._openAs(id) === "shutter" ? "#ffffff" : "#26c6da";
+      out += `<line x1="${o.x1 * 10}" y1="${o.y1 * 10}" x2="${o.x2 * 10}" y2="${o.y2 * 10}" stroke="${col}" stroke-opacity="${sel ? 0.95 : 0.45}" stroke-width="${sel ? 7 : 5}" stroke-linecap="round" vector-effect="non-scaling-stroke"${sel ? "" : ' stroke-dasharray="8 6"'}/>`;
+    }
     return out;
   }
 
@@ -3633,6 +3695,25 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.phUses = s.phUses === el.dataset.id ? null : el.dataset.id;
         this._render();
         break;
+      case "openas": {
+        const pos = this.work.positions[s.sel];
+        if (pos) this._change(() => (pos.as = el.dataset.as));
+        break;
+      }
+      case "opendraw": {
+        const pos = this.work.positions[s.sel];
+        if (!pos) break;
+        const W = this._realW();
+        const half = W ? (0.5 / W) * 100 : 3; // about 1 m long, horizontal, through the marker
+        const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
+        this._change(() => (pos.opening = { x1: c(pos.x - half), y1: c(pos.y), x2: c(pos.x + half), y2: c(pos.y) }));
+        break;
+      }
+      case "opendel": {
+        const pos = this.work.positions[s.sel];
+        if (pos) this._change(() => delete pos.opening);
+        break;
+      }
       case "airtype": {
         const pos = this.work.positions[s.sel];
         if (!pos) break;
@@ -4350,6 +4431,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (pin) this._gesture = { kind: "pin", id: pin.dataset.pin, el: pin, start, moved: false, snap: this._snap() };
     else if (bx) this._gesture = { kind: "box", id: bx.dataset.box, el: bx, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", id: this.s.sel, start, moved: false, snap: this._snap() };
+    else if (!modal && e.target.closest("[data-oh]")) this._gesture = { kind: "oh", which: e.target.closest("[data-oh]").dataset.oh, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
@@ -4438,6 +4520,24 @@ class DeviceFloorplanPanel extends HTMLElement {
       const R = this._ratio();
       const cur = this._air(g.id);
       pos.air = { a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI), r: Math.max(1, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), s: cur.s };
+      this._renderOverlay();
+      return;
+    }
+    if (g.kind === "oh") {
+      let p = this._pt(e);
+      const pos = this.work.positions[g.id];
+      if (!pos || !pos.opening) return;
+      const o = pos.opening;
+      const other = g.which === "1" ? [o.x2, o.y2] : [o.x1, o.y1];
+      // Straight along the wall: snap to the other end's row or column (Alt: any angle).
+      if (!e.altKey) {
+        const R = this._ratio();
+        if (Math.abs(p.x - other[0]) < Math.abs(p.y - other[1]) / R) p = { x: other[0], y: p.y };
+        else p = { x: p.x, y: other[1] };
+      }
+      const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
+      if (g.which === "1") Object.assign(o, { x1: c(p.x), y1: c(p.y) });
+      else Object.assign(o, { x2: c(p.x), y2: c(p.y) });
       this._renderOverlay();
       return;
     }
@@ -4566,7 +4666,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     clearTimeout(this._bondT);
-    if (g.kind === "ah" || g.kind === "lh") {
+    if (g.kind === "ah" || g.kind === "lh" || g.kind === "oh") {
       if (g.moved) {
         this._pushUndo(g.snap);
         this._scheduleSave();
@@ -5447,7 +5547,8 @@ class DeviceFloorplanPanel extends HTMLElement {
             refs: this.work.refs,
             hidden_rooms: this.work.hidden_rooms.map((a) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a })),
             anchors: Object.entries(this.work.anchors).map(([a, p]) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a, x: p.x, y: p.y })),
-            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0, ...(r.pos.box ? { box: r.pos.box } : {}), ...(r.pos.light ? { light: r.pos.light } : {}) })),
+            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0, ...(r.pos.box ? { box: r.pos.box } : {}), ...(r.pos.light ? { light: r.pos.light } : {}), ...(r.pos.of ? { of: r.pos.of } : {}), ...(r.pos.as ? { as: r.pos.as } : {}), ...(r.pos.air ? { air: r.pos.air } : {}), ...(r.pos.opening ? { opening: r.pos.opening } : {}) })),
+            shapes: Object.entries(this.work.shapes || {}).map(([a, pts]) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a, points: pts })),
             bonds: Object.entries(this.work.bonds || {}).map(([id, m]) => ({ id, members: m, ...((this.work.bond_meta || {})[id] || {}) })),
             phantoms: Object.entries(this.work.phantoms || {}).map(([id, ph]) => ({ id, ...ph })),
           },
@@ -5556,7 +5657,15 @@ class DeviceFloorplanPanel extends HTMLElement {
       const idMap = {};
       let matched = 0;
       let missing = 0;
+      const extra = (dv) => ({ ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}), ...(dv.box ? { box: dv.box } : {}), ...(dv.light ? { light: dv.light } : {}), ...(dv.as ? { as: dv.as } : {}), ...(dv.air ? { air: dv.air } : {}), ...(dv.opening ? { opening: dv.opening } : {}) });
+      const spots = [];
       for (const dv of P.devices || []) {
+        // 0.7.0: split spots and entities placed on their own come back when the entity exists here.
+        if (String(dv.device_id).startsWith("entity:")) {
+          if (this._hass && this._hass.states[dv.device_id.slice(7)]) spots.push(dv);
+          else missing++;
+          continue;
+        }
         let d = this.byId.get(dv.device_id);
         if (!d && dv.ieee) d = this.devices.find((x) => x.ieee === dv.ieee);
         if (!d && dv.mac) d = this.devices.find((x) => x.mac === dv.mac);
@@ -5567,7 +5676,16 @@ class DeviceFloorplanPanel extends HTMLElement {
         }
         matched++;
         idMap[dv.device_id] = d.id;
-        positions[d.id] = { x: dv.x, y: dv.y, ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}), ...(dv.box ? { box: dv.box } : {}), ...(dv.light ? { light: dv.light } : {}) };
+        positions[d.id] = { x: dv.x, y: dv.y, ...extra(dv) };
+      }
+      for (const dv of spots) {
+        const of = dv.of ? idMap[dv.of] : null;
+        if (dv.of && !of) {
+          missing++;
+          continue;
+        }
+        matched++;
+        positions[dv.device_id] = { x: dv.x, y: dv.y, ...(of ? { of } : {}), ...extra(dv) };
       }
       // Bonds and phantoms (0.5.0) follow their matched devices.
       const bonds = {};
@@ -5592,7 +5710,12 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (id) anchors[id] = { x: a.x, y: a.y };
       }
       const hidden = (P.hidden_rooms || []).map(areaFor).filter(Boolean);
-      const res = await this._ws("plan/update", { plan_id: plan.id, positions, anchors, refs: (P.refs || []).slice(0, 2), hidden_rooms: hidden, bonds, bond_meta: bondMeta, phantoms });
+      const shapes = {};
+      for (const a of P.shapes || []) {
+        const id = areaFor(a);
+        if (id && Array.isArray(a.points)) shapes[id] = a.points;
+      }
+      const res = await this._ws("plan/update", { plan_id: plan.id, positions, anchors, shapes, refs: (P.refs || []).slice(0, 2), hidden_rooms: hidden, bonds, bond_meta: bondMeta, phantoms });
       Object.assign(plan, res);
       this.plans.sort((a, b) => this._planOrder(a) - this._planOrder(b));
       this.s.dialog = null;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+**Doors, windows and shutters on the plan.** Draw where an opening is, and the card shows it as a bar: light blue while a door or window is open, a white outlined bar for an open shutter, filled as far as an electric shutter is closed. Closed shutters darken their room by day, now also manual ones with a contact sensor. [How it works](/using/openings)
+
+- **Night look**: with a shape for every room, only the inside of the home darkens; walls and the outside keep their colour. Follow the sun now stays in daylight until sunset; the warm dusk tint is an option.
+- **Live**: shutters show only while they move.
+- **Backup (JSON)** now also keeps room shapes, split spots, *Acts as*, air flow and openings.
+- **Fixes**: ACs with many feature switches (Haier, Midea, Tuya…) now pick the climate entity as their main one, so Live shows their climate chip; the chip card's phantom value counts like the card (*5 of 9 on*); Browser Mod sessions are no longer offered as new devices; card-mod styles on the floorplan card survive overlay switches.
+- **Guide**: requirements by feature (Install page), doors, windows and shutters.
+
 ## 0.6.0 – first public release (beta)
 
 Device Floorplan puts your Home Assistant devices on your own floorplan image and shows what's happening at home, live, on a dashboard card. Lights glowing in their room, night and day, air flow, people, interactive Zigbee map (ZHA): all set up with clicks, no coding.
