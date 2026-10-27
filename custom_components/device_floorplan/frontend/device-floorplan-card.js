@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.7.0).
+ * Device Floorplan – dashboard card (v0.7.1).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.7.0";
+const CARD_VERSION = "0.7.1";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1259,14 +1259,34 @@ class DeviceFloorplanCard extends HTMLElement {
       if (open == null) continue;
       (rooms[aid] = rooms[aid] || []).push(open);
     }
-    let polys = "";
+    const pts = (sh) => sh.map((q) => `${q[0]},${q[1]}`).join(" ");
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    let defs = `<filter id="shb" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${(2.2).toFixed(2)} ${(2.2 * ratio).toFixed(2)}"/></filter><filter id="shd" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="${(4).toFixed(1)} ${(4 * ratio).toFixed(1)}"/></filter>`;
+    let body = "";
+    let i = 0;
     for (const [aid, opens] of Object.entries(rooms)) {
       const avg = opens.reduce((t, v) => t + v, 0) / opens.length;
-      const k = 0.62 * (1 - avg) * day; // all closed ≈ quite dark, never black
+      // All closed: quite dark, never black; a room open to others (overlapping shapes) gets their daylight too.
+      const group = shapeGroup(areas, aid) || [areas[aid].shape];
+      const open = group.length > 1;
+      const k = 0.5 * (1 - avg) * day * (open ? 0.8 : 1);
       if (k < 0.04) continue;
-      polys += `<polygon points="${areas[aid].shape.map((q) => `${q[0]},${q[1]}`).join(" ")}" fill="rgb(12,18,34)" fill-opacity="${k.toFixed(2)}"/>`;
+      const fill = `fill="rgb(12,18,34)" fill-opacity="${k.toFixed(2)}"`;
+      const me = pts(areas[aid].shape);
+      if (!open) {
+        body += `<polygon points="${me}" ${fill}/>`;
+        continue;
+      }
+      // Open space (overlapping shapes): the shade fades softly across the open side into the
+      // neighbouring room, while real walls stay crisp (gap = wall). The area outside the space is
+      // filled before blurring, so no light rim appears along the outer walls; the clip removes it.
+      const others = group.filter((g) => pts(g) !== me);
+      defs += `<clipPath id="shc${i}">${group.map((g) => `<polygon points="${pts(g)}"/>`).join("")}</clipPath>`;
+      defs += `<mask id="shm${i}" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><rect x="-10" y="-10" width="120" height="120" fill="#fff"/><g filter="url(#shd)">${others.map((g) => `<polygon points="${pts(g)}" fill="#000"/>`).join("")}</g><polygon points="${me}" fill="#fff"/></mask>`;
+      body += `<g clip-path="url(#shc${i})"><g filter="url(#shb)"><g mask="url(#shm${i})"><rect x="-10" y="-10" width="120" height="120" ${fill}/></g></g></g>`;
+      i++;
     }
-    return polys ? `<svg class="shade" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${polys}</svg>` : "";
+    return body ? `<svg class="shade" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>` : "";
   }
 
   _nightHtml(a) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- **Softer shutter shading**: a room with closed shutters is less dark (about half at most, a little lighter again when it's open to another room), and where it's one open space with the next room (overlapping shapes) the shade fades smoothly across instead of stopping at a hard line. Real walls stay crisp.
+
 ## 0.7.0
 
 **Doors, windows and shutters on the plan.** Draw where an opening is, and the card shows it as a bar: light blue while a door or window is open, a white outlined bar for an open shutter, filled as far as an electric shutter is closed. Closed shutters darken their room by day, now also manual ones with a contact sensor. [How it works](/using/openings)
