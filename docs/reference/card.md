@@ -241,6 +241,96 @@ tap_action:
 
 With several floorplan cards on one view, add `&card=hall` so only that card switches.
 
+## Inside your own dashboard layout
+
+Want the floorplan inside a bigger design, such as a wallpanel with its own menu rail next to the plan? Put it in one of Home Assistant's own **stacks** (horizontal stack, vertical stack, grid) and shape the layout with [card-mod](https://github.com/thomasloven/lovelace-card-mod) on the stack.
+
+::: tip Why a stack and not a Button-Card field?
+Home Assistant opens a card's visual editor only for cards it can reach: on the dashboard itself or inside its stacks and grid. A card placed in a *custom field* of another custom card (Button-Card, for example) only offers the outer card's YAML, and the ✎ **Edit markers** pen can't reach it either. In a stack: **Edit** the stack → **Show visual editor** → pick the floorplan's tab, and the full card editor, including Edit markers, is there.
+:::
+
+An example: a panel with a menu rail (1 part) and the plan (8 parts), one gradient background for both, and the floorplan blending into it. The rail buttons switch the plan's overlays with the [`device_floorplan.show_overlay`](#_1-the-action-every-screen) action, so the card's own overlay buttons are hidden.
+
+```yaml
+type: horizontal-stack
+grid_options:
+  columns: full
+  rows: auto
+card_mod:
+  style: |
+    :host {
+      display: block;
+      box-sizing: border-box;
+      min-width: 0;
+      background: linear-gradient(160deg, rgba(42,52,72,0.95) 0%, rgba(22,24,30,0.98) 70%);
+      border: 1px solid rgba(90,169,255,0.18);
+      border-radius: 14px;
+      padding: 8px;
+      overflow: hidden;
+    }
+    #root {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 8fr);   /* rail : plan */
+      column-gap: 8px;
+      align-items: center;
+    }
+    #root > * {
+      min-width: 0 !important;
+      width: 100%;
+      margin: 0 !important;
+    }
+cards:
+  # Left: the menu rail
+  - type: vertical-stack
+    cards:
+      - type: button
+        name: Home
+        icon: mdi:home
+        tap_action:
+          action: perform-action
+          perform_action: device_floorplan.show_overlay
+          data: { card_id: panel, overlay: live }
+      - type: button
+        name: Lights
+        icon: mdi:lightbulb-group-outline
+        tap_action:
+          action: perform-action
+          perform_action: device_floorplan.show_overlay
+          data: { card_id: panel, overlay: lights }
+      - type: button
+        name: Comfort
+        icon: mdi:thermometer
+        tap_action:
+          action: perform-action
+          perform_action: device_floorplan.show_overlay
+          data: { card_id: panel, overlay: comfort }
+      - type: button
+        name: Security
+        icon: mdi:shield-home-outline
+        tap_action:
+          action: perform-action
+          perform_action: device_floorplan.show_overlay
+          data: { card_id: panel, overlay: security }
+  # Right: the floorplan, without its own frame
+  - type: custom:device-floorplan-card
+    plan: ground_floor
+    card_id: panel
+    buttons: { position: hidden }
+    card_mod:
+      style: |
+        :host { display: block; min-width: 0; }
+        ha-card {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+```
+
+- Change **`plan`** to your plan's id and keep the same **`card_id`** in the card and in the buttons.
+- Any card works in the rail: [chip cards](/reference/chip) (they also glow for the overlay that's showing), Tile, Button-Card, Mushroom… Only the floorplan itself needs to sit directly in the stack.
+- Prefer the card's own overlay buttons? Leave out `buttons: { position: hidden }` and the rail.
+- Card-mod styles on the floorplan card stay in place when you switch overlays. Put the layout (grid, background) on the **stack**, as above: the stack doesn't redraw, so the layout holds.
+
 ## YAML
 
 Everything the editor sets is plain YAML; only what differs from the defaults is stored.
