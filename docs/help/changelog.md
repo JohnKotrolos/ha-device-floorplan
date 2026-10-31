@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+
+- **Daylight that spreads**: closed shutters darken their room, and the rooms next to it too. Windows always let light in, shutters by how far they're open, doors don't count; a corridor or entrance without windows takes the average of the rooms it touches. Light passes where room shapes touch or overlap, never through a gap (a wall). One even layer: no extra darkness where shapes overlap, soft between rooms, crisp at walls.
+- **Two sensors, one bar**: put a window sensor and a shutter on the same spot and draw the bar once; the other gets a twin bar beside it, same length, moving with it. **Switch side**, **Next to…** for sensors in different places, and bar ends snap to each other.
+
 ## 0.7.1
 
 - **Softer shutter shading**: a room with closed shutters is less dark (about half at most, a little lighter again when it's open to another room), and where it's one open space with the next room (overlapping shapes) the shade fades smoothly across instead of stopping at a hard line. Real walls stay crisp.

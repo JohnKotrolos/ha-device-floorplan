@@ -635,6 +635,11 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     if isinstance(op, dict) and all(op.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
         # 0.7.0: the opening (door, window, shutter) drawn on the plan as a bar, in % of the image.
         entry["opening"] = {k: round(min(100.0, max(0.0, float(op[k]))), 3) for k in ("x1", "y1", "x2", "y2")}
+        if op.get("swap"):
+            entry["opening"]["swap"] = True  # 0.7.2: its twins sit on the other side
+    elif isinstance(op, dict) and op.get("link"):
+        # 0.7.2: shares the bar of another spot ("Next to"), on side 1 or -1.
+        entry["opening"] = {"link": str(op["link"]), "side": -1 if op.get("side") == -1 else 1}
     air = pos.get("air")
     if isinstance(air, dict):
         # #115: AC air flow cone: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.

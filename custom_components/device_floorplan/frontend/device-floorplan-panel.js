@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.7.1";
+const VERSION = "0.7.2";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -1717,7 +1717,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (c.type === "cone") parts.push(`<span class="ahd" data-ah="1" data-x="${c.x + Math.cos((c.a * Math.PI) / 180) * c.r}" data-y="${c.y + Math.sin((c.a * Math.PI) / 180) * c.r * this._ratio()}" title="Drag: direction and reach of the air flow"></span>`);
       }
       // 0.7.0: the selected opening's two ends.
-      if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening) {
+      if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening && this.work.positions[s.sel].opening.x1 != null) {
         const o = this.work.positions[s.sel].opening;
         parts.push(`<span class="ohd" data-oh="1" data-x="${o.x1}" data-y="${o.y1}" title="Drag: one end of the opening (Alt: free angle)"></span><span class="ohd" data-oh="2" data-x="${o.x2}" data-y="${o.y2}" title="Drag: the other end of the opening (Alt: free angle)"></span>`);
       }
@@ -2533,17 +2533,56 @@ class DeviceFloorplanPanel extends HTMLElement {
     return guessOpenAs(this._openingEnt(id), this._hass, (this.byId.get(id) || {}).name);
   }
 
+  /** 0.7.2: the bar of this spot: its own, its twin's (another sensor on the same spot) or a linked one. */
+  _openGeo(id) {
+    const P = this.work.positions;
+    const pos = P[id];
+    if (!pos || !this._openingEnt(id)) return null;
+    const own = (k) => P[k] && P[k].opening && P[k].opening.x1 != null && this._openingEnt(k);
+    if (own(id)) return { geo: pos.opening, side: 0, kind: "own" };
+    let base = null;
+    let kind = "twin";
+    if (pos.opening && pos.opening.link && own(pos.opening.link)) {
+      base = pos.opening.link;
+      kind = "link";
+    }
+    if (!base && !pos.opening) base = Object.keys(P).find((k) => k !== id && own(k) && Math.hypot(P[k].x - pos.x, P[k].y - pos.y) < 1.5) || null;
+    if (!base) return null;
+    const twins = Object.keys(P).filter((k) => k !== base && !own(k) && this._openingEnt(k) && ((P[k].opening && P[k].opening.link === base) || (!P[k].opening && Math.hypot(P[base].x - P[k].x, P[base].y - P[k].y) < 1.5)));
+    const n = twins.indexOf(id) + 1 || 1;
+    let side = kind === "link" && pos.opening.side ? pos.opening.side : n % 2 ? 1 : -1;
+    if (P[base].opening.swap) side = -side;
+    return { geo: P[base].opening, side: side * Math.ceil(n / 2), kind, base };
+  }
+
   _openSectionHtml(d) {
     const pos = this.work.positions[d.id];
     const eid = pos && this._openingEnt(d.id);
     if (!eid) return "";
     const as = this._openAs(d.id);
+    const g = this._openGeo(d.id);
+    const nm = (k) => esc(((this.byId.get(k) || {}).name) || String(k).replace(/^entity:/, ""));
     const chips = [["door", "Door"], ["window", "Window"], ["shutter", "Shutter"]].map(([k, l]) => `<button class="${as === k ? "on" : ""}" data-act="openas" data-as="${k}">${l}</button>`).join("");
-    const what = as === "shutter" ? (eid.startsWith("cover.") ? "a white bar filled as far as it's closed; fully closed it fades away and the room gets darker by day" : "a white outlined bar while open; closed, the bar goes away and the room gets darker by day") : "a light blue bar while open, nothing while closed";
+    const what = as === "shutter" ? (eid.startsWith("cover.") ? "a white bar filled as far as it's closed; fully closed it fades away and the room gets darker by day" : "a white outlined bar while open; closed, the bar goes away and the room gets darker by day") : as === "window" ? "a light blue bar while open; a window always lets daylight in" : "a light blue bar while open, nothing while closed";
+    let acts;
+    let hint;
+    if (g && g.kind === "own") {
+      const twins = Object.keys(this.work.positions).filter((k) => k !== d.id && (this._openGeo(k) || {}).base === d.id);
+      acts = `<button data-act="opendel">Remove the bar</button>${twins.length ? `<button data-act="openswap">Switch side of ${twins.length === 1 ? nm(twins[0]) : "the twins"}</button>` : ""}`;
+      hint = `Drag the two ends along the wall (they snap straight and to other bars' ends, Alt for any angle).${twins.length ? ` ${twins.map(nm).join(", ")} ${twins.length === 1 ? "sits" : "sit"} beside it and follow${twins.length === 1 ? "s" : ""}.` : " Put a second sensor of the same opening on this spot and it gets a twin bar beside this one."} On the card: ${what}.`;
+    } else if (g) {
+      acts = `<button data-act="openswap">Switch side</button><button data-act="openownbar">Draw its own bar</button>`;
+      hint = `${g.kind === "link" ? "Next to" : "Same spot as"} ${nm(g.base)}: same length, a few pixels beside its bar, and moves with it. On the card: ${what}.`;
+    } else {
+      const P = this.work.positions;
+      const near = Object.keys(P).filter((k) => k !== d.id && P[k].opening && P[k].opening.x1 != null && this._openingEnt(k)).map((k) => [k, Math.hypot((P[k].opening.x1 + P[k].opening.x2) / 2 - pos.x, (P[k].opening.y1 + P[k].opening.y2) / 2 - pos.y)]).sort((x, y) => x[1] - y[1]).slice(0, 4);
+      acts = `<button class="on" data-act="opendraw">Draw it on the plan</button>${near.length ? `<select data-act="openlink" aria-label="Next to another bar"><option value="">Next to…</option>${near.map(([k]) => `<option value="${esc(k)}">${nm(k)}</option>`).join("")}</select>` : ""}`;
+      hint = `Mark where the ${as} is: the card then shows ${what}, instead of a marker. Already a bar for this opening (the shutter, say)? Put this sensor on the same spot, or pick it under <b>Next to…</b>.`;
+    }
     return `<div class="lsec opn"><div class="lh">🪟 Opening on the plan<small>${["door", "window", "shutter"].includes(pos.as) ? "set by you" : "automatic"}</small></div>
       <div class="lchips">${chips}</div>
-      <div class="lchips">${pos.opening ? `<button data-act="opendel">Remove the bar</button>` : `<button class="on" data-act="opendraw">Draw it on the plan</button>`}</div>
-      <div style="font-size:12px;color:var(--df-sec)">${pos.opening ? `Drag the two ends along the wall (they snap straight, Alt for any angle). On the card: ${what}.` : `Mark where the ${as} is: the card then shows ${what}, instead of a marker.`}</div></div>`;
+      <div class="lchips">${acts}</div>
+      <div style="font-size:12px;color:var(--df-sec)">${hint}</div></div>`;
   }
 
   /** Has this device (or its bond) a light? Light shapes live on the bond's leader (#84). */
@@ -2686,12 +2725,22 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (selLead) out += this._shapeSvg(this._shape(selLead), "sel");
     if (s.sel && this.work.positions[s.sel] && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) out += this._airSvg(this._air(s.sel), true);
     // 0.7.0: openings (doors, windows, shutters): all faint, the selected one bold.
-    for (const [id, pos] of Object.entries(this.work.positions)) {
-      const o = pos.opening;
-      if (!o) continue;
-      const sel = id === s.sel;
+    for (const id of Object.keys(this.work.positions)) {
+      const g = this._openGeo(id);
+      if (!g) continue;
+      const o = g.geo;
+      const sel = id === s.sel || (g.base && g.base === s.sel);
       const col = this._openAs(id) === "shutter" ? "#ffffff" : "#26c6da";
-      out += `<line x1="${o.x1 * 10}" y1="${o.y1 * 10}" x2="${o.x2 * 10}" y2="${o.y2 * 10}" stroke="${col}" stroke-opacity="${sel ? 0.95 : 0.45}" stroke-width="${sel ? 7 : 5}" stroke-linecap="round" vector-effect="non-scaling-stroke"${sel ? "" : ' stroke-dasharray="8 6"'}/>`;
+      // Twins: a few screen pixels beside the bar (perpendicular).
+      let ox = 0, oy = 0;
+      if (g.side) {
+        const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
+        const dx = ((o.x2 - o.x1) * W) / 100, dy = ((o.y2 - o.y1) * H) / 100;
+        const L = Math.hypot(dx, dy) || 1;
+        ox = ((-dy / L) * 9 * g.side * 100) / W;
+        oy = ((dx / L) * 9 * g.side * 100) / H;
+      }
+      out += `<line x1="${(o.x1 + ox) * 10}" y1="${(o.y1 + oy) * 10}" x2="${(o.x2 + ox) * 10}" y2="${(o.y2 + oy) * 10}" stroke="${col}" stroke-opacity="${sel ? 0.95 : 0.45}" stroke-width="${sel ? 6 : 4}" stroke-linecap="round" vector-effect="non-scaling-stroke"${sel ? "" : ' stroke-dasharray="8 6"'}/>`;
     }
     return out;
   }
@@ -3181,6 +3230,11 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (Object.keys(u).length) ph.uses = u;
         else delete ph.uses;
       });
+      return;
+    }
+    if (act === "openlink") {
+      const pos = this.work.positions[this.s.sel];
+      if (pos && t.value) this._change(() => (pos.opening = { link: t.value, side: 1 }));
       return;
     }
     if (act === "splitas") {
@@ -3707,6 +3761,34 @@ class DeviceFloorplanPanel extends HTMLElement {
         const half = W ? (0.5 / W) * 100 : 3; // about 1 m long, horizontal, through the marker
         const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
         this._change(() => (pos.opening = { x1: c(pos.x - half), y1: c(pos.y), x2: c(pos.x + half), y2: c(pos.y) }));
+        break;
+      }
+      case "openswap": {
+        const g = this._openGeo(s.sel);
+        if (!g) break;
+        if (g.kind === "own") {
+          const pos = this.work.positions[s.sel];
+          this._change(() => (pos.opening.swap ? delete pos.opening.swap : (pos.opening.swap = true)));
+        } else if (g.kind === "link") {
+          const pos = this.work.positions[s.sel];
+          this._change(() => (pos.opening.side = (pos.opening.side || 1) === 1 ? -1 : 1));
+        } else {
+          const bp = this.work.positions[g.base];
+          this._change(() => (bp.opening.swap ? delete bp.opening.swap : (bp.opening.swap = true)));
+        }
+        break;
+      }
+      case "openownbar": {
+        const g = this._openGeo(s.sel);
+        const pos = this.work.positions[s.sel];
+        if (!g || !pos) break;
+        const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
+        const o = g.geo;
+        const dx = ((o.x2 - o.x1) * W) / 100, dy = ((o.y2 - o.y1) * H) / 100;
+        const L = Math.hypot(dx, dy) || 1;
+        const ox = ((-dy / L) * 14 * (g.side || 1) * 100) / W, oy = ((dx / L) * 14 * (g.side || 1) * 100) / H;
+        const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
+        this._change(() => (pos.opening = { x1: c(o.x1 + ox), y1: c(o.y1 + oy), x2: c(o.x2 + ox), y2: c(o.y2 + oy) }));
         break;
       }
       case "opendel": {
@@ -4534,6 +4616,18 @@ class DeviceFloorplanPanel extends HTMLElement {
         const R = this._ratio();
         if (Math.abs(p.x - other[0]) < Math.abs(p.y - other[1]) / R) p = { x: other[0], y: p.y };
         else p = { x: p.x, y: other[1] };
+      }
+      // 0.7.2: and to the ends of other bars, so bars of the same opening get the same length.
+      if (!e.altKey) {
+        const W = (this._vpW || 800) * (this.s.z || 1), H = (this._vpH || 500) * (this.s.z || 1);
+        const horiz = Math.abs(p.y - other[1]) < 1e-6;
+        for (const [k, q] of Object.entries(this.work.positions)) {
+          if (k === g.id || !q.opening || q.opening.x1 == null) continue;
+          for (const [ex, ey] of [[q.opening.x1, q.opening.y1], [q.opening.x2, q.opening.y2]]) {
+            if (horiz && Math.abs((ex - p.x) * W) / 100 < 10) p = { x: ex, y: p.y };
+            else if (!horiz && Math.abs((ey - p.y) * H) / 100 < 10) p = { x: p.x, y: ey };
+          }
+        }
       }
       const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
       if (g.which === "1") Object.assign(o, { x1: c(p.x), y1: c(p.y) });
@@ -5686,6 +5780,12 @@ class DeviceFloorplanPanel extends HTMLElement {
         }
         matched++;
         positions[dv.device_id] = { x: dv.x, y: dv.y, ...(of ? { of } : {}), ...extra(dv) };
+      }
+      // 0.7.2: "Next to" links follow their matched spots.
+      for (const pos of Object.values(positions)) if (pos.opening && pos.opening.link) {
+        const to = String(pos.opening.link).startsWith("entity:") ? pos.opening.link : idMap[pos.opening.link];
+        if (to && positions[to]) pos.opening.link = to;
+        else delete pos.opening;
       }
       // Bonds and phantoms (0.5.0) follow their matched devices.
       const bonds = {};

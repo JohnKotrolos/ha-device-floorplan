@@ -97,7 +97,7 @@ Card editor → **Day & night**:
 | **How dark the night gets** | 70 % | |
 | **Style** | Moonlight | Deep blue, or *Dim* (darker, neutral). |
 | **Dim quiet markers at night** | On | Markers that are off or idle get softer; active ones (a lamp on, motion, an open door) stay bright. |
-| **Closed shutters darken their room by day** | On | A room with a [shape](../using/rooms.md) gets darker the more of its shutters, blinds or curtains are closed: one window fully closed makes it clearly darker (never black), 2 of 5 closed a little darker. In an open space (overlapping shapes, e.g. living room and kitchen) the shade fades softly into the neighbouring room. Electric shutters count with their position, manual ones with their contact sensor (open or closed). What counts as a shutter is set in the Editor ([openings](/using/openings)). |
+| **Closed shutters darken their room by day** | On | Daylight spreads through rooms with a [shape](../using/rooms.md): a window always lets light in, a shutter by how far it's open (electric ones by position, manual ones by their contact), doors don't count. A room without windows or shutters takes the average of the rooms its shape touches or overlaps; a gap between shapes is a wall. Fully dark is about half dark, never black, and rooms blend softly into each other. See [openings](/using/openings). |
 | **Warm dusk and dawn colours** | Off | With *Follow the sun*: a warm tint at dusk and a soft blue one at dawn while it changes. |
 
 When **every room on the plan has a [shape](../using/rooms.md)**, only the inside of the home darkens at night: walls and everything outside keep their colour, so the card stays calm next to your other cards.

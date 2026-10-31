@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.7.1).
+ * Device Floorplan – dashboard card (v0.7.2).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.7.1";
+const CARD_VERSION = "0.7.2";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -230,6 +230,19 @@ function segsCross(a, b, c, d) {
 }
 
 /** Do two room shapes overlap (touch counts as overlap only when they really cross)? */
+/** 0.7.2: do two room shapes touch (an edge on an edge, a corner on an edge)? A gap between them is a wall. */
+function polysTouch(A, B, tol = 0.35) {
+  const d2 = (p, a, b) => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const L = dx * dx + dy * dy || 1e-9;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L));
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  };
+  const near = (P, Q) => P.some((p) => Q.some((a, i) => d2(p, a, Q[(i + 1) % Q.length]) <= tol));
+  return near(A, B) || near(B, A);
+}
+
 function polysOverlap(A, B) {
   if (A.some((p) => inPoly(p[0], p[1], B)) || B.some((p) => inPoly(p[0], p[1], A))) return true;
   for (let i = 0; i < A.length; i++) for (let j = 0; j < B.length; j++) if (segsCross(A[i], A[(i + 1) % A.length], B[j], B[(j + 1) % B.length])) return true;
@@ -1156,7 +1169,6 @@ class DeviceFloorplanCard extends HTMLElement {
     return `<svg class="air" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
   }
 
-  /** #117: by day, a room gets darker the more of its shutters / blinds are closed (needs a room shape). */
   /** 0.7.0: every door / window / shutter spot on the plan (devices and entity spots, bonded too). */
   _openSpots(a) {
     const hass = this._hass;
@@ -1173,6 +1185,23 @@ class DeviceFloorplanCard extends HTMLElement {
       if (eid) add(id, d, eid);
     }
     for (const [eid, d] of Object.entries(a.entities || {})) add(`entity:${eid}`, d, eid);
+    // 0.7.2: one bar per opening. A sensor without its own bar shares the bar of another one on the
+    // same spot (a twin, a few pixels beside it), or of the one it was set "Next to".
+    const own = (o) => o.opening && o.opening.x1 != null;
+    const sides = {};
+    for (const o of out) if (own(o)) o.geo = o.opening;
+    for (const o of out) {
+      if (o.geo) continue;
+      let base = null;
+      if (o.opening && o.opening.link) base = out.find((q) => q.id === o.opening.link && own(q));
+      if (!base && !o.opening) base = out.find((q) => q !== o && own(q) && Math.hypot(q.x - o.x, q.y - o.y) < 1.5);
+      if (!base) continue;
+      const n = (sides[base.id] = (sides[base.id] || 0) + 1);
+      let side = o.opening && o.opening.side ? o.opening.side : n % 2 ? 1 : -1;
+      if (base.opening.swap) side = -side;
+      o.geo = base.opening;
+      o.side = side * Math.ceil(n / 2);
+    }
     this._osA = a;
     this._osH = hass;
     this._os = out;
@@ -1183,7 +1212,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _barEnts() {
     const a = this._a;
     if (!a || !this._hass) return new Set();
-    return new Set(this._openSpots(a).filter((o) => o.opening).map((o) => o.eid));
+    return new Set(this._openSpots(a).filter((o) => o.geo).map((o) => o.eid));
   }
 
   /** How far open, 0…1 (null = unknown). */
@@ -1207,16 +1236,17 @@ class DeviceFloorplanCard extends HTMLElement {
     this._shutPrev = this._shutPrev || {};
     let html = "";
     for (const o of this._openSpots(a)) {
-      if (!o.opening) continue;
+      if (!o.geo) continue;
       const f = this._openFrac(o);
       const closed = f === 0;
       if (this._shutPrev[o.eid] === false && closed) this._shutT[o.eid] = now;
       this._shutPrev[o.eid] = f == null ? undefined : closed;
       if (f == null) continue;
-      const { x1, y1, x2, y2 } = o.opening;
+      const { x1, y1, x2, y2 } = o.geo;
       const len = Math.hypot(x2 - x1, (y2 - y1) / ratio);
       const ang = (Math.atan2((y2 - y1) / ratio, x2 - x1) * 180) / Math.PI;
-      const geo = `left:${x1}%;top:${y1}%;width:${len.toFixed(3)}%;transform:translateY(-50%) rotate(${ang.toFixed(2)}deg)`;
+      // Twins sit beside the bar: 7 px bar + 4 px gap per step.
+      const geo = `left:${x1}%;top:${y1}%;width:${len.toFixed(3)}%;transform:translateY(-50%) rotate(${ang.toFixed(2)}deg)${o.side ? ` translateY(${o.side * 11}px)` : ""}`;
       const label = `${o.st.attributes.friendly_name || o.eid}: ${this._hass.formatEntityState ? this._hass.formatEntityState(o.st) : o.st.state}`;
       let cls = "";
       let fill = 0;
@@ -1239,54 +1269,92 @@ class DeviceFloorplanCard extends HTMLElement {
     return html;
   }
 
-  /** #117: by day, a room gets darker the more of its shutters / blinds are closed (needs a room shape).
-   *  0.7.0: contacts on manual shutters count too (open / closed). */
+  /** 0.7.2: daylight per room, spreading through the home.
+   *  Sources: a window lets light in whatever its state; a shutter by how far it's open; doors don't count.
+   *  A room with sources is mostly its own light; an inner room (no sources) takes the average of the
+   *  rooms its shape touches or overlaps (gap = wall: no light). Overlap (open plan) links stronger. */
+  _daylight(a) {
+    const areas = a.areas || {};
+    const ids = Object.keys(areas).filter((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3);
+    if (!ids.length) return null;
+    const src = {};
+    let anyShutter = false;
+    for (const o of this._openSpots(a)) {
+      if (o.as === "door") continue;
+      let aid = o.area_id && ids.includes(o.area_id) ? o.area_id : null;
+      if (!aid) aid = ids.find((k) => inPoly(o.x, o.y, areas[k].shape)) || null;
+      if (!aid && o.geo) aid = ids.find((k) => inPoly((o.geo.x1 + o.geo.x2) / 2, (o.geo.y1 + o.geo.y2) / 2, areas[k].shape)) || null;
+      if (!aid) continue;
+      let v;
+      if (o.as === "window") v = 1;
+      else {
+        v = this._openFrac(o);
+        if (v == null) continue;
+        anyShutter = true;
+      }
+      (src[aid] = src[aid] || []).push(v);
+    }
+    if (!anyShutter) return null;
+    // Links: overlap (open plan) 1, touch (doorway) 0.5.
+    const links = {};
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const A = areas[ids[i]].shape;
+      const B = areas[ids[j]].shape;
+      const w = polysOverlap(A, B) ? 1 : polysTouch(A, B) ? 0.5 : 0;
+      if (!w) continue;
+      (links[ids[i]] = links[ids[i]] || []).push([ids[j], w]);
+      (links[ids[j]] = links[ids[j]] || []).push([ids[i], w]);
+    }
+    const own = {};
+    for (const k of ids) if (src[k]) own[k] = 1 - src[k].reduce((t, v) => t + v, 0) / src[k].length;
+    let d = {};
+    for (const k of ids) d[k] = own[k] ?? 0;
+    for (let it = 0; it < 16; it++) {
+      const nd = {};
+      for (const k of ids) {
+        const nb = links[k] || [];
+        const sw = nb.reduce((t, [, w]) => t + w, 0);
+        const sv = nb.reduce((t, [j, w]) => t + w * d[j], 0);
+        if (src[k]) {
+          const S = src[k].length; // its own windows count most
+          nd[k] = (S * own[k] + 0.6 * sv) / (S + 0.6 * sw);
+        } else nd[k] = sw ? sv / sw : 0;
+      }
+      d = nd;
+    }
+    return { ids, d };
+  }
+
+  /** #117 / 0.7.2: one shading layer by day; each spot gets one value (no doubling where shapes overlap),
+   *  soft between rooms that touch, crisp at walls and outside. */
   _shadeHtml(a, n, ns) {
     if (n.shutters === false || !(n.overlays || []).includes(this._overlay)) return "";
     const day = 1 - (ns.f || 0);
     if (day <= 0.05) return "";
+    const res = this._daylight(a);
+    if (!res) return "";
     const areas = a.areas || {};
-    const shaped = Object.keys(areas).filter((k) => areas[k].shape && areas[k].shape.length >= 3);
-    if (!shaped.length) return "";
-    const rooms = {};
-    for (const o of this._openSpots(a)) {
-      if (o.as !== "shutter") continue;
-      let aid = o.area_id && areas[o.area_id] && areas[o.area_id].shape ? o.area_id : null;
-      if (!aid) aid = shaped.find((k) => inPoly(o.x, o.y, areas[k].shape)) || null;
-      if (!aid && o.opening) aid = shaped.find((k) => inPoly((o.opening.x1 + o.opening.x2) / 2, (o.opening.y1 + o.opening.y2) / 2, areas[k].shape)) || null;
-      if (!aid) continue;
-      const open = this._openFrac(o);
-      if (open == null) continue;
-      (rooms[aid] = rooms[aid] || []).push(open);
-    }
-    const pts = (sh) => sh.map((q) => `${q[0]},${q[1]}`).join(" ");
     const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
-    let defs = `<filter id="shb" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${(2.2).toFixed(2)} ${(2.2 * ratio).toFixed(2)}"/></filter><filter id="shd" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="${(4).toFixed(1)} ${(4 * ratio).toFixed(1)}"/></filter>`;
-    let body = "";
-    let i = 0;
-    for (const [aid, opens] of Object.entries(rooms)) {
-      const avg = opens.reduce((t, v) => t + v, 0) / opens.length;
-      // All closed: quite dark, never black; a room open to others (overlapping shapes) gets their daylight too.
-      const group = shapeGroup(areas, aid) || [areas[aid].shape];
-      const open = group.length > 1;
-      const k = 0.5 * (1 - avg) * day * (open ? 0.8 : 1);
-      if (k < 0.04) continue;
-      const fill = `fill="rgb(12,18,34)" fill-opacity="${k.toFixed(2)}"`;
-      const me = pts(areas[aid].shape);
-      if (!open) {
-        body += `<polygon points="${me}" ${fill}/>`;
-        continue;
-      }
-      // Open space (overlapping shapes): the shade fades softly across the open side into the
-      // neighbouring room, while real walls stay crisp (gap = wall). The area outside the space is
-      // filled before blurring, so no light rim appears along the outer walls; the clip removes it.
-      const others = group.filter((g) => pts(g) !== me);
-      defs += `<clipPath id="shc${i}">${group.map((g) => `<polygon points="${pts(g)}"/>`).join("")}</clipPath>`;
-      defs += `<mask id="shm${i}" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><rect x="-10" y="-10" width="120" height="120" fill="#fff"/><g filter="url(#shd)">${others.map((g) => `<polygon points="${pts(g)}" fill="#000"/>`).join("")}</g><polygon points="${me}" fill="#fff"/></mask>`;
-      body += `<g clip-path="url(#shc${i})"><g filter="url(#shb)"><g mask="url(#shm${i})"><rect x="-10" y="-10" width="120" height="120" ${fill}/></g></g></g>`;
-      i++;
+    const pts = (sh) => sh.map((q) => `${q[0]},${q[1]}`).join(" ");
+    const MAX = 0.55; // fully dark room ≈ half dark, never black
+    const order = [...res.ids].sort((x, y) => res.d[x] - res.d[y]); // darker last: overlaps take the darker
+    let paint = "";
+    let any = false;
+    for (const k of order) {
+      const alpha = Math.max(0, Math.min(1, res.d[k])) * MAX * day;
+      if (alpha >= 0.03) any = true;
+      const L = Math.round(255 * alpha);
+      paint += `<polygon points="${pts(areas[k].shape)}" fill="rgb(${L},${L},${L})"/>`;
     }
-    return body ? `<svg class="shade" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>` : "";
+    if (!any) return "";
+    const clip = res.ids.map((k) => `<polygon points="${pts(areas[k].shape)}"/>`).join("");
+    const r = 1.4;
+    const b = 1.6;
+    return `<svg class="shade" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>
+<filter id="shf" x="-10%" y="-10%" width="120%" height="120%"><feMorphology operator="dilate" radius="${r} ${(r * ratio).toFixed(2)}"/><feGaussianBlur stdDeviation="${b} ${(b * ratio).toFixed(2)}"/></filter>
+<clipPath id="shc">${clip}</clipPath>
+<mask id="shm" maskUnits="userSpaceOnUse" x="-5" y="-5" width="110" height="110"><rect x="-5" y="-5" width="110" height="110" fill="#000"/><g filter="url(#shf)">${paint}</g></mask></defs>
+<rect x="0" y="0" width="100" height="100" fill="rgb(12,18,34)" mask="url(#shm)" clip-path="url(#shc)"/></svg>`;
   }
 
   _nightHtml(a) {
