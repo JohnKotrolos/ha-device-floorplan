@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.7.2).
+ * Device Floorplan – dashboard card (v0.7.3).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.7.2";
+const CARD_VERSION = "0.7.3";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -545,6 +545,13 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .m .xs, .chip .xs { display:flex; flex-direction:column; align-items:flex-start; gap:0; font-size: calc(var(--dfc-size) * .3); line-height:1.25; }
 .m .xs { position:absolute; top: calc(100% + 2px); left:50%; transform: translateX(-50%); background: var(--dfc-chipbg); color: var(--dfc-chipfg); border:1px solid var(--dfc-chipborder); border-radius:8px; padding:2px 7px; white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.3); }
 .chip .xs { margin-top:2px; opacity:.85; }
+.m.eb .xs { top:auto; bottom: calc(100% + 2px); }
+.m.eb.hasx .tip { bottom:auto; top: calc(100% + 6px); }
+.m.et .tip { bottom:auto; top: calc(100% + 6px); }
+.m.et.hasx .xs { top: calc(100% + 30px); }
+.m.er .val { left:auto; right: calc(100% + 4px); }
+.m.er .xs, .m.er .tip { left:auto; right:0; transform:none; }
+.m.el .xs, .m.el .tip { left:0; transform:none; }
 .xl { display:flex; align-items:center; gap:3px; white-space:nowrap; --mdc-icon-size: calc(var(--dfc-size) * .32); }
 .chip.cl2.cmp { gap:5px; padding: 4px 9px 4px 6px; }
 .chip.cl2.cmp .t { font-size: calc(var(--dfc-size) * .42); font-weight:500; white-space:nowrap; }
@@ -1453,7 +1460,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!this._peopleShown()) return { plan: "", row: "" };
     const { placed, home } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
-    const plan = placed.map((x) => `<button class="m person ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
+    const plan = placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y)} ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
     const row = this._overlay === "people" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   }
@@ -2432,7 +2439,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _markerHtml(s) {
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
-      const cls = ["m", "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
+      const cls = ["m", edgeCls(s.x, s.y), "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
       return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon></span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
     }
     const icon = s.icon
@@ -2440,7 +2447,7 @@ class DeviceFloorplanCard extends HTMLElement {
       : s.eid && this._hass.states[s.eid]
         ? `<ha-state-icon data-ent="${cesc(s.eid)}"></ha-state-icon>`
         : `<ha-icon icon="mdi:help-circle-outline"></ha-icon>`;
-    const cls = ["m", s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : ""].join(" ");
+    const cls = ["m", edgeCls(s.x, s.y), s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : ""].join(" ");
     // #112: a light that's on shows its real colour (or the lamp colour from the Editor).
     let lc = "";
     if (s.kind === "light" && s.on) {
@@ -3147,6 +3154,11 @@ class DeviceFloorplanCard extends HTMLElement {
 
 // =================================================================== editor
 /** JSON with sorted keys, to compare configs regardless of key order. */
+/** Near the plan's edges, a marker's labels open towards the inside so they aren't cut off. */
+function edgeCls(x, y) {
+  return [y > 78 ? "eb" : "", y < 12 ? "et" : "", x > 84 ? "er" : "", x < 12 ? "el" : ""].filter(Boolean).join(" ");
+}
+
 function stableJson(v) {
   if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
   if (v && typeof v === "object") return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;

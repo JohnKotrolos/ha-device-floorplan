@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- **Markers near the edge**: extra lines, values and names of a marker close to the bottom, top or sides of the plan now open towards the inside, so they're no longer cut off.
+
 ## 0.7.2
 
 - **Daylight that spreads**: closed shutters darken their room, and the rooms next to it too. Windows always let light in, shutters by how far they're open, doors don't count; a corridor or entrance without windows takes the average of the rooms it touches. Light passes where room shapes touch or overlap, never through a gap (a wall). One even layer: no extra darkness where shapes overlap, soft between rooms, crisp at walls.
