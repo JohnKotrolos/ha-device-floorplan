@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.3
+
+- **Room pulse**: motion in a room with a shape shows as a soft breathing outline of the room (presence stays steady, it fades out after motion ends); open-plan neighbours stay clear. Card option *Live → Motion as*: pulse, icons or both.
+- **Move whole shapes and bars**: in the Floorplan Editor, press and hold inside a room shape or the middle of a bar to move it as a whole.
+- **Combine into one bar**: a shutter and a window contact of the same window can share one bar, driven by the shutter. Shutter closed but the contact open? The bar pulses orange-red.
+- **Wi-Fi / LAN map**: with router device tracking (FRITZ!Box and others that report the access point), Network draws each device's link to its router or repeater, solid for cable, dotted for Wi-Fi, a colour per access point, with a count per access point in the legend and the details in the popup.
+- **Network layers**: only the options that apply to the connections shown (no Zigbee links, LQI or Refresh with only Wi-Fi / LAN).
+- **Card editor**: a switch to hide the *N new · Place them* button.
+- **"On this spot" list** opens upwards near the bottom of the plan and stays inside it.
+- **Markers near the edge**: extra lines, values and names of a marker close to the bottom, top or sides of the plan now open towards the inside, so they're no longer cut off.
+
 ## 0.7.2
 
 - **Daylight that spreads**: closed shutters darken their room, and the rooms next to it too. Windows always let light in, shutters by how far they're open, doors don't count; a corridor or entrance without windows takes the average of the rooms it touches. Light passes where room shapes touch or overlap, never through a gap (a wall). One even layer: no extra darkness where shapes overlap, soft between rooms, crisp at walls.

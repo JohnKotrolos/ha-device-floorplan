@@ -9,7 +9,7 @@ Instead of a round marker on the wall, a door, window or shutter can show as a *
 3. Drag its **two ends** to where the opening starts and ends. They snap straight along the wall; hold **Alt** for any angle. The bar doesn't have to touch the marker: put the sensor where it really is and the bar on the window.
 4. Choose what it is: **Door**, **Window** or **Shutter**. Device Floorplan guesses from the device class and the name (*shutter*, *roller*, *blind*…); change it if it's wrong.
 
-**Remove the bar** brings the marker back.
+Press and hold the **middle of the bar** and drag to move the whole bar (pressing right on the marker still moves the marker). **Remove the bar** brings the marker back.
 
 ## Two sensors, one opening
 
@@ -18,6 +18,7 @@ A window often has a contact sensor *and* a shutter. You draw the bar once:
 - **Put both sensors on the same spot** (drop one onto the other and keep them separate, no need to bond). Draw the bar for one of them; the other gets a **twin bar**: the same length, a few pixels beside it, and it follows when you move or resize the bar.
 - **Switch side** puts the twin on the other side: on top or below, or left or right of a vertical bar (for example window inside, shutter outside).
 - Sensors in different places, like a window sensed from both sides, are paired with **Next to…** in the second sensor's card.
+- **Combine into one bar** (a shutter and a contact of the same window): one bar instead of two, driven by the shutter, and daylight follows the shutter only. If the shutter says closed but the contact says open, the bar pulses orange-red.
 - **Draw its own bar** gives a twin its own handles again.
 - Bars you draw separately snap to each other's ends while you drag, so they line up.
 

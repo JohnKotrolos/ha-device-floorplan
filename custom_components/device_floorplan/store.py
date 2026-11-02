@@ -640,6 +640,8 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     elif isinstance(op, dict) and op.get("link"):
         # 0.7.2: shares the bar of another spot ("Next to"), on side 1 or -1.
         entry["opening"] = {"link": str(op["link"]), "side": -1 if op.get("side") == -1 else 1}
+        if op.get("merge"):
+            entry["opening"]["merge"] = True  # 0.7.3: one combined bar (shutter + contact)
     air = pos.get("air")
     if isinstance(air, dict):
         # #115: AC air flow cone: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.

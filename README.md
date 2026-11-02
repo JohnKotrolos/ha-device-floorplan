@@ -219,6 +219,7 @@ Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
 
 ## Changelog
 
+- 0.7.3 – Room pulse for motion; move whole room shapes and bars; shutter + contact combined into one bar with an alert; Wi-Fi / LAN map from your router (FRITZ!Box and others); Network layers show only what applies; option to hide the "N new" button; edge-aware marker labels.
 - 0.7.2 – Daylight spreads through the home from windows and shutters; twin bars for window + shutter on one opening.
 - 0.7.1 – Softer shutter shading, fading smoothly into open-plan rooms.
 - 0.7.0 – Doors, windows and shutters as bars on the plan; night look only inside the home; fixes (AC main entity, chip phantom value, Browser Mod devices, card-mod).

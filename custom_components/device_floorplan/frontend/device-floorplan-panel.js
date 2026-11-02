@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.7.2";
+const VERSION = "0.7.3";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -235,6 +235,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 @keyframes phglow { 0%,100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--df-primary) 50%, transparent); } 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--df-primary) 15%, transparent); } }
 .mk .count.phc { background: var(--primary-text-color); color: var(--df-card); }
 .stackpop { position:absolute; transform: translate(-50%, 26px); background: var(--df-card); color: var(--primary-text-color); border:1px solid var(--df-div); border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.25); padding:6px; display:flex; flex-direction:column; gap:2px; min-width:200px; pointer-events:auto; z-index:9; font-size:13px; }
+.stackpop.up { transform: translate(-50%, calc(-100% - 26px)); }
 .stackpop .sh { font-size:11px; color: var(--df-sec); padding:2px 6px 4px; display:flex; align-items:center; }
 .stackpop .sh button { margin-left:auto; }
 .stackpop .si { display:flex; align-items:center; gap:8px; border:0; background:transparent; padding:6px; border-radius:8px; cursor:pointer; font: inherit; color: inherit; text-align:left; }
@@ -564,6 +565,17 @@ details.box summary { font-weight:500; }
   .side { flex: 1 1 42%; width:auto; }
 }
 `;
+
+/** Is a point inside a polygon ([[x, y], …], % of the plan)? */
+function ptInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 
 /** 0.7.0: door, window or shutter, from the device class and the name. */
 function guessOpenAs(eid, hass, name) {
@@ -1999,6 +2011,18 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (b.top < vr.top + 4) el.style.marginTop = `${vr.top + 4 - b.top}px`;
       else if (b.bottom > vr.bottom - 4) el.style.marginTop = `${vr.bottom - 4 - b.bottom}px`;
     }
+    // "N on this spot" list: opens above the marker near the bottom, stays inside left and right.
+    for (const el of this.shadowRoot.querySelectorAll(".stackpop")) {
+      el.classList.remove("up");
+      el.style.marginLeft = "0px";
+      let b = el.getBoundingClientRect();
+      if (b.bottom > vr.bottom - 4) {
+        el.classList.add("up");
+        b = el.getBoundingClientRect();
+      }
+      if (b.left < vr.left + 4) el.style.marginLeft = `${vr.left + 4 - b.left}px`;
+      else if (b.right > vr.right - 4) el.style.marginLeft = `${vr.right - 4 - b.right}px`;
+    }
   }
 
   _zoomTo(nz, vx = 50, vy = 50) {
@@ -2552,7 +2576,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const n = twins.indexOf(id) + 1 || 1;
     let side = kind === "link" && pos.opening.side ? pos.opening.side : n % 2 ? 1 : -1;
     if (P[base].opening.swap) side = -side;
-    return { geo: P[base].opening, side: side * Math.ceil(n / 2), kind, base };
+    return { geo: P[base].opening, side: side * Math.ceil(n / 2), kind, base, merged: !!(pos.opening && pos.opening.merge) };
   }
 
   _openSectionHtml(d) {
@@ -2571,8 +2595,17 @@ class DeviceFloorplanPanel extends HTMLElement {
       acts = `<button data-act="opendel">Remove the bar</button>${twins.length ? `<button data-act="openswap">Switch side of ${twins.length === 1 ? nm(twins[0]) : "the twins"}</button>` : ""}`;
       hint = `Drag the two ends along the wall (they snap straight and to other bars' ends, Alt for any angle).${twins.length ? ` ${twins.map(nm).join(", ")} ${twins.length === 1 ? "sits" : "sit"} beside it and follow${twins.length === 1 ? "s" : ""}.` : " Put a second sensor of the same opening on this spot and it gets a twin bar beside this one."} On the card: ${what}.`;
     } else if (g) {
-      acts = `<button data-act="openswap">Switch side</button><button data-act="openownbar">Draw its own bar</button>`;
-      hint = `${g.kind === "link" ? "Next to" : "Same spot as"} ${nm(g.base)}: same length, a few pixels beside its bar, and moves with it. On the card: ${what}.`;
+      // 0.7.3: a shutter and a contact of the same opening can share one bar.
+      const be = this._openingEnt(g.base) || "";
+      const canMerge = eid.startsWith("cover.") !== be.startsWith("cover.");
+      const mergeBtn = canMerge ? `<button class="${g.merged ? "on" : ""}" data-act="openmerge">${g.merged ? "✓ Combined into one bar" : "Combine into one bar"}</button>` : "";
+      if (g.merged) {
+        acts = `${mergeBtn}<button data-act="openownbar">Draw its own bar</button>`;
+        hint = `One bar together with ${nm(g.base)}, driven by the shutter (daylight too). If the shutter says closed but the contact says open, the bar pulses orange-red.`;
+      } else {
+        acts = `<button data-act="openswap">Switch side</button>${mergeBtn}<button data-act="openownbar">Draw its own bar</button>`;
+        hint = `${g.kind === "link" ? "Next to" : "Same spot as"} ${nm(g.base)}: same length, a few pixels beside its bar, and moves with it. On the card: ${what}.${canMerge ? " A shutter and a contact of the same opening? <b>Combine into one bar</b>." : ""}`;
+      }
     } else {
       const P = this.work.positions;
       const near = Object.keys(P).filter((k) => k !== d.id && P[k].opening && P[k].opening.x1 != null && this._openingEnt(k)).map((k) => [k, Math.hypot((P[k].opening.x1 + P[k].opening.x2) / 2 - pos.x, (P[k].opening.y1 + P[k].opening.y2) / 2 - pos.y)]).sort((x, y) => x[1] - y[1]).slice(0, 4);
@@ -2733,6 +2766,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       const col = this._openAs(id) === "shutter" ? "#ffffff" : "#26c6da";
       // Twins: a few screen pixels beside the bar (perpendicular).
       let ox = 0, oy = 0;
+      if (g.merged) continue; // 0.7.3: combined into the other's bar
       if (g.side) {
         const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
         const dx = ((o.x2 - o.x1) * W) / 100, dy = ((o.y2 - o.y1) * H) / 100;
@@ -3778,6 +3812,17 @@ class DeviceFloorplanPanel extends HTMLElement {
         }
         break;
       }
+      case "openmerge": {
+        const g = this._openGeo(s.sel);
+        const pos = this.work.positions[s.sel];
+        if (!g || !pos || g.kind === "own") break;
+        this._change(() => {
+          const side = pos.opening && pos.opening.side === -1 ? -1 : 1;
+          pos.opening = { link: g.base, side };
+          if (!g.merged) pos.opening.merge = true;
+        });
+        break;
+      }
       case "openownbar": {
         const g = this._openGeo(s.sel);
         const pos = this.work.positions[s.sel];
@@ -4507,6 +4552,40 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (shp) this._render();
       return;
     }
+    // 0.7.3: press inside a room's shape (Mark rooms) and drag: the whole shape moves.
+    if (!modal && s.tool === "rooms" && !mk && !cl && !pin && !phm && !e.target.closest("[data-shc],[data-shp],.shbox,button,input,select")) {
+      const p = this._pt(e);
+      const sh = this.work.shapes || {};
+      const vis = s.layers.roomshapes !== false;
+      const hit = s.shapeEdit && sh[s.shapeEdit] && ptInPoly(p.x, p.y, sh[s.shapeEdit]) ? s.shapeEdit : vis ? Object.keys(sh).find((k) => ptInPoly(p.x, p.y, sh[k])) : null;
+      if (hit) {
+        e.preventDefault();
+        this._gesture = { kind: "shmove", aid: hit, start, p0: p, orig: clone(sh[hit]), moved: false, snap: this._snap() };
+        try { this._vp.setPointerCapture(e.pointerId); } catch (_e) { /* fine */ }
+        return;
+      }
+    }
+    // 0.7.3: press on a bar (not its ends) and drag: the whole bar moves, its twins follow.
+    if (!modal && s.tool === "place" && !mk && !cl && !pin && !phm && !lhd && !e.target.closest("[data-oh],[data-ah],button,input,select")) {
+      const p = this._pt(e);
+      const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
+      let best = null;
+      for (const [k, q] of Object.entries(this.work.positions)) {
+        const o = q.opening;
+        if (!o || o.x1 == null || !this._openingEnt(k)) continue;
+        const ax = (o.x1 * W) / 100, ay = (o.y1 * H) / 100, bx = (o.x2 * W) / 100, by = (o.y2 * H) / 100, px = (p.x * W) / 100, py = (p.y * H) / 100;
+        const L = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+        const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L));
+        const d = Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+        if (d < 9 && (!best || d < best.d)) best = { k, d };
+      }
+      if (best) {
+        e.preventDefault();
+        this._gesture = { kind: "obmove", id: best.k, start, p0: p, orig: { ...this.work.positions[best.k].opening }, moved: false, snap: this._snap() };
+        try { this._vp.setPointerCapture(e.pointerId); } catch (_e) { /* fine */ }
+        return;
+      }
+    }
     if (rh) this._gesture = { kind: "rh", i: Number(rh.dataset.rh), end: rh.dataset.end, start, moved: false, snap: this._snap() };
     else if (rl) this._gesture = { kind: "rl", i: Number(rl.dataset.refl), start, moved: false, snap: this._snap(), orig: clone(this.work.refs[Number(rl.dataset.refl)]), p0: this._pt(e) };
     else if (mh) this._gesture = { kind: "mh", which: mh.dataset.mh, start, moved: false };
@@ -4668,6 +4747,26 @@ class DeviceFloorplanPanel extends HTMLElement {
       g.el.style.left = `${x}px`;
       g.el.style.top = `${y}px`;
       s.shapeBox = { x, y };
+      return;
+    }
+    if (g.kind === "shmove" || g.kind === "obmove") {
+      const p = this._pt(e);
+      let dx = p.x - g.p0.x, dy = p.y - g.p0.y;
+      const r3 = (v) => Math.round(v * 1000) / 1000;
+      if (g.kind === "shmove") {
+        // Keep the whole shape on the plan.
+        const xs = g.orig.map((q) => q[0]), ys = g.orig.map((q) => q[1]);
+        dx = Math.max(-Math.min(...xs), Math.min(100 - Math.max(...xs), dx));
+        dy = Math.max(-Math.min(...ys), Math.min(100 - Math.max(...ys), dy));
+        this.work.shapes[g.aid] = g.orig.map((q) => [r3(q[0] + dx), r3(q[1] + dy), ...(q[2] ? [1] : [])]);
+        this._render();
+      } else {
+        const o = g.orig;
+        dx = Math.max(-Math.min(o.x1, o.x2), Math.min(100 - Math.max(o.x1, o.x2), dx));
+        dy = Math.max(-Math.min(o.y1, o.y2), Math.min(100 - Math.max(o.y1, o.y2), dy));
+        Object.assign(this.work.positions[g.id].opening, { x1: r3(o.x1 + dx), y1: r3(o.y1 + dy), x2: r3(o.x2 + dx), y2: r3(o.y2 + dy) });
+        this._renderOverlay();
+      }
       return;
     }
     if (g.kind === "shc") {
@@ -4853,6 +4952,15 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.placing = null;
         this._render();
       }
+      return;
+    }
+    if (g.kind === "shmove" || g.kind === "obmove") {
+      if (g.moved) {
+        this._pushUndo(g.snap);
+        this._scheduleSave();
+      } else if (g.kind === "shmove") s.shapeEdit = g.aid; // a click on a shape: edit it
+      else s.sel = g.id; // a click on a bar: its sensor
+      this._render();
       return;
     }
     if (g.kind === "shbox") return;

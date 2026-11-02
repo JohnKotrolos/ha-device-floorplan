@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.7.2).
+ * Device Floorplan – dashboard card (v0.7.3).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.7.2";
+const CARD_VERSION = "0.7.3";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -80,6 +80,7 @@ const CONNS = {
 const CONN_ORDER = ["zigbee", "zwave", "matter", "network", "bluetooth", "radio"];
 const ROLES = {
   coordinator: { label: "Coordinator", color: "#f5a623", shape: "diamond" },
+  ap: { label: "Router / access point", color: "#f5a623", shape: "diamond" },
   router: { label: "Router / repeater", color: "#3b82f6", shape: "square" },
   hub: { label: "Hub / bridge", color: "#3b82f6", shape: "square" },
   end: { label: "End device", color: "#43a047", shape: "round" },
@@ -93,6 +94,8 @@ const LQI_BANDS = [
   { min: 100, color: "#fb8c00", label: "100–149" },
   { min: 0, color: "#e53935", label: "0–99" },
 ];
+// 0.7.3: Wi-Fi / LAN topology, one colour per access point.
+const AP_COLORS = ["#29b6f6", "#ab47bc", "#26a69a", "#ffa726", "#ec407a", "#9ccc65"];
 const lqiColor = (v) => (LQI_BANDS.find((b) => v >= b.min) || LQI_BANDS[3]).color;
 
 const CLIMATE_MODES = {
@@ -506,9 +509,20 @@ ha-card.dock-right { flex-direction: row; }
 .obar.door { background:#4fc3f7; box-shadow:0 0 8px rgba(79,195,247,.85); }
 .obar.shut { border:2px solid #fff; box-shadow:0 0 6px rgba(0,0,0,.45); }
 .obar.shut i { display:block; height:100%; background:#fff; }
+.obar.alert { border-color:#ff7043; animation: dfcBarAlert 1.4s ease-in-out infinite; }
+.obar.alert i { background:#ff5722; }
+@keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
 .obar.fade { animation: dfcBarFade 2.6s linear forwards; }
 @keyframes dfcBarFade { 0%, 75% { opacity:1; } 100% { opacity:0; } }
-@media (prefers-reduced-motion: reduce) { .obar.fade { animation-duration:.01s; } }
+@media (prefers-reduced-motion: reduce) { .obar.fade { animation-duration:.01s; } .obar.alert { animation:none; } }
+.box svg.pulse { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+.box svg.pulse .ptap { pointer-events: all; cursor:pointer; }
+.pg.breathe { animation: dfcBreathe 3.6s ease-in-out infinite; }
+.pg.steady { opacity:.5; }
+.pg.fade { animation: dfcPulseOut 2s linear forwards; }
+@keyframes dfcBreathe { 0%, 100% { opacity:.45; } 50% { opacity:1; } }
+@keyframes dfcPulseOut { from { opacity:.8; } to { opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .pg.breathe { animation:none; opacity:.8; } }
 .box svg.air, .box svg.shade { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .nglow { mix-blend-mode: soft-light; }
 .nglow.day { mix-blend-mode: multiply; opacity:.85; filter: saturate(1.6); }
@@ -527,6 +541,8 @@ ha-card.dock-right { flex-direction: row; }
 svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 svg.lines line { stroke-linecap: round; }
 svg.lines line.lead { stroke: var(--secondary-text-color); stroke-width:1; opacity:.55; }
+svg.lines line.wl { stroke-width:1.6; stroke-dasharray: 3 4; opacity:.7; }
+svg.lines line.wl.cab { stroke-width:2.2; stroke-dasharray:none; opacity:.8; }
 svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharray: 5 4; opacity:.75; }
 .room { position:absolute; transform: translate(-50%, -50%); pointer-events:none; white-space:nowrap; font-weight:500; color: var(--dfc-roomfg); display:flex; align-items:center; gap:4px; z-index:0; }
 .room.label { text-shadow: 0 0 3px var(--dfc-roomhalo), 0 0 6px var(--dfc-roomhalo); }
@@ -545,6 +561,13 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .m .xs, .chip .xs { display:flex; flex-direction:column; align-items:flex-start; gap:0; font-size: calc(var(--dfc-size) * .3); line-height:1.25; }
 .m .xs { position:absolute; top: calc(100% + 2px); left:50%; transform: translateX(-50%); background: var(--dfc-chipbg); color: var(--dfc-chipfg); border:1px solid var(--dfc-chipborder); border-radius:8px; padding:2px 7px; white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.3); }
 .chip .xs { margin-top:2px; opacity:.85; }
+.m.eb .xs { top:auto; bottom: calc(100% + 2px); }
+.m.eb.hasx .tip { bottom:auto; top: calc(100% + 6px); }
+.m.et .tip { bottom:auto; top: calc(100% + 6px); }
+.m.et.hasx .xs { top: calc(100% + 30px); }
+.m.er .val { left:auto; right: calc(100% + 4px); }
+.m.er .xs, .m.er .tip { left:auto; right:0; transform:none; }
+.m.el .xs, .m.el .tip { left:0; transform:none; }
 .xl { display:flex; align-items:center; gap:3px; white-space:nowrap; --mdc-icon-size: calc(var(--dfc-size) * .32); }
 .chip.cl2.cmp { gap:5px; padding: 4px 9px 4px 6px; }
 .chip.cl2.cmp .t { font-size: calc(var(--dfc-size) * .42); font-weight:500; white-space:nowrap; }
@@ -612,6 +635,9 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .dock button.layers.on { color: var(--dfc-accent); }
 .legend button.layers { display:flex; align-items:center; gap:5px; border: 1px solid var(--divider-color); background: var(--card-background-color, #fff); color: var(--primary-text-color); font: inherit; font-size:12px; padding: 3px 10px; border-radius: 14px; cursor:pointer; --mdc-icon-size: 16px; }
 .legend button.layers.on { color: var(--dfc-accent); border-color: var(--dfc-accent); }
+.legend i.cab { width:16px; height:0; border-radius:0; border-top: 2px solid var(--secondary-text-color); }
+.legend i.dash.wf { border-top-color: var(--secondary-text-color); border-top-style: dotted; }
+.legend i.sw { width:10px; height:10px; border-radius:50%; }
 .legend i.dash { width:16px; height:0; border-radius:0; border-top: 2px dashed var(--dfc-accent); }
 .lmenu { position:absolute; left:0; top:0; z-index:6; min-width: 230px; background: var(--card-background-color, #fff); color: var(--primary-text-color); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35); padding: 10px 6px; font-size:14px; }
 .lmenu h4 { margin: 2px 10px 6px; font-size:13px; font-weight:500; color: var(--secondary-text-color); }
@@ -729,6 +755,7 @@ class DeviceFloorplanCard extends HTMLElement {
       roles: Array.isArray(saved.roles) ? saved.roles : [], // hidden roles
       links: net.links !== false,
       hubs: net.hub_links !== false,
+      wlinks: net.wifi_links !== false,
       minLqi: Number(net.min_lqi || 0),
       legend: net.legend !== false,
     };
@@ -1202,6 +1229,21 @@ class DeviceFloorplanCard extends HTMLElement {
       o.geo = base.opening;
       o.side = side * Math.ceil(n / 2);
     }
+    // 0.7.3: "Combine into one bar": a shutter and a contact of the same opening share one bar,
+    // driven by the shutter; the contact only raises an alert (closed shutter, open contact).
+    for (const o of out) {
+      if (!(o.opening && o.opening.merge && o.geo)) continue;
+      const base = out.find((q) => q.id === o.opening.link);
+      if (!base) continue;
+      const cover = [o, base].find((q) => q.kind === "cover");
+      const contact = cover === o ? base : o;
+      if (!cover || contact.kind !== "contact") continue;
+      cover.geo = base.opening;
+      cover.side = 0;
+      cover.as = "shutter";
+      cover.mate = contact;
+      contact.hidden = true;
+    }
     this._osA = a;
     this._osH = hass;
     this._os = out;
@@ -1236,7 +1278,7 @@ class DeviceFloorplanCard extends HTMLElement {
     this._shutPrev = this._shutPrev || {};
     let html = "";
     for (const o of this._openSpots(a)) {
-      if (!o.geo) continue;
+      if (!o.geo || o.hidden) continue;
       const f = this._openFrac(o);
       const closed = f === 0;
       if (this._shutPrev[o.eid] === false && closed) this._shutT[o.eid] = now;
@@ -1250,6 +1292,12 @@ class DeviceFloorplanCard extends HTMLElement {
       const label = `${o.st.attributes.friendly_name || o.eid}: ${this._hass.formatEntityState ? this._hass.formatEntityState(o.st) : o.st.state}`;
       let cls = "";
       let fill = 0;
+      if (o.mate && closed && o.mate.st && o.mate.st.state === "on") {
+        // Shutter says closed, the contact says open: pulsing orange-red.
+        const ml = `${label} · ${o.mate.st.attributes.friendly_name || o.mate.eid}: open`;
+        html += `<button class="obar shut alert" data-bar="${cesc(o.eid)}" aria-label="${cesc(ml)}" title="${cesc(ml)}" style="${geo}"><i style="width:100%"></i></button>`;
+        continue;
+      }
       if (o.as !== "shutter") {
         if (closed) continue;
         cls = "door";
@@ -1269,6 +1317,84 @@ class DeviceFloorplanCard extends HTMLElement {
     return html;
   }
 
+  /** 0.7.3: the shaped room a device sits in (its area, else the shape under it). */
+  _roomOf(item) {
+    const areas = (this._a && this._a.areas) || {};
+    if (item.area_id && areas[item.area_id] && Array.isArray(areas[item.area_id].shape) && areas[item.area_id].shape.length >= 3) return item.area_id;
+    return Object.keys(areas).find((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3 && inPoly(item.x, item.y, areas[k].shape)) || null;
+  }
+
+  /** Motion and presence sensors on the plan, with their room. */
+  _motionSpots(a) {
+    const hass = this._hass;
+    const out = [];
+    const seen = new Set();
+    for (const item of this._items(a)) {
+      if (item.phantom) continue;
+      const room = this._roomOf(item);
+      if (!room) continue;
+      for (const e of [item.main_entity, ...(item.entities || [])]) {
+        if (!e || seen.has(e)) continue;
+        const st = hass.states[e];
+        if (!st || kindOf(e, st) !== "motion") continue;
+        seen.add(e);
+        const dc = st.attributes.device_class;
+        out.push({ eid: e, st, room, presence: dc === "occupancy" || dc === "presence" });
+      }
+    }
+    return out;
+  }
+
+  /** 0.7.3: Room pulse. Motion: the room's edges glow and breathe; presence: a steady faint outline;
+   *  cleared: fades out over 2 s. Only along real walls: where a room overlaps another (open plan),
+   *  nothing is drawn, so no line runs through the open space. */
+  _pulseHtml(a) {
+    if (this._overlay !== "live") return "";
+    const opts = (this._config.live || {});
+    if ((opts.motion_as || "pulse") === "icons") return "";
+    const areas = a.areas || {};
+    const now = Date.now();
+    this._pulseT = this._pulseT || {};
+    this._pulseOn = this._pulseOn || {};
+    const rooms = {};
+    for (const m of this._motionSpots(a)) {
+      const r = (rooms[m.room] = rooms[m.room] || { motion: false, presence: false, ents: [] });
+      if (m.st.state === "on") {
+        if (m.presence) r.presence = true;
+        else r.motion = true;
+        r.ents.push(m.eid);
+      }
+    }
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const pts = (sh) => sh.map((q) => `${q[0]},${q[1]}`).join(" ");
+    const shaped = Object.keys(areas).filter((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3);
+    let defs = `<filter id="pgf" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="${(0.9).toFixed(2)} ${(0.9 * ratio).toFixed(2)}"/></filter>`;
+    let body = "";
+    let i = 0;
+    for (const aid of shaped) {
+      const r = rooms[aid] || { motion: false, presence: false, ents: [] };
+      const active = r.motion || r.presence;
+      const was = this._pulseOn[aid];
+      if (was && !active) this._pulseT[aid] = now;
+      this._pulseOn[aid] = active;
+      const fading = !active && this._pulseT[aid] && now - this._pulseT[aid] < 2100;
+      if (!active && !fading) continue;
+      const me = pts(areas[aid].shape);
+      const open = shaped.filter((k) => k !== aid && polysOverlap(areas[aid].shape, areas[k].shape));
+      defs += `<clipPath id="pc${i}"><polygon points="${me}"/></clipPath>`;
+      let mask = "";
+      if (open.length) {
+        defs += `<mask id="pm${i}" maskUnits="userSpaceOnUse" x="-5" y="-5" width="110" height="110"><rect x="-5" y="-5" width="110" height="110" fill="#fff"/>${open.map((k) => `<polygon points="${pts(areas[k].shape)}" fill="#000"/>`).join("")}</mask>`;
+        mask = ` mask="url(#pm${i})"`;
+      }
+      const cls = fading ? "fade" : r.motion ? "breathe" : "steady";
+      const delay = fading ? `animation-delay:-${now - this._pulseT[aid]}ms` : r.motion ? `animation-delay:-${now % 3600}ms` : "";
+      body += `<g class="pg ${cls}" style="${delay}"><g clip-path="url(#pc${i})"${mask}><polygon points="${me}" fill="none" stroke="#3fb8a5" stroke-width="14" vector-effect="non-scaling-stroke" filter="url(#pgf)" opacity=".55"/><polygon points="${me}" fill="none" stroke="#5fd3c0" stroke-width="2" vector-effect="non-scaling-stroke" opacity=".85"/></g>${r.ents.length ? `<polygon points="${me}" fill="transparent" class="ptap" data-pulse="${cesc(r.ents[0])}"/>` : ""}</g>`;
+      i++;
+    }
+    return body ? `<svg class="pulse" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>` : "";
+  }
+
   /** 0.7.2: daylight per room, spreading through the home.
    *  Sources: a window lets light in whatever its state; a shutter by how far it's open; doors don't count.
    *  A room with sources is mostly its own light; an inner room (no sources) takes the average of the
@@ -1280,7 +1406,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const src = {};
     let anyShutter = false;
     for (const o of this._openSpots(a)) {
-      if (o.as === "door") continue;
+      if (o.as === "door" || o.hidden) continue;
       let aid = o.area_id && ids.includes(o.area_id) ? o.area_id : null;
       if (!aid) aid = ids.find((k) => inPoly(o.x, o.y, areas[k].shape)) || null;
       if (!aid && o.geo) aid = ids.find((k) => inPoly((o.geo.x1 + o.geo.x2) / 2, (o.geo.y1 + o.geo.y2) / 2, areas[k].shape)) || null;
@@ -1453,7 +1579,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!this._peopleShown()) return { plan: "", row: "" };
     const { placed, home } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
-    const plan = placed.map((x) => `<button class="m person ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
+    const plan = placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y)} ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
     const row = this._overlay === "people" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   }
@@ -1525,7 +1651,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const all = [...new Set(mem.flatMap((d) => d.entities || [d.main_entity]).filter(Boolean))];
       const conns = [...new Set(mem.flatMap((d) => d.conns || []))];
       const zb = mem.find((d) => d.ieee);
-      out.push({ id: `bond:${bid}`, bond: true, light: (mem.find((d) => d.light) || {}).light, name: b.name || (b.names || []).join(" + "), icon: b.icon, tap: b.tap, show: b.show, x: b.x, y: b.y, px: b.px, py: b.py, main_entity: (b.entities || [])[0], entities: b.entities || [], allEntities: all, members: b.members || [], names: b.names || [], conns, ieee: zb ? zb.ieee : null, area: (mem[0] || {}).area, domain: b.domain, group: groups.includes("lights") || b.domain === "light" ? "lights" : groups[0] || "lights" });
+      const rtr = (mem.find((d) => d.router) || {}).router;
+      out.push({ id: `bond:${bid}`, bond: true, router: rtr, light: (mem.find((d) => d.light) || {}).light, name: b.name || (b.names || []).join(" + "), icon: b.icon, tap: b.tap, show: b.show, x: b.x, y: b.y, px: b.px, py: b.py, main_entity: (b.entities || [])[0], entities: b.entities || [], allEntities: all, members: b.members || [], names: b.names || [], conns, ieee: zb ? zb.ieee : null, area: (mem[0] || {}).area, domain: b.domain, group: groups.includes("lights") || b.domain === "light" ? "lights" : groups[0] || "lights" });
     }
     // Phantoms (#60): an extra item with a combined value; its devices keep their own markers.
     for (const [pid, ph] of Object.entries(a.phantoms || {})) {
@@ -1700,6 +1827,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const kind = kindOfE(lead);
       // Live = what is happening now: things that are off are hidden (option: faint).
       const hideOff = !q && (opts.show_off || "hidden") === "hidden";
+      // 0.7.3: Room pulse: motion and presence in a room with a shape show as the room's glowing edges.
+      if (!q && kind === "motion" && (opts.motion_as || "pulse") === "pulse" && this._roomOf(item)) return [];
       // 0.7.0: a drawn opening is its own signal (the bar); shutters show only while moving.
       if (!q && this._barEnts().has(lead)) return [];
       if (!q && openKind(lead, hass.states[lead]) && guessOpenAs(lead, hass, item.name, item.as) === "shutter") {
@@ -1958,9 +2087,10 @@ class DeviceFloorplanCard extends HTMLElement {
     const z = conns.includes("zigbee") && item.ieee ? cx.zha[ieeeKey(item.ieee)] : null;
     const mainSt = hass.states[item.main_entity];
     const unavailable = (z && !z.available) || (!z && item.main_entity && !live(mainSt) && !item.bond);
-    let role = z && z.role ? z.role : cx.hubs.has(item.id) ? "hub" : conns.includes("zigbee") ? "end" : "device";
+    const isAp = Object.values((this._a && this._a.aps) || {}).includes(item.id);
+    let role = z && z.role ? z.role : isAp ? "ap" : cx.hubs.has(item.id) ? "hub" : conns.includes("zigbee") ? "end" : "device";
     if (unavailable) role = "unavailable";
-    if (!z && conns.includes("zigbee") && !unavailable && !cx.hubs.has(item.id)) role = Object.keys(cx.zha || {}).length ? "unknown" : "end";
+    if (!z && conns.includes("zigbee") && !unavailable && !cx.hubs.has(item.id) && !isAp) role = Object.keys(cx.zha || {}).length ? "unknown" : "end";
     if ((this._net.roles || []).includes(role)) return [];
     // Signal: ZHA's LQI, else an enabled signal sensor.
     const sigEid = [...(item.entities || [])].find((e) => kindOf(e, hass.states[e]) === "signal" && live(hass.states[e]));
@@ -1979,7 +2109,10 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     const pos = item.box || item;
     const label = opts.labels && this._look().markers !== "icon" ? conns.map((c) => CONNS[c].label).join(" + ") : "";
-    return [{ key: item.id, type: "net", item, name, conns, conn, role, ring, z, sigEid, unavailable, ents: [item.main_entity].filter(Boolean), icon: CONNS[conn].icon, value: label, ieee: z ? item.ieee : null, x: pos.x, y: pos.y }];
+    // 0.7.3: what the router says (access point, cable or Wi-Fi, network).
+    const rs = item.router && hass.states[item.router];
+    const rt = rs ? { eid: item.router, ap: rs.attributes.connected_to || "", lan: /lan|ethernet|cable/i.test(rs.attributes.connection_type || "") && !/wlan|wifi|wi-fi|wireless/i.test(rs.attributes.connection_type || ""), ssid: rs.attributes.ssid || "", ip: rs.attributes.ip || "", home: rs.state === "home" } : null;
+    return [{ key: item.id, type: "net", item, name, conns, conn, role, ring, z, sigEid, rt, unavailable, ents: [item.main_entity].filter(Boolean), icon: CONNS[conn].icon, value: label, ieee: z ? item.ieee : null, x: pos.x, y: pos.y }];
   }
 
   /** Connections shown in Network: the viewer's choice, else the card's default. */
@@ -1987,6 +2120,21 @@ class DeviceFloorplanCard extends HTMLElement {
     if (Array.isArray(this._net.conns) && this._net.conns.length) return this._net.conns;
     const opts = this._ov("network");
     return Array.isArray(opts.connections) && opts.connections.length && !opts.connections.includes("all") ? opts.connections : CONN_ORDER;
+  }
+
+  /** 0.7.3: access points in a stable order (the one with most devices first) for their colours. */
+  _apList() {
+    const a = this._a || {};
+    if (this._apA === a) return this._aps;
+    const n = {};
+    for (const d of Object.values(a.devices || {})) {
+      const st = d.router && this._hass.states[d.router];
+      const k = st && st.attributes.connected_to;
+      if (k) n[k] = (n[k] || 0) + 1;
+    }
+    this._apA = a;
+    this._aps = Object.keys(n).sort((x, y) => n[y] - n[x] || x.localeCompare(y));
+    return this._aps;
   }
 
   _saveNet() {
@@ -2222,6 +2370,8 @@ class DeviceFloorplanCard extends HTMLElement {
     const watch = new Set();
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
+    if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
+    if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
     if (ov !== "plan") for (const item of this._items(a)) if (!this._hidden(item, ov)) for (const e of this._reads(item, ov)) watch.add(e);
     for (const s of specs) for (const e of s.ents || []) watch.add(e);
     if (ov === "lights") for (const sc of this._lights().scenes || []) for (const e of sc.lights || []) watch.add(e);
@@ -2271,7 +2421,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names} ${hasRail ? "hasrail" : ""}"><div class="box ${boxCls}" style="--ratio:${ratio}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._nightHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}
+          ${this._nightHtml(a)}${this._airHtml(a)}${this._pulseHtml(a)}${this._barsHtml(a)}
           ${this._roomsHtml(a)}
           <svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${people.plan}${emptyMsg}
@@ -2432,7 +2582,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _markerHtml(s) {
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
-      const cls = ["m", "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
+      const cls = ["m", edgeCls(s.x, s.y), "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
       return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon></span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
     }
     const icon = s.icon
@@ -2440,7 +2590,7 @@ class DeviceFloorplanCard extends HTMLElement {
       : s.eid && this._hass.states[s.eid]
         ? `<ha-state-icon data-ent="${cesc(s.eid)}"></ha-state-icon>`
         : `<ha-icon icon="mdi:help-circle-outline"></ha-icon>`;
-    const cls = ["m", s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : ""].join(" ");
+    const cls = ["m", edgeCls(s.x, s.y), s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : ""].join(" ");
     // #112: a light that's on shows its real colour (or the lamp colour from the Editor).
     let lc = "";
     if (s.kind === "light" && s.on) {
@@ -2495,7 +2645,10 @@ class DeviceFloorplanCard extends HTMLElement {
     const custom = Array.isArray(n.conns) && n.conns.length;
     const chk = (on) => `<ha-icon class="eye" icon="${on ? "mdi:checkbox-marked" : "mdi:checkbox-blank-outline"}"></ha-icon>`;
     const tick = (on) => `<ha-icon class="eye" icon="${on ? "mdi:eye" : "mdi:eye-off-outline"}"></ha-icon>`;
-    const hasZ = present.includes("zigbee");
+    // 0.7.3: only what applies to the connections shown.
+    const hasZ = present.includes("zigbee") && shown.includes("zigbee");
+    const hasW = shown.includes("network") && [...(this._specs || new Map()).values()].some((s) => s.rt);
+    const hasH = [...(this._specs || new Map()).values()].some((s) => s.type === "net" && s.item.via && this._specs.has(s.item.via));
     const roles = this._rolesPresent();
     return `<div class="lmenu" role="menu" style="visibility:hidden"><h4>Connections</h4>
       <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
@@ -2503,7 +2656,8 @@ class DeviceFloorplanCard extends HTMLElement {
       ${roles.length > 1 ? `<hr><h4>Show</h4>${roles.map((r) => `<button class="chk ${!(n.roles || []).includes(r) ? "on" : ""}" data-role="${r}">${chk(!(n.roles || []).includes(r))}<i style="display:inline-block;width:10px;height:10px;border-radius:${ROLES[r].shape === "round" ? "50%" : "2px"};background:${ROLES[r].color}"></i>${cesc(ROLES[r].label)}</button>`).join("")}` : ""}
       <hr>
       ${hasZ ? `<button class="${n.links ? "on" : ""}" data-tg="links">${tick(n.links)}Zigbee links</button>` : ""}
-      <button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>
+      ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}Wi-Fi / LAN links</button>` : ""}
+      ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>` : ""}
       <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}Legend</button>
       ${hasZ ? `<div class="sl"><div><span>Minimum LQI</span><b>${n.minLqi}</b></div><input type="range" min="0" max="250" step="5" value="${n.minLqi}" data-minlqi="1" aria-label="Minimum LQI"></div>` : ""}
     </div>`;
@@ -2521,7 +2675,7 @@ class DeviceFloorplanCard extends HTMLElement {
     } finally {
       this._net.roles = saved;
     }
-    return ["coordinator", "router", "hub", "end", "device", "unknown", "unavailable"].filter((r) => set.has(r));
+    return ["coordinator", "ap", "router", "hub", "end", "device", "unknown", "unavailable"].filter((r) => set.has(r));
   }
 
   _legendHtml(specs, withLayers) {
@@ -2532,9 +2686,28 @@ class DeviceFloorplanCard extends HTMLElement {
       items.push(...roles.map((r) => `<button class="lg ${hidden.includes(r) ? "off" : ""}" data-role="${r}" aria-pressed="${!hidden.includes(r)}" title="Show / hide"><i class="${ROLES[r].shape}" style="background:${ROLES[r].color}"></i>${ROLES[r].label}</button>`));
       if (specs.some((s) => s.z && s.z.lqi != null)) items.push(`<span>LQI ${LQI_BANDS.slice().reverse().map((b) => `<i class="ring" style="border-color:${b.color}"></i>${b.label}`).join(" ")}</span>`);
       if (this._net.hubs && specs.some((s) => s.item.via && this._specs.has(s.item.via))) items.push(`<span><i class="dash"></i>through hub / bridge</span>`);
+      if (specs.some((s) => s.sigEid && !(s.z && s.z.lqi != null))) items.push(`<span>Signal <i class="ring" style="border-color:#43a047"></i>good <i class="ring" style="border-color:#fb8c00"></i>fair <i class="ring" style="border-color:#e53935"></i>weak</span>`);
+      // 0.7.3: Wi-Fi / LAN summary per access point.
+      const rts = specs.filter((s) => s.rt && s.rt.home);
+      if (rts.length) {
+        const aps = this._apList();
+        const by = {};
+        for (const s of rts) {
+          const k = s.rt.ap || "?";
+          const b = (by[k] = by[k] || { w: 0, c: 0 });
+          s.rt.lan ? b.c++ : b.w++;
+        }
+        for (const [k, b] of Object.entries(by)) {
+          const i = aps.indexOf(k);
+          const ap = this._a.aps && this._a.aps[k] && this._specs.get(this._a.aps[k]);
+          const nm = ap ? ap.name : k === "?" ? "Unknown" : k;
+          items.push(`<span class="aps"><i class="sw" style="background:${AP_COLORS[(i < 0 ? 0 : i) % AP_COLORS.length]}"></i>${cesc(nm)}: ${[b.w ? `${b.w} Wi-Fi` : "", b.c ? `${b.c} cable` : ""].filter(Boolean).join(", ")}</span>`);
+        }
+        if (this._net.wlinks) items.push(`<span><i class="cab"></i>cable <i class="dash wf"></i>Wi-Fi</span>`);
+      }
     }
     const isAdmin = this._hass.user && this._hass.user.is_admin;
-    if (isAdmin && (this._zha || (this._a && Object.values(this._a.devices || {}).some((d) => (d.conns || []).includes("zigbee"))))) {
+    if (isAdmin && this._netShow().includes("zigbee") && (this._zha || (this._a && Object.values(this._a.devices || {}).some((d) => (d.conns || []).includes("zigbee"))))) {
       const t = this._zhaAt ? new Date(this._zhaAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–";
       items.push(`<span class="upd"><button class="rf ${this._scanning ? "busy" : ""}" data-refresh="1" title="Scan the Zigbee network again"><ha-icon icon="mdi:refresh"></ha-icon>${this._scanning ? "Scanning…" : "Refresh"}</button>Updated ${t}</span>`);
     }
@@ -2746,6 +2919,19 @@ class DeviceFloorplanCard extends HTMLElement {
         out += `<line class="${this._hl && (this._hl === p.key || this._hl === q.key) ? "hl" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${lqiColor(l.lqi)}" stroke-width="2" opacity=".6"/>`;
       }
     }
+    if (this._net.wlinks && this._a && this._a.aps) {
+      // 0.7.3: each device to its access point; solid = cable, dashed = Wi-Fi; colour = access point.
+      const aps = this._apList();
+      for (const s of specs) {
+        if (!s.rt || !s.rt.home || !s.rt.ap) continue;
+        const ap = this._specs.get(this._a.aps[s.rt.ap]);
+        if (!ap || ap === s) continue;
+        const col = AP_COLORS[Math.max(0, aps.indexOf(s.rt.ap)) % AP_COLORS.length];
+        const [x1, y1] = P(s);
+        const [x2, y2] = P(ap);
+        out += `<line class="wl ${s.rt.lan ? "cab" : ""} ${this._hl && (this._hl === s.key || this._hl === ap.key) ? "hl" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}"/>`;
+      }
+    }
     if (this._net.hubs) {
       for (const s of specs) {
         const parent = s.item.via && this._specs.get(s.item.via);
@@ -2831,6 +3017,8 @@ class DeviceFloorplanCard extends HTMLElement {
     if (fl) return this._setFloor(fl.dataset.floor);
     const stp = t.closest("[data-step]");
     if (stp) return this._stepFloor(Number(stp.dataset.step));
+    const pl = t.closest("[data-pulse]");
+    if (pl) return this._moreInfo(pl.dataset.pulse);
     const bar = t.closest("[data-bar]");
     if (bar) return this._moreInfo(bar.dataset.bar);
     const cv = t.closest("[data-cov]");
@@ -3070,10 +3258,26 @@ class DeviceFloorplanCard extends HTMLElement {
       if (s.z && s.z.lqi != null) rows.push(["LQI", String(s.z.lqi)]);
       if (s.z && s.z.rssi != null) rows.push(["RSSI", `${s.z.rssi} dBm`]);
       if (s.sigEid) rows.push(["Signal", this._fmt(s.sigEid)]);
+      if (s.rt) {
+        const ap = this._a.aps && this._specs.get(this._a.aps[s.rt.ap]);
+        if (!s.rt.home) rows.push(["Router", "not connected"]);
+        else {
+          rows.push(["Access point", ap ? ap.name : s.rt.ap || "—"]);
+          rows.push(["Link", s.rt.lan ? "Cable (LAN)" : "Wi-Fi"]);
+          if (s.rt.ssid) rows.push(["Wi-Fi network", s.rt.ssid]);
+        }
+        if (s.rt.ip) rows.push(["IP", s.rt.ip]);
+      }
+      if (s.role === "ap") {
+        const mine = Object.entries(this._a.aps || {}).filter(([, k]) => k === s.key).map(([n]) => n);
+        let w = 0, c = 0;
+        for (const x of this._specs.values()) if (x.rt && x.rt.home && mine.includes(x.rt.ap)) x.rt.lan ? c++ : w++;
+        if (w + c) rows.push(["Connected here", [w ? `${w} Wi-Fi` : "", c ? `${c} cable` : ""].filter(Boolean).join(", ") + " (on this floor)"]);
+      }
       if (s.item.parts && s.item.parts.length) rows.push(["Includes", s.item.parts.join(", ")]);
       const parent = s.item.via && this._specs.get(s.item.via);
       if (parent) rows.push(["Through", parent.name]);
-      const none = !(s.z && (s.z.lqi != null || s.z.rssi != null)) && !s.sigEid;
+      const none = !(s.z && (s.z.lqi != null || s.z.rssi != null)) && !s.sigEid && !s.rt;
       const hint = none ? `<div style="font-size:12px;color:var(--secondary-text-color)">${s.conns.includes("zigbee") ? "No link quality known yet (ZHA data is loaded for admins)." : "No signal value: enable this device's signal sensor in Home Assistant to see it here."}</div>` : "";
       const kids = this._children(s);
       const conn = kids.out.length || kids.extra.length
@@ -3147,6 +3351,11 @@ class DeviceFloorplanCard extends HTMLElement {
 
 // =================================================================== editor
 /** JSON with sorted keys, to compare configs regardless of key order. */
+/** Near the plan's edges, a marker's labels open towards the inside so they aren't cut off. */
+function edgeCls(x, y) {
+  return [y > 78 ? "eb" : "", y < 12 ? "et" : "", x > 84 ? "er" : "", x < 12 ? "el" : ""].filter(Boolean).join(" ");
+}
+
 function stableJson(v) {
   if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
   if (v && typeof v === "object") return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;
@@ -3433,6 +3642,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       general: [
         { name: "title", selector: { text: {} } },
         { name: "card_id", selector: { text: {} } },
+        { name: "hide_admin_hint", selector: { boolean: {} } },
       ],
       buttons: [
         { name: "overlays", selector: { select: { options: ovOpts, multiple: true, reorder: true, mode: "list" } } },
@@ -3450,6 +3660,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             { name: "values", selector: { boolean: {} } },
             { name: "lights_as", selector: { select: { options: [{ value: "glow", label: "Glow only (tap the glow to switch off)" }, { value: "markers", label: "Markers" }], mode: "dropdown" } } },
             { name: "show_off", selector: { select: { options: [{ value: "hidden", label: "Hidden (Live shows only what's on or happening)" }, { value: "faint", label: "Faint" }], mode: "dropdown" } } },
+            { name: "motion_as", selector: { select: { options: [{ value: "pulse", label: "Room pulse (the room's edges glow)" }, { value: "icons", label: "Icons" }, { value: "both", label: "Both" }], mode: "dropdown" } } },
           ],
         },
         {
@@ -3474,6 +3685,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             { name: "links", selector: { boolean: {} } },
             { name: "min_lqi", selector: { number: { min: 0, max: 250, step: 5, mode: "slider" } } },
             { name: "hub_links", selector: { boolean: {} } },
+            { name: "wifi_links", selector: { boolean: {} } },
             { name: "legend", selector: { boolean: {} } },
             { name: "labels", selector: { boolean: {} } },
             { name: "only_weak", selector: { boolean: {} } },
@@ -3501,13 +3713,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const L = {
       plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
       buttons_position: "Where the buttons are", buttons_style: "Button style",
-      lights_as: "Lights show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
+      lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
       show_quiet: "Also show closed / idle (not only alerts)", cameras: "Show cameras",
-      connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
+      connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", wifi_links: "Draw Wi-Fi / LAN links to the router / access point (needs router device tracking)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
       low: "Battery is low below", only_problems: "Only low batteries and offline devices",
       show_title: "Show the title on the card", size: "Marker size", markers: "Markers on the plan", chips: "Reading chips", names: "Device names", card_id: "Card ID (lets other cards switch this card's overlay)",
+      hide_admin_hint: "Hide the “N new · Place them” button (admins only see it)",
       ...TAP_KINDS,
     };
     if (OVERLAYS[s.name] && !L[s.name]) return OVERLAYS[s.name].label;
@@ -3524,11 +3737,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       ...c,
       buttons_position: b.position || (look.dock === "hidden" ? "hidden" : "bottom"),
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
-      live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", ...(c.live || {}) },
+      live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
       comfort: { humidity: true, humidity_alone: true, climate: true, ...(c.comfort || {}) },
       security: { show_quiet: true, quiet_small: true, cameras: true, ...(c.security || {}) },
-      network: { connections: ["all"], layers: true, links: true, min_lqi: 0, hub_links: true, legend: true, labels: false, only_weak: false, ...(c.network || {}) },
+      network: { connections: ["all"], layers: true, links: true, min_lqi: 0, hub_links: true, wifi_links: true, legend: true, labels: false, only_weak: false, ...(c.network || {}) },
       health: { low: 20, only_problems: false, ...(c.health || {}) },
       tap: { ...TAP_DEFAULT, ...(c.tap || {}) },
       look: { size: 34, chips: "dark", names: c.names || "hover", markers: look.markers || (look.values === false || c.show_states === false ? "icon" : "icon_text"), ...look, show_title: look.title !== false },
@@ -3544,6 +3757,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     delete out.names; // moved into look.names
     delete out.show_states; // replaced by look.markers
     delete out.default_view; // replaced by default_overlay
+    if (!out.hide_admin_hint) delete out.hide_admin_hint;
     if (out.look) {
       out.look = { ...out.look };
       if ("show_title" in out.look) {

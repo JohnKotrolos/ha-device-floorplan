@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -290,6 +291,40 @@ def device_mac(device: dr.DeviceEntry) -> str | None:
         if ctype in (dr.CONNECTION_NETWORK_MAC, dr.CONNECTION_BLUETOOTH):
             return str(value).lower()
     return None
+
+
+def _norm(text: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(text or "").lower())
+
+
+def router_trackers(hass: HomeAssistant) -> dict[str, Any]:
+    """0.7.3: device trackers of routers that report the access point (FRITZ!Box and others)."""
+    out: dict[str, Any] = {"all": {}, "mac": {}, "name": {}}
+    for st in hass.states.async_all("device_tracker"):
+        attrs = st.attributes
+        if "connected_to" not in attrs and "connection_type" not in attrs:
+            continue
+        out["all"][st.entity_id] = {"ap": attrs.get("connected_to") or ""}
+        mac = re.sub(r"[^0-9a-f]", "", str(attrs.get("mac") or "").lower())
+        if len(mac) == 12:
+            out["mac"][mac] = st.entity_id
+        for nm in (attrs.get("host_name"), attrs.get("friendly_name")):
+            if _norm(nm):
+                out["name"].setdefault(_norm(nm), st.entity_id)
+    return out
+
+
+def _router_for(trackers: dict[str, Any], mac: str | None, ids: list[str], name: str) -> str | None:
+    if not trackers["all"]:
+        return None
+    if mac:
+        m = re.sub(r"[^0-9a-f]", "", mac.lower())
+        if m in trackers["mac"]:
+            return trackers["mac"][m]
+    for eid in ids:
+        if eid in trackers["all"]:
+            return eid
+    return trackers["name"].get(_norm(name))
 
 
 def _integrations(hass: HomeAssistant, device: dr.DeviceEntry) -> list[str]:
@@ -661,6 +696,7 @@ def build_plan_payload(
     devices: dict[str, Any] = {}
     entities_out: dict[str, Any] = {}
     zigbee: dict[str, Any] = {}
+    trackers = router_trackers(hass)
     for key, pos in plan.get("positions", {}).items():
         x, y = pos["x"], pos["y"]
         px, py = to_px(x, y)
@@ -773,6 +809,11 @@ def build_plan_payload(
             item["mac"] = mac
         if device.via_device_id:
             item["via"] = device.via_device_id  # hub / bridge (Network links, #49)
+        router = _router_for(trackers, mac, ids, name)
+        if router:
+            item["router"] = router  # 0.7.3: router's tracker (access point, cable / Wi-Fi)
+            if "network" not in item["conns"]:
+                item["conns"] = [c for c in item["conns"] if c != "other"] + ["network"]
         devices[key] = item
 
     areas: dict[str, Any] = {}
@@ -839,6 +880,16 @@ def build_plan_payload(
             **({"one": ph["one"]} if ph.get("one") else {}),
         }
 
+    # 0.7.3: access points (the router, repeaters) as named by the router, matched to devices on the plan.
+    aps: dict[str, str] = {}
+    for node in {t["ap"] for t in trackers["all"].values() if t["ap"]}:
+        n = _norm(node)
+        if not n:
+            continue
+        hits = [k for k, item in devices.items() if n in _norm(item["name"])]
+        hits.sort(key=lambda k: ("router" in devices[k], len(devices[k]["name"])))
+        if hits:
+            aps[node] = hits[0]
     real_w = round(width * scale["x"], 2) if scale["x"] and width else None
     real_h = round(height * scale["y"], 2) if scale["y"] and height else None
     return {
@@ -862,5 +913,6 @@ def build_plan_payload(
         "bonds": bonds,
         "phantoms": phantoms,
         "zigbee_devices": zigbee,
+        "aps": aps,
         "areas": areas,
     }

@@ -15,7 +15,7 @@ The card shows your plan and its **overlay buttons**. That's all there is to do 
 | Overlay | What it shows |
 |---|---|
 | **Plan** | The plan with your room names. |
-| **Live** | **What is happening at home right now**: lights that are on (just their glow), switches and plugs that are on, covers while they move, ACs that run, motion (pulsing when detected), open doors and windows, unlocked locks, media playing, appliances running. Things that are off are hidden (option: faint), lights can show as markers instead of glow. Shutters appear only while they move; doors, windows and shutters with a drawn [opening](/using/openings) show as bars instead of markers. |
+| **Live** | **What is happening at home right now**: lights that are on (just their glow), switches and plugs that are on, covers while they move, ACs that run, motion (in a room with a [shape](/using/rooms#room-shapes-optional) the whole room gently pulses: a breathing outline while motion is detected, steady for presence, fading out after; open-plan neighbours stay clear. Option *Motion as*: pulse, icons or both), open doors and windows, unlocked locks, media playing, appliances running. Things that are off are hidden (option: faint), lights can show as markers instead of glow. Shutters appear only while they move; doors, windows and shutters with a drawn [opening](/using/openings) show as bars instead of markers. |
 | **Lights** | Only lights (and switches or plugs that run lights), with a soft **light pool** where each lamp shines. Tap to switch; **All off** (asks first), **All on** and your own **light scenes** below the plan. |
 | **Comfort** | Room temperature and humidity per sensor, as calm chips (*21.0 °C · 69.6 %*). ACs and thermostats get a [climate chip](#climate-chips). |
 | **Security** | Doors and windows, motion, locks, alarm panels, smoke / leak / gas sensors and cameras. Alerts are highlighted. |
@@ -65,8 +65,9 @@ Switch floors from other cards too: `floor:` in the action, or `?floor=first_flo
 - **Colour and shape** = role: coordinator (amber diamond), router / repeater (blue square), hub or bridge (blue square), end device (green), other devices (grey), unavailable (red).
 - **Ring** = Zigbee link quality: 0–99 red, 100–149 orange, 150–199 yellow-green, 200–255 green. It comes straight from ZHA; you don't need to enable any LQI sensor.
 - **Lines**: Zigbee links between placed devices (ZHA), coloured by LQI, and dashed lines from devices to their hub or bridge.
+- **Wi-Fi / LAN from your router**: with a router integration that tracks network devices and reports the access point (FRITZ!Box: *Configure* → device tracking on), each Wi-Fi / LAN device gets a line to the router or repeater it's connected to: **solid = cable, dotted = Wi-Fi**, one colour per access point. The router and repeaters are found by name among the devices on your plan and show as diamonds (*Router / access point*). The legend counts the devices per access point (*FRITZ!Box: 30 Wi-Fi, 6 cable*), the popup shows the access point, cable or Wi-Fi, the Wi-Fi network and the IP. The ring is the device's own signal sensor (good / fair / weak), when it has one.
 - **Legend** under the plan: tap a role to hide or show it, **Refresh** reloads the Zigbee data (the time of the last update is next to it; it also refreshes by itself every few minutes while Network is open).
-- **Layers**: show **several connections at once** (Zigbee + Matter, for example) or *Default*, lines and legend on or off, and a **Minimum LQI** for links. What a viewer picks is remembered on that screen.
+- **Layers**: show **several connections at once** (Zigbee + Matter, for example) or *Default*, lines and legend on or off, and a **Minimum LQI** for links. Only what applies to the connections shown is offered: with just Wi-Fi / LAN there's no Zigbee links, LQI or Refresh. What a viewer picks is remembered on that screen.
 - **Popup**: connection, role, LQI / RSSI, the **path** to the coordinator, and **Connected devices**: for a router, the Zigbee devices that connect through it; for a hub or bridge, the devices behind it. Tap one to highlight it on the plan.
 
 ## Climate chips
@@ -140,7 +141,7 @@ Open the dashboard's edit mode and edit the card. The sections, in order: **Gene
 - **Lights**: switches and plugs that run lights, brightness of lamps that are on, lamps that are off (faint, normal or hidden), All off / All on buttons.
 - **Comfort**: humidity, humidity-only devices, ACs and thermostats as climate chips, how bonds and phantoms combine sensors.
 - **Security**: also closed / idle, cameras.
-- **Network**: connections shown by default, the Layers button, Zigbee links and their minimum LQI, hub links, legend, connection names next to icons, only weak signals.
+- **Network**: connections shown by default, the Layers button, Zigbee links and their minimum LQI, hub links, Wi-Fi / LAN links, legend, connection names next to icons, only weak signals.
 - **Health**: low-battery threshold, only problems.
 - **Tap behaviour** per kind: switch on/off, details, readings popup or nothing.
 - **Look**: marker size (at full width; smaller cards scale down), **markers** with icon and text or icon only, reading chips (dark glass, light, follow the theme), device names, title.
@@ -374,4 +375,4 @@ card_id: hall
 
 Older configurations (`plan`, `show_states`, `names`, `default_view`, `look.dock`, `look.values`) keep working.
 
-Admins see a small **N new · Place them** button when new devices are waiting. Hide it with `hide_admin_hint: true`.
+Admins see a small **N new · Place them** button when new devices are waiting. Hide it with `hide_admin_hint: true`, or the card editor's *Hide the “N new · Place them” button*.
