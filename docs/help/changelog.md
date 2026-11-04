@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0
+
+**Comfort heatmap, appliances and a card that tells you more with a tap.**
+
+- **Comfort heatmap**: every room with a shape is coloured from the temperatures on the plan (cool to warm), estimated between sensors, with a legend and a strength slider. Layers in Comfort: room names, heatmap, temperature labels, **climate devices** and AC air flow.
+- **A room thermometer beats a built-in sensor**: an AC or thermostat bonded with a thermometer shows the room's temperature and humidity on its chip and in the heatmap. A unit's own (wrong) reading can be left out everywhere (*Count this unit's own temperature*).
+- **Appliances** (washer, dryer, dishwasher): draw a drum or a line in the Editor and Live shows what the machine does (water, heat, spin, finished, error). Its label shows for a few minutes after a change, or *Always* / *Never*; **finished stays** ("Done · tap to unload", amber) until you tap *Unloaded*. The label and card follow *Leads in Live*.
+- **Info card**: a tap on a bond, phantom or appliance opens a small card next to it: its state, the readings you picked under *Also show* (or all its members), buttons (Unloaded, press buttons, on/off for lamp groups) and *Open ›* for Home Assistant's details. Single devices keep their own tap action; a long press opens the details. Configuration and diagnostic entities are never listed or switched.
+- **Hover and explore**: one tooltip for everything on the plan, "name · state". On a touch screen: hold, then slide your finger.
+- **AC air flow from the real unit**: draw the AC as a line along the wall (two handles) and set its reach; the air leaves it as a trapezoid with the moving arcs. Auto / Heat-Cool have their own colour unless the unit reports what it's doing. In Live an AC shows only its air flow (temperatures are in Comfort).
+- **TV glow**: a TV that is on lights the room from its screen line.
+- **Layers for viewers**: each overlay's layers are switched by whoever looks at the card (kept in that browser). The Plan overlay is gone: room names are a layer in every overlay. The Layers button shares the row or column of the overlay buttons when it sits on their side; the overlay buttons use at most ~70% and scroll inside.
+- **Edit markers**: devices in alphabetical order, settings open under the row you clicked, the selected marker is always drawn (faded when hidden here), its info card shows as a live preview, and choosing what leads takes it out of *Also show*.
+- **Floorplan Editor**: trackpad pinch / Ctrl-⌘ + wheel zooms at the pointer, two-finger swipe pans, arrow keys pan (Shift = bigger steps), + / − zoom, 0 fits. Automatic bonds can get their own name on the plan.
+- **Chip card**: tap and hold actions, icon glow while something is on, short value style ("3 on").
+- **Fixes**: shutters as a white bar for the closed part; no "Nothing to show" text on an empty overlay; the plan image no longer blinks on updates.
+
 ## 0.7.3
 
 - **Room pulse**: motion in a room with a shape shows as a soft breathing outline of the room (presence stays steady, it fades out after motion ends); open-plan neighbours stay clear. Card option *Live → Motion as*: pulse, icons or both.

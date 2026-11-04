@@ -255,6 +255,15 @@ def replacement_entity(hass: HomeAssistant, entity_id: str) -> str | None:
     return None
 
 
+def wrapped_source(hass: HomeAssistant, entity_id: str) -> str | None:
+    """0.7.4: the switch a "Show as" (switch_as_x) entity is made from, if it is one."""
+    ent = er.async_get(hass).async_get(entity_id)
+    if ent is None or ent.platform != "switch_as_x" or not ent.config_entry_id:
+        return None
+    entry = hass.config_entries.async_get_entry(ent.config_entry_id)
+    return (entry.options or {}).get("entity_id") if entry else None
+
+
 def migrate_replaced(hass: HomeAssistant, data: FloorplanData) -> None:
     """Move entity spots whose entity is now shown as another one (switch → light)."""
     ent_reg = er.async_get(hass)
@@ -751,8 +760,10 @@ def build_plan_payload(
         # Split device (#91): each entity shows in one place; its own spot wins.
         split = [e for e in all_ids if f"entity:{e}" in plan.get("positions", {}) and plan["positions"][f"entity:{e}"].get("of") == key]
         if split:
-            all_ids = [e for e in all_ids if e not in split]
-            if main in split:
+            # 0.7.4: a light made from a switch ("Show as") placed elsewhere takes its switch along.
+            gone = set(split) | {src for e in split if (src := wrapped_source(hass, e))}
+            all_ids = [e for e in all_ids if e not in gone]
+            if main in gone:
                 main = all_ids[0] if all_ids else None
         # 0.6.0: "the card uses only this entity" is gone; the card picks per overlay (#100).
         only_main = False
@@ -760,11 +771,11 @@ def build_plan_payload(
         if split:
             # Entities placed elsewhere never shape the device itself (#106).
             try:
-                group = _group([e for e in entities if e.entity_id not in split], integrations)
+                group = _group([e for e in entities if e.entity_id not in gone], integrations)
             except Exception:  # noqa: BLE001
                 pass
         item: dict[str, Any] = {
-            "name": name,
+            "name": pos.get("label") or name,  # 0.8.0: the name given on the plan wins
             "area_id": device.area_id,
             "x": x, "y": y, "px": px, "py": py,
             "approx": approx,

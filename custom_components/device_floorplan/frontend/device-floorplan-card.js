@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.7.3).
+ * Device Floorplan – dashboard card (v0.8.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.7.3";
+const CARD_VERSION = "0.8.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -31,7 +31,7 @@ const OVERLAYS = {
   health: { label: "Health", icon: "mdi:battery-heart-variant" },
   people: { label: "People", icon: "mdi:account-group-outline" },
 };
-const OVERLAY_ORDER = ["plan", "live", "lights", "comfort", "security", "network", "health"];
+const OVERLAY_ORDER = ["live", "lights", "comfort", "security", "network", "health"];
 
 // What Live (and custom overlays) can show, by kind.
 const LIVE_KINDS = {
@@ -159,15 +159,19 @@ const live = (st) => !!st && st.state !== "unavailable" && st.state !== "unknown
 /** Re-render a shadow root but keep what other cards put in it (card-mod's <card-mod> style). */
 function setShadow(el, html) {
   const keep = [...el.shadowRoot.children].filter((n) => n.localName === "card-mod");
+  const oldImg = el.shadowRoot.querySelector("img.plan");
   el.shadowRoot.innerHTML = html;
   for (const n of keep) el.shadowRoot.appendChild(n);
+  // 0.7.5: the same plan image stays (no reload / blink on every redraw).
+  const ni = el.shadowRoot.querySelector("img.plan");
+  if (oldImg && ni && oldImg.getAttribute("src") === ni.getAttribute("src")) ni.replaceWith(oldImg);
 }
 const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
 
 // ---- Night look and light pools (#74): pure CSS over the one plan image.
-const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["plan", "live", "lights", "people"], dim_quiet: true, shutters: true, warm_dusk: false };
+const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["live", "lights", "people"], dim_quiet: true, shutters: true, warm_dusk: false };
 
 /** 0 = day … 1 = night for fixed times, with a 30 minute fade around each time. */
 function timesFactor(start, end, now) {
@@ -215,6 +219,21 @@ function bulbRgb(at, lampCol) {
   const has = at && (Array.isArray(at.rgb_color) || at.color_temp_kelvin || at.color_temp);
   if (has) return lightRgb(at);
   return colourRgb(lampCol) || lightRgb(at || {});
+}
+
+// 0.7.4: Comfort heatmap colours (cool -> warm) and the soft contour lines.
+const HEAT_STOPS = [[0, [90, 134, 230]], [0.33, [72, 197, 192]], [0.66, [233, 220, 160]], [1, [243, 166, 92]]];
+function heatRgb(t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < HEAT_STOPS.length; i++) {
+    const [t1, c1] = HEAT_STOPS[i];
+    const [t0, c0] = HEAT_STOPS[i - 1];
+    if (t <= t1) {
+      const k = (t - t0) / (t1 - t0 || 1);
+      return c0.map((v, j) => Math.round(v + (c1[j] - v) * k));
+    }
+  }
+  return HEAT_STOPS[HEAT_STOPS.length - 1][1];
 }
 
 function inPoly(x, y, poly) {
@@ -316,6 +335,80 @@ function guessOpenAs(eid, hass, name, chosen) {
   return "window";
 }
 
+// 0.7.4: appliances (washer, dryer, dishwasher). Colour by what the machine is doing:
+// water = aqua, heat = champagne, finished = green, attention = orange, error = red.
+const APPL_TYPES = ["washer", "dryer", "dishwasher"];
+const APPL_COL = { water: "79,209,197", spin: "79,209,197", heat: "242,196,141", run: null, done: "76,175,80", attention: "251,140,0", error: "229,57,53" };
+function applGuess(text) {
+  const t = String(text || "").toLowerCase();
+  if (/dish|πιάτ|geschirr|lave-vaisselle|lavastoviglie|lavavajillas/.test(t)) return "dishwasher";
+  if (/dryer|tumble|στεγν|trockner|sèche|asciuga|secadora/.test(t)) return "dryer";
+  if (/wash|πλυντ|waschmaschine|lave-linge|lavatrice|lavadora/.test(t)) return "washer";
+  return null;
+}
+/** What a status text means: water / spin / heat / done / attention / error / idle / run. */
+function applPhase(text) {
+  const t = String(text || "").toLowerCase().replace(/[_-]/g, " ");
+  if (!t || ["unavailable", "unknown"].includes(t)) return null;
+  if (/error|fault|fail/.test(t)) return "error";
+  if (/end|finish|complete|done/.test(t)) return "done";
+  if (/pause|door open|interrupt/.test(t)) return "attention";
+  if (/spin/.test(t)) return "spin";
+  if (/dry|heat|steam/.test(t)) return "heat";
+  if (/wash|rins|soak|fill|drain|detect|pre ?wash|cool/.test(t)) return "water";
+  if (/^(off|power off|standby|idle|ready|inactive|initial|sleep|none|0)$/.test(t.trim())) return "idle";
+  return "run";
+}
+
+/** 0.7.7: AC air flow as a trapezoid from the unit's line on the wall. Works in square units (y / ratio).
+ *  c: { x, y (marker, %), x1..y2 (the unit's line, % — optional), a (direction, deg), r (reach, %), s (spread, deg), L (default length, %) }
+ *  The flow leaves the line at right angles towards a, widening by s / 2 on each side; arcs are centred on
+ *  the point where the two sides meet, so the waves look like before. */
+function airGeom(c, ratio) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dir = [Math.cos(rad(c.a ?? 90)), Math.sin(rad(c.a ?? 90))];
+  let e1, e2;
+  if (c.x1 != null && c.x2 != null) {
+    e1 = [c.x1, c.y1 / ratio];
+    e2 = [c.x2, c.y2 / ratio];
+  } else {
+    const L = c.L || 4;
+    const u = [-dir[1], dir[0]];
+    const m = [c.x, c.y / ratio];
+    e1 = [m[0] - (u[0] * L) / 2, m[1] - (u[1] * L) / 2];
+    e2 = [m[0] + (u[0] * L) / 2, m[1] + (u[1] * L) / 2];
+  }
+  const dx = e2[0] - e1[0], dy = e2[1] - e1[1];
+  const len = Math.hypot(dx, dy) || 0.01;
+  let n = [-dy / len, dx / len];
+  if (n[0] * dir[0] + n[1] * dir[1] < 0) n = [-n[0], -n[1]];
+  const h = rad(Math.max(10, Math.min(60, (c.s ?? 60) / 2)));
+  const mid = [(e1[0] + e2[0]) / 2, (e1[1] + e2[1]) / 2];
+  const d0 = len / 2 / Math.tan(h);
+  const apex = [mid[0] - n[0] * d0, mid[1] - n[1] * d0];
+  const R = d0 + Math.max(0.5, c.r || 10);
+  const th = Math.atan2(n[1], n[0]);
+  const far = (sg) => [apex[0] + Math.cos(th + sg * h) * (R / Math.cos(h)), apex[1] + Math.sin(th + sg * h) * (R / Math.cos(h))];
+  const P = (q) => [q[0], q[1] * ratio];
+  const f1 = far(-1), f2 = far(1);
+  return { e1: P(e1), e2: P(e2), f1: P(f1), f2: P(f2), mid: P(mid), tip: P([mid[0] + n[0] * (R - d0), mid[1] + n[1] * (R - d0)]), apex: P(apex), d0, R, th: (th * 180) / Math.PI, h: (h * 180) / Math.PI, n };
+}
+
+/** 0.7.4: TV glow: the light leaves the whole screen (a line) and widens into the room.
+ *  x/y in % of the image; reach r in % of the width; spread a in degrees; it faces (tx, ty). */
+function screenPoly(x, y, x2, y2, r, a, ratio, tx, ty) {
+  const Y = (v) => v / ratio;
+  const dx = x2 - x, dy = Y(y2) - Y(y);
+  const L = Math.hypot(dx, dy) || 1;
+  const ux = dx / L, uy = dy / L;
+  let nx = -uy, ny = ux;
+  const mx = (x + x2) / 2, my = (Y(y) + Y(y2)) / 2;
+  if (tx != null && ty != null && (tx - mx) * nx + (Y(ty) - my) * ny < 0) { nx = -nx; ny = -ny; }
+  const sp = Math.tan((Math.max(0, Math.min(60, a ?? 20)) * Math.PI) / 180) * r;
+  const P = [[x, Y(y)], [x2, Y(y2)], [x2 + nx * r + ux * sp, Y(y2) + ny * r + uy * sp], [x + nx * r - ux * sp, Y(y) + ny * r - uy * sp]];
+  return { pts: P.map(([px, py]) => [px, py * ratio]), from: [mx, my * ratio], to: [mx + nx * r, (my + ny * r) * ratio] };
+}
+
 function shapeEllipses(x, y, s, ratio) {
   const r = Number(s.r) || 6;
   if (s.type === "strip" && s.x2 != null && s.y2 != null) {
@@ -340,21 +433,35 @@ function defaultShape(type, realW) {
   const m = (v, pct) => (realW ? (v / realW) * 100 : pct);
   if (type === "spot") return { type, r: m(0.8, 3.5) };
   if (type === "strip") return { type, r: m(0.5, 2.5) };
+  if (type === "screen") return { type, r: m(2.5, 10), a: 20 };
   if (type === "panel") return { type, w: m(1.2, 6) };
   if (type === "wall") return { type, r: m(1.2, 5), a: 90 };
   return { type: "bulb", r: m(1.5, 6) };
 }
 
 /** Phantom summary for chips outside the plan (#73): combined value from its entities. */
+/** 0.7.4: a phantom's members as counting units: members of one bond are one unit. */
+function phUnits(mem) {
+  const by = new Map();
+  mem.forEach((d, i) => {
+    if (!d || !d.main_entity) return;
+    const k = d.bond ? `b:${d.bond}` : `m:${i}`;
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(d.main_entity);
+  });
+  return [...by.values()];
+}
+
 function phantomSummary(hass, ph) {
   const all = (ph && ph.entities) || [];
   // #126: lights, switches, doors and motion count by each member's main entity, as on the card;
   // readings still use every temperature / humidity sensor of the members.
   const mains = (ph && ph.mains) || [];
   const mk = mains.map((e) => kindOf(e, hass.states[e]));
-  const switching = mains.filter((e, i) => ["light", "switch", "fan"].includes(mk[i]));
-  if (mains.length && switching.length && !mk.some((k) => ["temperature", "humidity", "opening", "motion"].includes(k))) {
-    return `${switching.filter((e) => (hass.states[e] || {}).state === "on").length} of ${switching.length} on`;
+  if (mains.length && mk.some((k) => ["light", "switch", "fan"].includes(k)) && !mk.some((k) => ["temperature", "humidity", "opening", "motion"].includes(k))) {
+    // 0.7.4: a bond counts once (on while any of its members is on).
+    const units = ((ph && ph.units) || mains.map((e) => [e])).filter((u) => u.some((e) => ["light", "switch", "fan"].includes(kindOf(e, hass.states[e]))));
+    return `${units.filter((u) => u.some((e) => (hass.states[e] || {}).state === "on")).length} of ${units.length} on`;
   }
   const ents = mains.length && mk.some((k) => ["opening", "motion"].includes(k)) ? mains : all;
   const by = (k) => ents.filter((e) => kindOf(e, hass.states[e]) === k);
@@ -507,14 +614,14 @@ ha-card.dock-right { flex-direction: row; }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
 .obar { position:absolute; height:7px; padding:0; margin:0; border:0; border-radius:4px; transform-origin:0 50%; cursor:pointer; z-index:2; box-sizing:border-box; overflow:hidden; background:transparent; }
 .obar.door { background:#4fc3f7; box-shadow:0 0 8px rgba(79,195,247,.85); }
-.obar.shut { border:2px solid #fff; box-shadow:0 0 6px rgba(0,0,0,.45); }
-.obar.shut i { display:block; height:100%; background:#fff; }
+.obar.shut { overflow:visible; }
+.obar.shut i { display:block; height:100%; background:#fff; border-radius:4px; box-shadow:0 0 0 1px rgba(0,0,0,.18), 0 0 6px rgba(0,0,0,.35); }
+.obar.shut.unk { border:2px dashed rgba(255,255,255,.75); opacity:.6; }
+.obar.shut.track { border:1.5px solid rgba(255,255,255,.7); box-shadow:0 0 0 1px rgba(0,0,0,.18); }
 .obar.alert { border-color:#ff7043; animation: dfcBarAlert 1.4s ease-in-out infinite; }
 .obar.alert i { background:#ff5722; }
 @keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
-.obar.fade { animation: dfcBarFade 2.6s linear forwards; }
-@keyframes dfcBarFade { 0%, 75% { opacity:1; } 100% { opacity:0; } }
-@media (prefers-reduced-motion: reduce) { .obar.fade { animation-duration:.01s; } .obar.alert { animation:none; } }
+@media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
 .box svg.pulse { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .box svg.pulse .ptap { pointer-events: all; cursor:pointer; }
 .pg.breathe { animation: dfcBreathe 3.6s ease-in-out infinite; }
@@ -546,7 +653,7 @@ svg.lines line.wl.cab { stroke-width:2.2; stroke-dasharray:none; opacity:.8; }
 svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharray: 5 4; opacity:.75; }
 .room { position:absolute; transform: translate(-50%, -50%); pointer-events:none; white-space:nowrap; font-weight:500; color: var(--dfc-roomfg); display:flex; align-items:center; gap:4px; z-index:0; }
 .room.label { text-shadow: 0 0 3px var(--dfc-roomhalo), 0 0 6px var(--dfc-roomhalo); }
-.room.pill { padding: 2px 9px; border-radius: 10px; background: var(--dfc-chipbg); color: var(--dfc-chipfg); border: 1px solid var(--dfc-chipborder); }
+.room.pill { padding: 3px 10px; border-radius: 999px; background: var(--dfc-chipbg); color: var(--dfc-chipfg); border: 1px solid var(--dfc-chipborder); font-weight:600; letter-spacing:.2px; box-shadow:0 1px 4px rgba(0,0,0,.12); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .room ha-icon { --mdc-icon-size: 1.15em; }
 .m { position:absolute; transform: translate(-50%, -50%); border:0; padding:0; background:transparent; cursor:pointer; font: inherit; color: var(--primary-text-color); -webkit-tap-highlight-color: transparent; touch-action: manipulation; z-index:1; }
 .m .ic { width: var(--dfc-size); height: var(--dfc-size); border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); box-shadow: 0 1px 4px rgba(0,0,0,.35); --mdc-icon-size: calc(var(--dfc-size) * .55); border: 2px solid transparent; transition: box-shadow .2s, background .2s, transform .1s; position:relative; }
@@ -601,7 +708,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .chip.warn { border-color: var(--warning-color, #ffa000); border-width:2px; }
 .m .tip, .chip .tip { position:absolute; left:50%; bottom: calc(100% + 6px); transform: translateX(-50%); white-space:nowrap; font-size:12px; font-weight:400; padding: 3px 8px; border-radius:6px; background: rgba(28,28,28,.92); color:#fff; opacity:0; pointer-events:none; transition: opacity .12s; z-index:3; }
 .m.net.diamond .tip { transform: translateX(-50%); }
-@media (hover: hover) { .m:hover .tip, .chip:hover .tip { opacity:1; } }
+/* 0.7.5: hover names come from the one shared tooltip (.xtip); .tip stays for "names always". */
 .names-always .tip { opacity:1; }
 .names-always .tip small { display:none; }
 .xb { position:absolute; top:-9px; right:-9px; width:20px; height:20px; border-radius:50%; background:#b3261e; color:#fff; font-size:12px; line-height:20px; text-align:center; cursor:pointer; z-index:8; box-shadow:0 1px 4px rgba(0,0,0,.4); pointer-events:auto; }
@@ -614,8 +721,17 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .dockrow { display:flex; justify-content:center; padding: 10px 10px 12px; }
 .dock-top .dockrow { padding: 12px 10px 2px; }
 .dock-left .dockrow, .dock-right .dockrow { flex-direction:column; justify-content:center; padding: 10px 8px; }
-.dock { display:flex; gap:2px; padding:4px; border-radius: 22px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 80%, transparent); max-width:100%; overflow-x:auto; scrollbar-width:none; }
-.dock-left .dock, .dock-right .dock { flex-direction:column; max-height:100%; overflow-y:auto; }
+.dock { display:flex; gap:2px; padding:4px; border-radius: 22px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 80%, transparent); max-width:70%; overflow-x:auto; scrollbar-width:none; flex: 0 1 auto; min-width:0; }
+.dock-left .dock, .dock-right .dock { flex-direction:column; max-width:none; max-height:70%; overflow-y:auto; min-height:0; }
+.dockrow { align-items:center; gap:8px; }
+.dockrow.share { justify-content:space-between; }
+.dockrow.share .lslot { flex: 1 1 0; display:flex; min-width:44px; min-height:44px; align-items:center; }
+.dockrow.share .lslot:last-child { justify-content:flex-end; }
+.dock-left .dockrow.share, .dock-right .dockrow.share { align-self:stretch; }
+.dock-left .dockrow.share .lslot, .dock-right .dockrow.share .lslot { flex-direction:column; justify-content:flex-start; }
+.dock-left .dockrow.share .lslot:last-child, .dock-right .dockrow.share .lslot:last-child { justify-content:flex-end; }
+.lslot button.layers { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; flex:none; border:1px solid var(--dfc-chipborder, rgba(0,0,0,.12)); background: var(--dfc-chipbg, rgba(255,255,255,.85)); color: var(--dfc-chipfg, var(--primary-text-color)); box-shadow:0 2px 8px rgba(0,0,0,.18); --mdc-icon-size:20px; }
+.lslot button.layers.on { color: var(--dfc-accent); border-color: var(--dfc-accent); }
 .dock::-webkit-scrollbar { display:none; }
 .dock button { display:flex; align-items:center; gap:6px; border:0; background:transparent; color: var(--secondary-text-color); font: inherit; font-size:13px; padding: 8px 14px; border-radius: 18px; cursor:pointer; white-space:nowrap; --mdc-icon-size: 18px; }
 .dock-left .dock button, .dock-right .dock button { flex-direction:column; gap:3px; font-size:11px; padding: 9px 10px; }
@@ -639,6 +755,45 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .legend i.dash.wf { border-top-color: var(--secondary-text-color); border-top-style: dotted; }
 .legend i.sw { width:10px; height:10px; border-radius:50%; }
 .legend i.dash { width:16px; height:0; border-radius:0; border-top: 2px dashed var(--dfc-accent); }
+.appl { position:absolute; z-index:2; cursor:pointer; }
+.appl.drum { transform: translate(-50%, -50%); aspect-ratio:1; border-radius:50%; box-shadow: 0 0 0 2px rgba(var(--ac), .85), 0 0 14px 3px rgba(var(--ac), .55), inset 0 0 12px rgba(var(--ac), .45); }
+.appl.drum i { position:absolute; inset:-3px; border-radius:50%; background: conic-gradient(from 0deg, rgba(var(--ac), 0) 0deg, rgba(var(--ac), .95) 70deg, rgba(var(--ac), 0) 110deg); -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%); mask: radial-gradient(circle, transparent 62%, #000 64%); animation: dfcSpin 4s linear infinite; }
+.appl.drum.spin i { animation-duration: 1.6s; }
+.appl.drum.heat i { animation-duration: 6s; }
+.appl.drum.done i, .appl.drum.unavailable i, .appl.drum.error i, .appl.drum.attention i, .appl.still i { animation:none; opacity:0; }
+.appl.drum.attention, .appl.drum.error, .appl.aline.attention, .appl.aline.error { animation: dfcApPulse 1.8s ease-in-out infinite; }
+.appl.unavailable { box-shadow:none !important; border:2px dashed rgba(150,150,150,.8); background:none; }
+.appl.aline { height:2px; transform-origin:0 50%; border-radius:2px; background: linear-gradient(90deg, rgba(var(--ac), .35), rgba(var(--ac), 1), rgba(var(--ac), .35)); background-size: 200% 100%; box-shadow: 0 0 6px 2px rgba(var(--ac), .55); animation: dfcFlow 3s linear infinite; }
+.appl.aline.heat { animation-duration: 6s; }
+.appl.aline.done, .appl.aline.unavailable, .appl.still { animation:none; }
+.appl.aline.unavailable { height:0; border:0; border-top:2px dashed rgba(150,150,150,.8); }
+@keyframes dfcSpin { to { transform: rotate(360deg); } }
+@keyframes dfcFlow { from { background-position: 200% 0; } to { background-position: 0 0; } }
+@keyframes dfcApPulse { 0%, 100% { opacity:1; } 50% { opacity:.45; } }
+.applbl { position:absolute; z-index:4; transform: translate(-50%, -100%); display:flex; flex-direction:column; gap:2px; padding:5px 10px; border-radius:12px; border:1px solid var(--dfc-chipborder); background: var(--dfc-chipbg); color: var(--dfc-chipfg); font: 500 12px/1.3 var(--primary-font-family, sans-serif); white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.2); cursor:pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.applbl .ar { display:flex; align-items:center; gap:6px; }
+.applbl .ar i { width:8px; height:8px; border-radius:50%; flex:none; }
+.alist .arow { display:flex; align-items:center; gap:6px; }
+.alist .arow > button:first-child { flex:1; display:flex; align-items:center; gap:10px; border:0; background:transparent; color:inherit; font:inherit; text-align:left; padding:8px 4px; cursor:pointer; border-radius:8px; }
+.alist .ad { width:10px; height:10px; border-radius:50%; background: rgb(var(--ac)); box-shadow: 0 0 6px rgba(var(--ac), .7); flex:none; }
+.alist .nm { flex:1; display:flex; flex-direction:column; } .alist .nm small { color: var(--secondary-text-color); }
+.alist .mini { border:1px solid var(--divider-color); background:transparent; color:inherit; border-radius:8px; padding:4px 8px; cursor:pointer; font:inherit; font-size:12px; }
+canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+.heatleg { display:flex; align-items:center; gap:16px; padding: 8px 12px 2px; font-size:12px; color: var(--secondary-text-color); }
+.heatleg .ht { text-transform:uppercase; letter-spacing:1.2px; font-weight:600; color: var(--primary-text-color); white-space:nowrap; }
+.heatleg .hb { flex:1; min-width:120px; }
+.heatleg .bar { height:10px; border-radius:6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.heatleg .tk { display:flex; justify-content:space-between; margin-top:3px; font-variant-numeric: tabular-nums; }
+.heatleg .est { font-style:italic; white-space:nowrap; }
+.heatleg .hop { display:flex; align-items:center; gap:4px; flex:none; }
+.heatleg .hop ha-icon { --mdc-icon-size:18px; }
+.heatleg .hop input { width:90px; accent-color: var(--dfc-accent); }
+.lcorner { position:absolute; z-index:5; }
+.lcorner.top-right { top:8px; right:8px; } .lcorner.top-left { top:8px; left:8px; }
+.lcorner.bottom-right { bottom:8px; right:8px; } .lcorner.bottom-left { bottom:8px; left:8px; }
+.lcorner button.layers { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; border:1px solid var(--dfc-chipborder, rgba(0,0,0,.12)); background: var(--dfc-chipbg, rgba(255,255,255,.85)); color: var(--dfc-chipfg, var(--primary-text-color)); box-shadow:0 2px 8px rgba(0,0,0,.18); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.lcorner button.layers ha-icon { --mdc-icon-size:20px; }
+.lcorner button.layers.on { color: var(--dfc-accent); border-color: var(--dfc-accent); }
 .lmenu { position:absolute; left:0; top:0; z-index:6; min-width: 230px; background: var(--card-background-color, #fff); color: var(--primary-text-color); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35); padding: 10px 6px; font-size:14px; }
 .lmenu h4 { margin: 2px 10px 6px; font-size:13px; font-weight:500; color: var(--secondary-text-color); }
 .lmenu button { display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent; color:inherit; font: inherit; padding: 7px 10px; border-radius: 8px; cursor:pointer; text-align:left; --mdc-icon-size: 20px; }
@@ -652,6 +807,41 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .admin { position:absolute; right:12px; top:12px; z-index:4; border:0; border-radius:14px; padding: 5px 10px; font: inherit; font-size:12px; cursor:pointer; background: var(--dfc-accent); color: var(--text-primary-color, #fff); box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .msg { padding: 24px 16px; color: var(--secondary-text-color); font-size: 14px; text-align:center; }
 .empty { position:absolute; left:50%; top:50%; transform: translate(-50%,-50%); font-size:13px; color: var(--secondary-text-color); background: var(--card-background-color); padding: 8px 12px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.2); pointer-events:none; max-width: 80%; text-align:center; z-index:2; }
+.pop.ip { background: transparent; padding:0; display:block; }
+.pop.ip.prev { pointer-events:none; }
+.pop.ip.prev .icard { pointer-events:auto; border-style:dashed; }
+.icard { position:absolute; left:-999px; top:-999px; width: min(300px, calc(100% - 12px)); max-height: calc(100% - 12px); overflow:auto; background: rgba(28,30,36,.95); color:#f1f3f6; border:1px solid rgba(255,255,255,.12); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.4); padding:12px 14px; display:flex; flex-direction:column; gap:8px; font-size:13px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity:0; transition: opacity .12s; }
+.icard.placed { opacity:1; }
+.icard .ih { display:flex; align-items:center; gap:8px; }
+.icard .ih b { font-size:15px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.icard .ih button { border:0; background:transparent; color:#aab1bc; font-size:22px; line-height:1; cursor:pointer; padding:2px 4px; min-width:36px; min-height:36px; }
+.icard .ist { display:flex; align-items:center; gap:8px; font-size:14px; }
+.icard .ist i { width:10px; height:10px; border-radius:50%; flex:none; box-shadow:0 0 6px currentColor; }
+.icard .irows { display:flex; flex-direction:column; border-top:1px solid rgba(255,255,255,.08); }
+.icard .irow { display:flex; justify-content:space-between; gap:10px; border:0; background:transparent; color:inherit; font:inherit; padding:7px 0; min-height:36px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,.06); text-align:left; }
+.icard .irow span { color:#aab1bc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.icard .irow b { font-weight:500; white-space:nowrap; }
+.icard .ibtns { display:flex; flex-wrap:wrap; gap:8px; }
+.icard .ibig, .icard .ipress { border:0; border-radius:12px; padding:10px 14px; min-height:44px; font:inherit; font-weight:600; cursor:pointer; background: var(--dfc-accent); color: var(--text-primary-color, #fff); flex:1; }
+.icard .ipress { background: rgba(255,255,255,.1); color:#f1f3f6; font-weight:500; }
+.icard .ipress.done { opacity:.6; }
+.icard .iacts { display:flex; justify-content:flex-end; margin-top:-4px; }
+.icard .irow:last-child { border-bottom:0; }
+.icard .iopen { border:0; background:transparent; color: var(--dfc-accent); font:inherit; font-weight:600; cursor:pointer; padding:6px 4px; min-height:36px; }
+.applbl.att { border-color: rgba(251,140,0,.85); box-shadow: 0 0 0 0 rgba(251,140,0,.5), 0 2px 8px rgba(0,0,0,.2); animation: dfatt 2.4s ease-in-out infinite; }
+@keyframes dfatt { 0%,100% { box-shadow: 0 0 0 0 rgba(251,140,0,0), 0 2px 8px rgba(0,0,0,.2); } 50% { box-shadow: 0 0 0 4px rgba(251,140,0,.22), 0 0 14px rgba(251,140,0,.35); } }
+.applbl::after, .m::before, .chip::before { content:''; position:absolute; inset:-8px; border-radius:inherit; }
+.m.ghost, .chip.ghost { opacity:.5; }
+.m.ghost .ic, .chip.ghost { outline: 1.5px dashed var(--secondary-text-color, #888); outline-offset: 2px; }
+.m.sel .ic, .chip.sel { outline: 2px solid var(--dfc-accent); outline-offset: 3px; animation: dfsel 1.6s ease-in-out infinite; }
+@keyframes dfsel { 50% { outline-offset: 6px; outline-color: transparent; } }
+.tip .tst { opacity:.85; }
+.names-always .tip .tst { display:none; }
+@media (hover: hover) { .names-always .m:hover .tip .tst, .names-always .chip:hover .tip .tst { display:inline; } }
+.xtip, .ftoast { position:absolute; z-index:20; transform: translate(-50%, -100%); white-space:nowrap; font-size:13px; padding:6px 10px; border-radius:8px; background: rgba(28,28,28,.94); color:#fff; pointer-events:none; opacity:0; transition: opacity .12s; }
+.xtip.show, .ftoast.show { opacity:1; }
+.ftoast { left:50%; top:auto; bottom:12px; transform: translateX(-50%); white-space:normal; text-align:center; max-width:90%; }
+@media (prefers-reduced-motion: reduce) { .applbl.att, .m.sel .ic, .chip.sel { animation:none; } }
 .pop { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,.35); padding: 16px; }
 .popin { width: min(380px, 100%); max-height: 100%; overflow:auto; background: var(--card-background-color, #fff); color: var(--primary-text-color); border-radius: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.35); padding: 16px 18px; display:flex; flex-direction:column; gap: 14px; }
 .popin h3 { margin:0; font-size:16px; font-weight:500; display:flex; align-items:center; gap:8px; }
@@ -744,21 +934,26 @@ class DeviceFloorplanCard extends HTMLElement {
     this._raw = config; // as stored in the dashboard (to find and save this card, #97)
     const c = { ...config };
     // Older configs (0.4.x card, card v0.0x): keep them working.
-    if (!c.default_overlay && c.default_view) c.default_overlay = c.default_view === "plan" ? "plan" : "live";
+    if (!c.default_overlay && c.default_view) c.default_overlay = "live";
+    // 0.7.4: the Plan overlay is gone; room names are a layer in every overlay. Old configs go to Live.
+    if (c.default_overlay === "plan") c.default_overlay = "live";
     this._config = c;
     const dock = this._overlays();
     if (!this._overlay || !dock.includes(this._overlay)) this._overlay = this._defaultOverlay();
     const net = this._ov("network");
     const saved = lsGet(`dfc_net_${this._lsKey()}`) || {};
+    const keep = (k, d) => (typeof saved[k] === "boolean" ? saved[k] : d);
     this._net = {
       conns: Array.isArray(saved.conns) ? saved.conns : null, // null = the card's default
       roles: Array.isArray(saved.roles) ? saved.roles : [], // hidden roles
-      links: net.links !== false,
-      hubs: net.hub_links !== false,
-      wlinks: net.wifi_links !== false,
-      minLqi: Number(net.min_lqi || 0),
-      legend: net.legend !== false,
+      links: keep("links", net.links !== false),
+      hubs: keep("hubs", net.hub_links !== false),
+      wlinks: keep("wlinks", net.wifi_links !== false),
+      minLqi: Number.isFinite(saved.minLqi) ? saved.minLqi : Number(net.min_lqi || 0),
+      legend: keep("legend", net.legend !== false),
     };
+    // 0.7.4: layers chosen by the viewer (per overlay), kept in this browser.
+    this._lay = lsGet(`dfc_layers_${this._lsKey()}`) || {};
     // Floors (#75): which plan is shown.
     const ids = this._planIds();
     if (!this._floor || !ids.includes(this._floor)) {
@@ -890,22 +1085,62 @@ class DeviceFloorplanCard extends HTMLElement {
       root.addEventListener("click", (e) => this._onClick(e));
       root.addEventListener("input", (e) => this._onInput(e));
       root.addEventListener("contextmenu", (e) => {
-        const t = e.target.closest && e.target.closest("[data-k]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl]");
         if (!t) return;
         e.preventDefault();
-        this._hold(t.dataset.k);
+        if (this._held || this._xOn) return; // a touch long press already did it
+        if (t.dataset.k) this._hold(t.dataset.k);
+        else this._holdAppl(t.dataset.appl);
       });
+      // 0.7.5: tap = info card, hold = the marker's action. On touch screens hold, then slide = explore:
+      // the name and state of whatever is under the finger, like a mouse hover; lifting does nothing.
       root.addEventListener("pointerdown", (e) => {
-        const t = e.target.closest && e.target.closest("[data-k]");
-        if (!t || e.button > 0) return;
         clearTimeout(this._holdT);
+        clearTimeout(this._armT);
         this._held = false;
-        this._holdT = setTimeout(() => {
-          this._held = true;
-          this._hold(t.dataset.k);
-        }, 550);
+        this._xArm = false;
+        this._xOn = false;
+        if (e.button > 0) return;
+        const inBox = e.target.closest && e.target.closest(".box");
+        this._pd = { x: e.clientX, y: e.clientY };
+        if (inBox && e.pointerType !== "mouse") this._armT = setTimeout(() => (this._xArm = true), 300);
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl]");
+        if (!t) return;
+        // A long press counts when the finger is lifted without having moved (moving = explore).
+        this._pd.t = t;
+        this._holdT = setTimeout(() => (this._pd && (this._pd.long = true)), 550);
       });
-      for (const ev of ["pointerup", "pointerleave", "pointercancel"]) root.addEventListener(ev, () => clearTimeout(this._holdT));
+      root.addEventListener("pointermove", (e) => {
+        if (e.pointerType === "mouse" && !this._pd) return this._hoverSoon(e.clientX, e.clientY);
+        if (!this._pd || Math.hypot(e.clientX - this._pd.x, e.clientY - this._pd.y) < 10) return;
+        clearTimeout(this._holdT);
+        this._pd.long = false;
+        this._pd.moved = true;
+        if (this._xArm) {
+          this._xOn = true;
+          this._explore(e.clientX, e.clientY);
+        } else clearTimeout(this._armT);
+      });
+      this.addEventListener("mouseleave", () => this._hideTip());
+      root.addEventListener("touchmove", (e) => {
+        if (this._xArm && e.cancelable) e.preventDefault(); // exploring, not scrolling the dashboard
+      }, { passive: false });
+      for (const ev of ["pointerup", "pointercancel"]) root.addEventListener(ev, (e) => {
+        clearTimeout(this._holdT);
+        clearTimeout(this._armT);
+        const pd = this._pd;
+        if (this._xOn) {
+          this._held = true; // no tap after exploring
+          this._exploreEnd();
+        } else if (ev === "pointerup" && pd && pd.long && pd.t && !pd.moved) {
+          this._held = true; // the click that follows is not a tap
+          if (pd.t.dataset.k) this._hold(pd.t.dataset.k);
+          else this._holdAppl(pd.t.dataset.appl);
+        }
+        this._pd = null;
+        this._xArm = false;
+        this._xOn = false;
+      });
       root.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && (this._popup || this._menu)) {
           this._popup = null;
@@ -1063,7 +1298,38 @@ class DeviceFloorplanCard extends HTMLElement {
 
   _overlays() {
     const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...(this._people().length ? ["people"] : []), ...this._custom().map((c) => c.id)];
-    return list.filter((o) => this._ovDef(o));
+    return list.filter((o) => o !== "plan" && this._ovDef(o));
+  }
+
+  /** 0.7.4: a layer of an overlay, as the viewer left it (else the card's default). */
+  _layerOn(ov, name, dflt) {
+    const v = (this._lay[ov] || {})[name];
+    return typeof v === "boolean" ? v : dflt;
+  }
+
+  /** Default of a layer other than room names: as set in the card editor (Comfort: heatmap, readings, air flow). */
+  _layerDefault(ov, name) {
+    if (ov === "comfort") return this._ov("comfort")[{ heat: "heatmap", labels: "readings", air: "airflow", clim: "climate_shown" }[name] || name] !== false;
+    return true;
+  }
+
+  _setLayer(ov, name, on) {
+    this._lay = { ...this._lay, [ov]: { ...(this._lay[ov] || {}), [name]: on } };
+    lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
+  }
+
+  /** Room names: shown by default in the overlays chosen in the editor (Live, when not set: where Plan was). */
+  _roomsDefault(ov) {
+    const si = (this._config.rooms || {}).show_in;
+    if (!Array.isArray(si)) return ov === "live";
+    return si.includes(ov) || (ov === "live" && si.includes("plan"));
+  }
+
+  /** Where the Layers button is: a corner of the plan (default top right), the overlay bar, or hidden. */
+  _layersPos() {
+    const v = this._config.layers_button;
+    if (["top-right", "top-left", "bottom-left", "bottom-right", "bar", "hidden"].includes(v)) return v;
+    return this._ov("network").layers === false ? "hidden" : "top-right";
   }
 
   _defaultOverlay() {
@@ -1119,15 +1385,19 @@ class DeviceFloorplanCard extends HTMLElement {
       const on = lights.map((e) => hass.states[e]).filter((s) => s && s.state === "on");
       if (!on.length) continue;
       const shape = chosen ? { ...defaultShape(item.light.type, a.real_width_m), ...item.light } : defaultShape("bulb", a.real_width_m);
-      if (shape.type === "none") continue;
+      if (["none", "screen", "drum", "line"].includes(shape.type)) continue;
       const bs = on.map((s) => (s.attributes.brightness != null ? Number(s.attributes.brightness) / 255 : 1));
       const b = Math.max(0.2, Math.min(1, bs.reduce((x, y) => x + y, 0) / bs.length)) * (0.6 + (0.4 * on.length) / lights.length);
       // #111: the light stays inside its room's shape.
       const devs = a.devices || {};
       const aid = item.area_id || (item.of && devs[item.of] && devs[item.of].area_id) || (item.members && (devs[item.members[0]] || {}).area_id) || null;
       const areas = a.areas || {};
-      let start = aid && areas[aid] && areas[aid].shape ? aid : null;
-      if (!start) start = Object.keys(areas).find((k) => areas[k].shape && inPoly(item.x, item.y, areas[k].shape)) || null;
+      const polyArea = (P) => Math.abs(P.reduce((t, p, i) => t + p[0] * P[(i + 1) % P.length][1] - P[(i + 1) % P.length][0] * p[1], 0)) / 2;
+      const under = Object.keys(areas).filter((k) => areas[k].shape && inPoly(item.x, item.y, areas[k].shape)).sort((x, y) => polyArea(areas[x].shape) - polyArea(areas[y].shape))[0] || null;
+      // 0.7.4: a split spot (a relay's light placed where it acts) glows in the room it sits in,
+      // not in its device's area (an NSPanel in the corridor switching the WC light).
+      let start = item.of && !item.area_id && under ? under : aid && areas[aid] && areas[aid].shape ? aid : null;
+      if (!start) start = under;
       if (!this._groups || this._groups.a !== a) this._groups = { a, by: {} };
       if (start && !(start in this._groups.by)) this._groups.by[start] = shapeGroup(areas, start);
       out.push({ rgb: bulbRgb(on[0].attributes || {}, item.light && item.light.color), b, ell: shapeEllipses(item.x, item.y, shape, ratio), shapes: start ? this._groups.by[start] : null });
@@ -1135,16 +1405,210 @@ class DeviceFloorplanCard extends HTMLElement {
     return out;
   }
 
+  /** 0.7.4: an appliance with a drum or line drawn in the Editor: its type and readings (null = not one). */
+  _applOf(item) {
+    if (!item || item.phantom || !item.light || !["drum", "line"].includes(item.light.type)) return null;
+    const hass = this._hass;
+    const devs = (this._a && this._a.devices) || {};
+    const ents = [...new Set([...(item.bond ? item.entities || [] : [...(item.allEntities || item.entities || []), item.main_entity]), ...(item.allEntities || [])])].filter((e) => e && hass.states[e]);
+    const as = APPL_TYPES.includes(item.as) ? item.as : ((item.members || []).map((m) => (devs[m] || {}).as).find((v) => APPL_TYPES.includes(v)));
+    const type = as || applGuess(`${item.name} ${ents.join(" ")}`) || (item.light.type === "line" ? "dishwasher" : "washer");
+    const dc = (e) => (hass.states[e].attributes || {}).device_class;
+    const status = ents.find((e) => domainOf(e) === "sensor" && !num(hass.states[e].state) && dc(e) !== "timestamp" && /(run_state|operation_state|current_status|program_phase|program_progress_status|machine_state|status|_state)$/.test(e))
+      || ents.find((e) => domainOf(e) === "sensor" && /run_state|operation_state|current_status/.test(e));
+    const remaining = ents.find((e) => domainOf(e) === "sensor" && /remain|time_left|finish_time|end_time/.test(e));
+    const running = ents.find((e) => domainOf(e) === "binary_sensor" && (dc(e) === "running" || /running/.test(e)));
+    const power = ents.find((e) => domainOf(e) === "sensor" && dc(e) === "power");
+    const door = ents.find((e) => domainOf(e) === "binary_sensor" && ["door", "opening"].includes(dc(e)));
+    const plug = ents.find((e) => domainOf(e) === "switch");
+    return { item, type, status, remaining, running, power, door, plug, ents };
+  }
+
+  /** Current state of an appliance: phase, colour, label and the rows for its panel. */
+  _applState(ap) {
+    const hass = this._hass;
+    const S = (e) => (e ? hass.states[e] : null);
+    const deadStatus = ap.status && !live(S(ap.status));
+    const deadPlug = (ap.plug && !live(S(ap.plug))) || (ap.power && !live(S(ap.power)));
+    let phase = null;
+    if (ap.status && !deadStatus) phase = applPhase(S(ap.status).state);
+    if (!phase || phase === "run") {
+      if (ap.running && live(S(ap.running)) && !deadPlug) phase = S(ap.running).state === "on" ? (phase || (ap.type === "dryer" ? "heat" : "run")) : phase === "run" ? "run" : "idle";
+      else if (!ap.running && ap.power && live(S(ap.power))) phase = Number(S(ap.power).state) > 3 ? phase || (ap.type === "dryer" ? "heat" : "run") : phase || "idle";
+    }
+    const unav = (ap.status ? deadStatus : true) && (deadPlug || (!ap.running && !ap.power));
+    if (unav && !(ap.status && !deadStatus)) phase = "unavailable";
+    phase = phase || "idle";
+    const key = ap.item.id;
+    // Finished: a cycle that was running and stopped keeps a check until the door opens or you tap "Unloaded".
+    this._applDone = this._applDone || lsGet(`dfc_appl_${this._lsKey()}`) || {};
+    this._applPrev = this._applPrev || {};
+    const active = ["water", "spin", "heat", "run", "attention"].includes(phase);
+    const prev = this._applPrev[key];
+    if (phase === "done" || (prev && prev !== "idle" && prev !== "done" && prev !== "unavailable" && phase === "idle")) this._applDone[key] = true;
+    if (active) delete this._applDone[key];
+    if (ap.door && S(ap.door) && S(ap.door).state === "on" && !active) delete this._applDone[key];
+    // 0.7.5: when the phase last changed (the status pill shows for a few minutes after that).
+    this._applChg = this._applChg || {};
+    if (prev === undefined) {
+      const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
+      this._applChg[key] = since ? new Date(since.last_changed).getTime() : 0;
+    } else if (prev !== phase) this._applChg[key] = Date.now();
+    this._applPrev[key] = phase;
+    lsSet(`dfc_appl_${this._lsKey()}`, this._applDone);
+    if (phase === "idle" && this._applDone[key]) phase = "done";
+    // Time: a finish timestamp becomes a countdown, minutes stay minutes; else time since it started.
+    let time = "";
+    const rem = S(ap.remaining);
+    if (active && rem && live(rem)) {
+      const v = rem.state;
+      let min = null;
+      if ((rem.attributes || {}).device_class === "timestamp" || /^\d{4}-\d{2}-\d{2}T/.test(v)) min = Math.round((new Date(v).getTime() - Date.now()) / 60000);
+      else if (/^\d+:\d{2}(:\d{2})?$/.test(v)) {
+        const [h, m] = v.split(":").map(Number);
+        min = h * 60 + m;
+      } else if (num(v)) min = Math.round(Number(v) * ((rem.attributes || {}).unit_of_measurement === "h" ? 60 : (rem.attributes || {}).unit_of_measurement === "s" ? 1 / 60 : 1));
+      if (min != null && min >= 0) time = `${min} min remaining`;
+    }
+    if (active && !time) {
+      const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
+      if (since) time = `${Math.max(0, Math.round((Date.now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
+    }
+    const pretty = (t) => String(t).replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+    const word = phase === "unavailable" ? "Status unavailable" : phase === "done" ? "Finished" : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? "Door open" : "Paused") : phase === "error" ? "Error" : phase === "idle" ? "Idle"
+      : ap.status && !deadStatus && applPhase(S(ap.status).state) !== "run" ? pretty(S(ap.status).state) : ap.status && !deadStatus ? pretty(S(ap.status).state) : ap.type === "dryer" ? "Drying" : "Running";
+    const w = ap.power && live(S(ap.power)) ? `${Math.round(Number(S(ap.power).state))} W` : "";
+    const col = APPL_COL[phase] || (phase === "run" ? (ap.type === "dryer" ? APPL_COL.heat : APPL_COL.water) : null);
+    return { phase, col, word, time, w, active, chg: this._applChg[key] || 0 };
+  }
+
+  /** Live: appliances glow on their drum (front view) or along their line (seen from above) while they work;
+   *  close ones share one label; tap opens a small panel (information, never the plug). */
+  _applHtml(a) {
+    this._appls = [];
+    if (this._overlay !== "live") return "";
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let html = "";
+    const shown = [];
+    for (const item of this._items(a)) {
+      if (this._hidden(item, "live")) continue;
+      const ap = this._applOf(item);
+      if (!ap) continue;
+      const st = this._applState(ap);
+      this._appls.push({ ap, st });
+      if (st.phase === "idle" && !(this._pick && this._selId === item.id)) continue;
+      const L = item.light;
+      const c = st.col || "150,150,150";
+      const cls = `appl ${st.phase} ${still ? "still" : ""}`;
+      if (L.type === "drum") {
+        const r = Number(L.r) || 1.5;
+        html += `<div class="${cls} drum" style="left:${item.x}%;top:${item.y}%;width:${(r * 2).toFixed(2)}%;--ac:${c}" data-appl="${cesc(item.id)}"><i></i></div>`;
+        shown.push({ id: item.id, x: item.x, y: item.y - r * ratio - 1, st, ap });
+      } else {
+        const x1 = L.x1 ?? item.x - 3;
+        const y1 = L.y1 ?? item.y;
+        const x2 = L.x2 ?? item.x + 3;
+        const y2 = L.y2 ?? item.y;
+        const len = Math.hypot(x2 - x1, (y2 - y1) / ratio);
+        const ang = (Math.atan2((y2 - y1) / ratio, x2 - x1) * 180) / Math.PI;
+        html += `<div class="${cls} aline" style="left:${x1}%;top:${y1}%;width:${len.toFixed(3)}%;transform:translateY(-50%) rotate(${ang.toFixed(2)}deg);--ac:${c}" data-appl="${cesc(item.id)}"></div>`;
+        shown.push({ id: item.id, x: (x1 + x2) / 2, y: Math.min(y1, y2) - 2.5, st, ap });
+      }
+    }
+    // 0.7.5: a status pill shows for ~3 min after a change; one that needs you (finished, paused, error) stays
+    // until it's resolved. Per marker in Live: automatic / always / never.
+    const PILL_MS = 180000;
+    let next = 0;
+    const pillOf = (o) => {
+      const mode = this._per(o.ap.item, "live").pill || "";
+      if (this._pick && this._selId === o.ap.item.id) return true; // Edit markers: always while selected
+      if (mode === "never") return false;
+      if (["done", "attention", "error"].includes(o.st.phase) || mode === "always") return true;
+      const left = o.st.chg + PILL_MS - Date.now();
+      if (left > 0) next = next ? Math.min(next, left) : left;
+      return left > 0;
+    };
+    const labelled = shown.filter(pillOf);
+    clearTimeout(this._applT);
+    if (next) this._applT = setTimeout(() => this._update(true), next + 500);
+    // One label per group of appliances that sit close together.
+    const used = new Set();
+    for (const s0 of labelled) {
+      if (used.has(s0.id)) continue;
+      const grp = labelled.filter((o) => !used.has(o.id) && Math.hypot(o.x - s0.x, (o.y - s0.y) / ratio) < 9);
+      grp.forEach((o) => used.add(o.id));
+      const x = grp.reduce((t, o) => t + o.x, 0) / grp.length;
+      const y = Math.min(...grp.map((o) => o.y));
+      const att = grp.some((o) => ["done", "attention", "error"].includes(o.st.phase));
+      const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? "Done · tap to unload" : `${cesc(this._applWord(o))}${o.st.time ? ` · ${cesc(o.st.time.replace(" remaining", "").replace(" elapsed", ""))}` : ""}`}</span>`).join("");
+      html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => `${o.ap.item.name}: ${o.st.word}`).join(", "))}">${rows}</button>`;
+    }
+    return html;
+  }
+
+  /** The appliance's word on its label: the leading entity chosen in Edit markers, else its status. */
+  _applWord(o) {
+    const l = this._per(o.ap.item, "live").lead;
+    return l && this._hass.states[l] ? this._fmt(l) : o.st.word;
+  }
+
+  /** 0.7.4: a TV that is on lights the room from its screen: a soft, slowly changing glow (Live, Lights). */
+  _tvHtml(a) {
+    const ov = this._overlay;
+    if (ov !== "live" && ov !== "lights") return "";
+    const hass = this._hass;
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const areas = a.areas || {};
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const night = (this._ns && this._ns.f) || 0;
+    let defs = "";
+    let body = "";
+    let n = 0;
+    for (const item of this._items(a)) {
+      if (item.phantom || item.bond || this._hidden(item, ov)) continue;
+      const mp = [item.main_entity, ...(item.entities || [])].find((e) => e && domainOf(e) === "media_player" && hass.states[e]);
+      const st = mp && hass.states[mp];
+      // A TV glows by default; anything else only when set to Screen in the Editor.
+      if (item.light ? item.light.type !== "screen" : !(st && st.attributes.device_class === "tv")) continue;
+      if (!st || !live(st)) continue;
+      const level = ["on", "playing"].includes(st.state) ? 1 : st.state === "paused" ? 0.45 : ["idle", "standby", "buffering"].includes(st.state) ? 0.25 : 0;
+      if (!level) continue;
+      const L = { ...defaultShape("screen", a.real_width_m), ...(item.light || {}) };
+      // The screen is its own line (both ends set in the Editor); older settings start at the marker.
+      const x1 = L.x1 ?? (L.x2 != null ? item.x : item.x - 3);
+      const y1 = L.y1 ?? item.y;
+      const x2 = L.x2 ?? item.x + 3;
+      const y2 = L.y2 ?? item.y;
+      const anc = item.area_id && areas[item.area_id];
+      const g = screenPoly(x1, y1, x2, y2, Number(L.r) || 10, L.a, ratio, anc ? anc.x : 50, anc ? anc.y : 50);
+      const under = Object.keys(areas).find((k) => areas[k].shape && inPoly((x1 + x2) / 2, (y1 + y2) / 2, areas[k].shape)) || null;
+      const start = item.area_id && areas[item.area_id] && areas[item.area_id].shape ? item.area_id : under;
+      const group = start ? shapeGroup(areas, start) : null;
+      const i = n++;
+      if (group) defs += `<clipPath id="tvc${i}">${group.map((sh) => `<polygon points="${sh.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>`).join("")}</clipPath>`;
+      const op = (0.5 + 0.35 * night) * level;
+      const anim = !still && level === 1;
+      const col = anim ? `<animate attributeName="stop-color" values="#a9c8ff;#eef4ff;#b7a8ff;#8fd8ff;#ffe0b8;#a9c8ff" dur="11s" repeatCount="indefinite"/>` : "";
+      defs += `<linearGradient id="tvg${i}" gradientUnits="userSpaceOnUse" x1="${g.from[0]}" y1="${g.from[1]}" x2="${g.to[0]}" y2="${g.to[1]}"><stop offset="0" stop-color="#cfe0ff" stop-opacity="${op.toFixed(2)}">${col}</stop><stop offset=".55" stop-color="#cfe0ff" stop-opacity="${(op * 0.35).toFixed(2)}">${col}</stop><stop offset="1" stop-color="#cfe0ff" stop-opacity="0"/></linearGradient><filter id="tvf${i}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${(0.9).toFixed(2)} ${(0.9 * ratio).toFixed(2)}"/></filter>`;
+      const flick = anim ? `<animate attributeName="opacity" values="1;.82;.95;.75;1;.88;1" dur="4.3s" repeatCount="indefinite"/>` : "";
+      body += `<g${group ? ` clip-path="url(#tvc${i})"` : ""}><polygon points="${g.pts.map((q) => `${q[0].toFixed(2)},${q[1].toFixed(2)}`).join(" ")}" fill="url(#tvg${i})" filter="url(#tvf${i})">${flick}</polygon></g><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#eaf2ff" stroke-opacity="${(0.35 + 0.35 * level).toFixed(2)}" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke" style="filter:drop-shadow(0 0 2px rgba(200,220,255,.8))"/>`;
+    }
+    if (!n) return "";
+    return `<svg class="air" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
+  }
+
   /** #115: air flowing from ACs while they cool / heat (Live, Comfort), kept inside the room shapes. */
   _airHtml(a) {
     const ov = this._overlay;
     if (ov !== "live" && ov !== "comfort") return "";
+    if (ov === "comfort" && !this._layerOn("comfort", "air", this._layerDefault("comfort", "air"))) return "";
     const hass = this._hass;
     const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
     const areas = a.areas || {};
     const W = a.real_width_m;
     const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const COL = { cool: "79,163,255", heat: "255,138,61", dry: "60,193,176", fan: "60,193,176" };
+    const COL = { cool: "79,163,255", heat: "255,138,61", dry: "60,193,176", fan: "60,193,176", auto: "126,87,194" };
     let defs = "";
     let body = "";
     let n = 0;
@@ -1155,7 +1619,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const st = hass.states[clim];
       const at = st.attributes || {};
       const act = at.hvac_action;
-      let mode = act ? { cooling: "cool", heating: "heat", drying: "dry", fan: "fan" }[act] : { cool: "cool", heat: "heat", dry: "dry", fan_only: "fan", heat_cool: "cool", auto: "cool" }[st.state];
+      let mode = act ? { cooling: "cool", heating: "heat", drying: "dry", fan: "fan" }[act] : { cool: "cool", heat: "heat", dry: "dry", fan_only: "fan", heat_cool: "auto", auto: "auto" }[st.state];
       if (!mode || !live(st)) continue;
       const modes = at.hvac_modes || [];
       const canCool = modes.includes("cool") || modes.includes("heat_cool") || modes.includes("dry") || modes.includes("fan_only");
@@ -1178,19 +1642,19 @@ class DeviceFloorplanCard extends HTMLElement {
       let ang = 90;
       const anc = aid && areas[aid];
       if (anc && (Math.abs(anc.x - item.x) > 0.5 || Math.abs(anc.y - item.y) > 0.5)) ang = (Math.atan2((anc.y - item.y) / ratio, anc.x - item.x) * 180) / Math.PI;
-      const cone = { a: ang, r: W ? (2 / W) * 100 : 10, s: 60, ...(item.air || {}) };
-      const rad = (d) => (d * Math.PI) / 180;
-      const pt = (d, r) => [Math.cos(rad(d)) * r, Math.sin(rad(d)) * r * ratio];
-      const [ax, ay] = pt(cone.a - cone.s / 2, cone.r);
-      const [bx, by] = pt(cone.a + cone.s / 2, cone.r);
+      // 0.7.7: a trapezoid from the unit's line (drawn in the Editor; else a short line at the marker).
+      const g = airGeom({ a: ang, r: W ? (2 / W) * 100 : 10, s: 60, L: W ? (0.8 / W) * 100 : 4, ...(item.air || {}), x: item.x, y: item.y }, ratio);
+      const f = (q) => `${q[0].toFixed(2)},${q[1].toFixed(2)}`;
+      defs += `<linearGradient id="ag${i}" gradientUnits="userSpaceOnUse" x1="${g.mid[0].toFixed(2)}" y1="${g.mid[1].toFixed(2)}" x2="${g.tip[0].toFixed(2)}" y2="${g.tip[1].toFixed(2)}"><stop offset="0" stop-color="rgb(${c})" stop-opacity=".62"/><stop offset="1" stop-color="rgb(${c})" stop-opacity="0"/></linearGradient>`;
+      // The arcs, as before: centred where the two sides meet, from the unit's line out to the reach.
       const arc = (k) => {
-        const [x1, y1] = pt(cone.a - (cone.s / 2) * 0.92, cone.r * k);
-        const [x2, y2] = pt(cone.a + (cone.s / 2) * 0.92, cone.r * k);
-        return `M${x1.toFixed(2)},${y1.toFixed(2)} A${(cone.r * k).toFixed(2)},${(cone.r * k * ratio).toFixed(2)} 0 0 1 ${x2.toFixed(2)},${y2.toFixed(2)}`;
+        const rr = g.R * k;
+        const a1 = ((g.th - g.h * 0.92) * Math.PI) / 180, a2 = ((g.th + g.h * 0.92) * Math.PI) / 180;
+        return `M${(Math.cos(a1) * rr).toFixed(2)},${(Math.sin(a1) * rr).toFixed(2)} A${rr.toFixed(2)},${rr.toFixed(2)} 0 0 1 ${(Math.cos(a2) * rr).toFixed(2)},${(Math.sin(a2) * rr).toFixed(2)}`;
       };
-      defs += `<radialGradient id="ag${i}" cx="0" cy="0" r="${cone.r}" gradientUnits="userSpaceOnUse" gradientTransform="scale(1 ${ratio})"><stop offset="0" stop-color="rgb(${c})" stop-opacity=".62"/><stop offset="1" stop-color="rgb(${c})" stop-opacity="0"/></radialGradient>`;
-      const waves = still ? `<path d="${arc(0.6)}" fill="none" stroke="rgba(${c},.55)" stroke-width="2" vector-effect="non-scaling-stroke"/>` : [0, 1, 2].map((k) => `<g><path d="${arc(1)}" fill="none" stroke="rgba(${c},.95)" stroke-width="2.8" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0"><animateTransform attributeName="transform" type="scale" from="0.12" to="1" dur="3s" begin="${k}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.9;0" dur="3s" begin="${k}s" repeatCount="indefinite"/></path></g>`).join("");
-      body += `<g${clip}><g transform="translate(${item.x} ${item.y})"><path d="M0,0 L${ax.toFixed(2)},${ay.toFixed(2)} A${cone.r},${cone.r * ratio} 0 0 1 ${bx.toFixed(2)},${by.toFixed(2)} Z" fill="url(#ag${i})"/>${waves}</g></g>`;
+      const k0 = Math.min(0.9, g.d0 / g.R);
+      const waves = still ? `<path d="${arc((1 + k0) / 2)}" fill="none" stroke="rgba(${c},.55)" stroke-width="2" vector-effect="non-scaling-stroke"/>` : [0, 1, 2].map((k) => `<g><path d="${arc(1)}" fill="none" stroke="rgba(${c},.95)" stroke-width="2.8" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0"><animateTransform attributeName="transform" type="scale" from="${k0.toFixed(3)}" to="1" dur="3s" begin="${k}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.9;0" dur="3s" begin="${k}s" repeatCount="indefinite"/></path></g>`).join("");
+      body += `<g${clip}><polygon points="${f(g.e1)} ${f(g.f1)} ${f(g.f2)} ${f(g.e2)}" fill="url(#ag${i})"/><g transform="translate(${g.apex[0].toFixed(2)} ${g.apex[1].toFixed(2)}) scale(1 ${ratio})">${waves}</g></g>`;
     }
     if (!n) return "";
     return `<svg class="air" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
@@ -1267,52 +1731,51 @@ class DeviceFloorplanCard extends HTMLElement {
     return st.state === "closed" ? 0 : 1;
   }
 
-  /** 0.7.0: doors and windows as a light blue bar while open; shutters as a white outlined bar,
-   *  filled as far as they are closed (electric), fading out 2.5 s after closing. */
+  /** 0.7.0: doors and windows as a light blue bar while open.
+   *  0.7.4: shutters as a white bar for the part that is closed: open = nothing, closed = full bar.
+   *  A sliding shutter grows from the bar's first end, a roller shutter from the centre to both ends.
+   *  Unknown / unavailable: a faint dashed bar, so it never looks open by mistake.
+   *  In Security every shutter shows (an open one as a faint outline), so each can be tapped. */
   _barsHtml(a) {
     const ov = this._overlay;
     if (!["live", "security"].includes(ov)) return "";
     const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
-    const now = Date.now();
-    this._shutT = this._shutT || {};
-    this._shutPrev = this._shutPrev || {};
     let html = "";
     for (const o of this._openSpots(a)) {
       if (!o.geo || o.hidden) continue;
       const f = this._openFrac(o);
-      const closed = f === 0;
-      if (this._shutPrev[o.eid] === false && closed) this._shutT[o.eid] = now;
-      this._shutPrev[o.eid] = f == null ? undefined : closed;
-      if (f == null) continue;
       const { x1, y1, x2, y2 } = o.geo;
       const len = Math.hypot(x2 - x1, (y2 - y1) / ratio);
       const ang = (Math.atan2((y2 - y1) / ratio, x2 - x1) * 180) / Math.PI;
       // Twins sit beside the bar: 7 px bar + 4 px gap per step.
       const geo = `left:${x1}%;top:${y1}%;width:${len.toFixed(3)}%;transform:translateY(-50%) rotate(${ang.toFixed(2)}deg)${o.side ? ` translateY(${o.side * 11}px)` : ""}`;
       const label = `${o.st.attributes.friendly_name || o.eid}: ${this._hass.formatEntityState ? this._hass.formatEntityState(o.st) : o.st.state}`;
-      let cls = "";
-      let fill = 0;
-      if (o.mate && closed && o.mate.st && o.mate.st.state === "on") {
+      const bar = (cls, inner = "", title = label) => `<button class="obar ${cls}" data-bar="${cesc(o.eid)}" aria-label="${cesc(title)}" title="${cesc(title)}" style="${geo}">${inner}</button>`;
+      if (o.as !== "shutter") {
+        if (f == null || f === 0) continue;
+        html += bar("door");
+        continue;
+      }
+      if (f == null) {
+        html += bar("shut unk");
+        continue;
+      }
+      const shut = 1 - f; // how much of the opening the shutter covers
+      if (o.mate && shut > 0.99 && o.mate.st && o.mate.st.state === "on") {
         // Shutter says closed, the contact says open: pulsing orange-red.
         const ml = `${label} · ${o.mate.st.attributes.friendly_name || o.mate.eid}: open`;
-        html += `<button class="obar shut alert" data-bar="${cesc(o.eid)}" aria-label="${cesc(ml)}" title="${cesc(ml)}" style="${geo}"><i style="width:100%"></i></button>`;
+        html += bar("shut alert", `<i style="width:100%"></i>`, ml);
         continue;
       }
-      if (o.as !== "shutter") {
-        if (closed) continue;
-        cls = "door";
-      } else if (closed) {
-        const t = this._shutT[o.eid];
-        if (!t || now - t > 2600) continue;
-        cls = "shut fade";
-        fill = 1;
-        html += `<button class="obar ${cls}" data-bar="${cesc(o.eid)}" aria-label="${cesc(label)}" style="${geo};animation-delay:-${now - t}ms"><i style="width:100%"></i></button>`;
+      // Security shows every shutter (open ones as a faint outline you can tap); Live only what is closed.
+      const track = ov === "security" ? " track" : "";
+      if (shut < 0.01) {
+        if (track) html += bar("shut track");
         continue;
-      } else {
-        cls = "shut";
-        fill = o.kind === "cover" ? 1 - f : 0;
       }
-      html += `<button class="obar ${cls}" data-bar="${cesc(o.eid)}" aria-label="${cesc(label)}" style="${geo}">${fill > 0.01 ? `<i style="width:${(fill * 100).toFixed(1)}%"></i>` : ""}</button>`;
+      const w = (shut * 100).toFixed(1);
+      const roll = (o.geo.roll || (o.kind === "cover" && num(o.st.attributes.current_position) ? "roller" : "sliding")) === "roller";
+      html += bar(`shut${track}`, `<i style="width:${w}%${roll ? `;margin-left:${((100 - shut * 100) / 2).toFixed(1)}%` : ""}"></i>`);
     }
     return html;
   }
@@ -1609,7 +2072,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _rooms() {
-    return { show_in: ["plan"], style: "label", size: "m", hidden: [], names: {}, ...(this._config.rooms || {}) };
+    return { style: "label", size: "m", hidden: [], names: {}, ...(this._config.rooms || {}) };
   }
 
   _lights() {
@@ -1660,7 +2123,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const mem = ph.members.map((m) => [m, memberOf(m)]).filter((x) => x[1]);
       const byMember = {};
       for (const [m, d] of mem) byMember[m] = d.entities || [d.main_entity];
-      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), entities: ph.entities || [], byMember, value: ph.value || "average", one: ph.one, group: "phantoms" });
+      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, value: ph.value || "average", one: ph.one, group: "phantoms" });
     }
     return out;
   }
@@ -1706,8 +2169,17 @@ class DeviceFloorplanCard extends HTMLElement {
     this._cx = this._ctx(a);
     this._skippedUnknown = 0;
     for (const item of this._items(a)) {
-      if (this._hidden(item, ov)) continue;
-      out.push(...this._specsFor(item, ov, false));
+      const isSel = this._pick && this._selId === item.id;
+      if (this._hidden(item, ov)) {
+        // 0.7.5: Edit markers: a selected marker hidden here is drawn faded, so changes can be seen.
+        if (isSel) out.push(...this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, ghost: true })));
+        continue;
+      }
+      let sp = this._specsFor(item, ov, false);
+      // Off / idle right now (Live hides it): while selected it shows as it looks when active.
+      // (Appliances show their label instead, see _applHtml.)
+      if (isSel && !sp.length && !((ov === "live" || ov === "lights") && this._applOf(item))) sp = this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, on: true, dim: false, cls: "" }));
+      out.push(...sp);
     }
     return out;
   }
@@ -1810,6 +2282,8 @@ class DeviceFloorplanCard extends HTMLElement {
     const cx = this._cx || { hubs: new Set(), zha: {} };
     const kindOfE = (e) => (item.actsAs && e === item.main_entity ? { light: "light", switch: "switch", fan: "fan" }[item.actsAs] : kindOf(e, hass.states[e]));
     const one = (spec, defaults) => (spec ? [this._withExtras(spec, item, ov, defaults)] : []);
+    // 0.7.4: an appliance with a drum / line is its own signal in Live (bonds too), and its plug is no light.
+    if (!q && (ov === "live" || ov === "lights") && this._applOf(item)) return [];
     if (ov === "live") {
       const opts = this._ov("live");
       const kinds = opts.show || LIVE_DEFAULT;
@@ -1817,6 +2291,7 @@ class DeviceFloorplanCard extends HTMLElement {
         const kind = this._mainKind(item);
         const key = LIVE_KEY[kind];
         if (!key || !kinds.includes(key)) return [];
+        if (kind === "climate" && !q) return [];
         const bs = this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], kind, opts);
         if (!q && (opts.show_off || "hidden") === "hidden" && !bs.on) return [];
         if (kind === "light" && this._glowOnly(ov)) bs.glow = true;
@@ -1836,8 +2311,9 @@ class DeviceFloorplanCard extends HTMLElement {
         if (!(domainOf(lead) === "cover" && st0 && ["opening", "closing"].includes(st0.state))) return [];
       }
       if (kind === "climate") {
-        const cst = hass.states[lead];
-        if (hideOff && (!cst || !live(cst) || cst.state === "off")) return [];
+        // 0.8.0: Live shows climate only as its air flow / warm glow; temperatures live in Comfort.
+        // (The editor still sees it, so it can be hidden in Live, which also hides its air flow.)
+        if (!q) return [];
         return one(this._climateChip(item, name, lead, null, null, { compact: true }));
       }
       const spec = this._liveSpec(item, name, lead, hass.states[lead], kind, opts);
@@ -2001,7 +2477,11 @@ class DeviceFloorplanCard extends HTMLElement {
     let value = "";
     if (kind === "opening") value = n ? `${n} open` : "All closed";
     else if (kind === "motion") value = n ? "Detected" : "Clear";
-    else if (["light", "switch", "fan"].includes(kind)) value = `${n} of ${list.length} on`;
+    else if (["light", "switch", "fan"].includes(kind)) {
+      // 0.7.4: a bond counts once (on while any of its members is on).
+      const units = (item.units || list.map((e) => [e])).map((u) => u.filter((e) => list.includes(e))).filter((u) => u.length);
+      value = `${units.filter((u) => u.some((e) => this._isOn(e, hass.states[e], kindOf(e, hass.states[e])))).length} of ${units.length} on`;
+    }
     else value = n ? `${n} active` : "";
     const color = kind === "motion" ? "#43a047" : kind === "opening" ? "#fb8c00" : "var(--dfc-accent)";
     return [{ key: item.id, type: "marker", item, name, ents: list, eid: list[0], st: null, kind, on: n > 0, dim: false, unavail: false, color, value: this._look().markers !== "icon" ? value : "", icon: icon || kindIcon[kind] || "mdi:shape-outline", x: item.x, y: item.y, phantom: true }];
@@ -2023,18 +2503,40 @@ class DeviceFloorplanCard extends HTMLElement {
       else if (a.target_temp_low != null && a.target_temp_high != null) set = `Set ${this._num1(a.target_temp_low)}–${this._num1(a.target_temp_high)}°`;
       else if (a.target_humidity != null) set = `Set ${a.target_humidity}%`;
     }
+    // 0.7.5: a real room thermometer bonded with the unit beats its built-in sensor; "own_temp: off"
+    // keeps the unit's own readings out of the chip, Comfort and the heatmap.
+    const room = this._roomSensors(item, clim);
+    const own = this._dev(item.id).own_temp !== "off";
     let temp = "";
-    if (a.current_temperature != null) temp = `${this._num1(a.current_temperature)}°`;
-    else if (tempEid) temp = this._fmtNum(tempEid).replace(/\s?°C|\s?°F/, "°");
+    if (room.t) temp = this._fmtNum(room.t).replace(/\s?°C|\s?°F/, "°");
+    else if (own && a.current_temperature != null) temp = `${this._num1(a.current_temperature)}°`;
+    else if (own && tempEid) temp = this._fmtNum(tempEid).replace(/\s?°C|\s?°F/, "°");
     let hum = "";
     // #88: 0 / missing humidity = the unit has no humidity sensor.
-    if (a.current_humidity != null && Number(a.current_humidity) > 0) hum = `${Math.round(Number(a.current_humidity))}%`;
-    else if (humEid && Number((this._hass.states[humEid] || {}).state) > 0) hum = this._fmtNum(humEid);
+    if (room.h && Number((this._hass.states[room.h] || {}).state) > 0) hum = this._fmtNum(room.h);
+    else if (own && a.current_humidity != null && Number(a.current_humidity) > 0) hum = `${Math.round(Number(a.current_humidity))}%`;
+    else if (own && humEid && Number((this._hass.states[humEid] || {}).state) > 0) hum = this._fmtNum(humEid);
     const icon = this._dev(item.id).icon || climateIcon(clim, st);
     const ents = [clim];
+    const heatEnts = room.t ? [room.t] : own ? [clim, tempEid].filter(Boolean) : [];
     // Compact (Live, custom overlays, #99): icon + room temperature in the mode colour; "Off" when off.
-    if (compact) return { key: `${item.id}|${clim}`, type: "chip", cl2: true, compact: true, item, name, lines: [temp || "—", word], word: on ? "" : word, set: "", temp, hum: "", ents, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
-    return { key: `${item.id}|${clim}`, type: "chip", cl2: true, item, name, lines: [temp || "—", word], word, set, temp, hum, ents, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
+    // 0.7.4: off needs no word: the grey chip already says it (a narrower chip); offline still says so.
+    const shown = live(st) && st.state === "off" ? "" : word;
+    if (compact) return { key: `${item.id}|${clim}`, type: "chip", cl2: true, compact: true, item, name, lines: [temp || "—", word], word: on ? "" : shown, set: "", temp, hum: "", ents, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
+    return { key: `${item.id}|${clim}`, type: "chip", cl2: true, item, name, lines: [temp || "—", word], word: shown, set, temp, hum, ents, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
+  }
+
+  /** Room thermometer / humidity sensor bonded with a climate unit (from another device than the unit). */
+  _roomSensors(item, clim) {
+    if (!item.bond) return {};
+    const hass = this._hass;
+    const devs = (this._a && this._a.devices) || {};
+    const climDev = (item.members || []).find((m) => ((devs[m] || {}).entities || []).includes(clim));
+    const mine = new Set(climDev ? devs[climDev].entities || [] : []);
+    const pool = (item.entities || []).filter((e) => e !== clim && !mine.has(e) && live(hass.states[e]));
+    const t = pool.find((e) => kindOf(e, hass.states[e]) === "temperature" && ambientTemp(e, hass.states[e], { standalone: true }));
+    const h = pool.find((e) => kindOf(e, hass.states[e]) === "humidity");
+    return { t, h };
   }
 
   _num1(v) {
@@ -2138,7 +2640,8 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _saveNet() {
-    lsSet(`dfc_net_${this._lsKey()}`, { conns: this._net.conns, roles: this._net.roles });
+    const n = this._net;
+    lsSet(`dfc_net_${this._lsKey()}`, { conns: n.conns, roles: n.roles, links: n.links, hubs: n.hubs, wlinks: n.wlinks, legend: n.legend, minLqi: n.minLqi });
   }
 
   /** Custom overlays (#109): ordered kinds; the first matching kind leads, the others become extra lines. */
@@ -2365,13 +2868,22 @@ class DeviceFloorplanCard extends HTMLElement {
     this._netTimer(ov === "network");
     const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
     this._a = a;
-    const specs = this._markers(a);
+    let specs = this._markers(a);
+    this._heat = null;
+    if (ov === "comfort") {
+      if (this._layerOn("comfort", "heat", this._layerDefault("comfort", "heat"))) this._heat = this._heatGrid(a, specs, ratio);
+      if (!this._layerOn("comfort", "labels", this._layerDefault("comfort", "labels"))) specs = specs.filter((sp) => sp.kind !== "reading");
+      // 0.7.5: ACs / thermostats as their own layer (their temperatures still count in the heatmap above).
+      if (!this._layerOn("comfort", "clim", this._layerDefault("comfort", "clim"))) specs = specs.filter((sp) => sp.kind !== "climate");
+    }
     this._specs = new Map(specs.map((s) => [s.key, s]));
     const watch = new Set();
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
+    if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
     if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
+    if (ov === "live" || ov === "lights") for (const item of this._items(a)) for (const e of [item.main_entity, ...(item.entities || [])]) if (e && domainOf(e) === "media_player") watch.add(e);
     if (ov !== "plan") for (const item of this._items(a)) if (!this._hidden(item, ov)) for (const e of this._reads(item, ov)) watch.add(e);
     for (const s of specs) for (const e of s.ents || []) watch.add(e);
     if (ov === "lights") for (const sc of this._lights().scenes || []) for (const e of sc.lights || []) watch.add(e);
@@ -2391,28 +2903,30 @@ class DeviceFloorplanCard extends HTMLElement {
     const dockShown = dock.length > 1 && btn.position !== "hidden";
     // Layers live in the floor rail when there is one, else in the button bar, never on the plan
     // (#63, #75); without a bar, in the legend row.
-    const layersOn = ov === "network" && this._ov("network").layers !== false;
+    const lpos = this._layersPos();
+    const layersOn = lpos !== "hidden";
     const floors = this._floorStack();
     const hasRail = floors.length > 1;
-    const layersInBar = layersOn && !hasRail;
+    const layersInBar = layersOn && lpos === "bar";
+    // 0.7.5: a Layers corner on the bar's side shares that row / column (at its own end); "bar" = right after
+    // the overlay buttons. Either way it sits outside the scrolling overlay buttons.
+    const bp = btn.position;
+    const touch = dockShown && layersOn && !hasRail && lpos !== "bar"
+      && ((bp === "top" && lpos.startsWith("top")) || (bp === "bottom" && lpos.startsWith("bottom")) || (bp === "left" && lpos.endsWith("left")) || (bp === "right" && lpos.endsWith("right")));
+    const atStart = touch && (vertical ? lpos.startsWith("top") : lpos.endsWith("left"));
+    const slot = (on) => `<span class="lslot ${on ? "" : "lvoid"}">${on ? this._layersBtn(true) : ""}</span>`;
     const dockHtml = dockShown
-      ? `<div class="dockrow"><nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${dock.map((o) => {
+      ? `<div class="dockrow ${touch ? "share" : ""}">${touch ? slot(atStart) : ""}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${dock.map((o) => {
         const d = this._ovDef(o);
         const label = labels[o] || d.label;
         return `<button class="${o === ov ? "on" : ""}" data-ov="${cesc(o)}" aria-pressed="${o === ov}" title="${cesc(label)}"><ha-icon icon="${cesc(d.icon)}"></ha-icon><span>${cesc(label)}</span></button>`;
-      }).join("")}${layersInBar ? `<span class="sep" aria-hidden="true"></span>${this._layersBtn()}` : ""}${this._penMode() === "pen" ? this._penHtml() : ""}</nav></div>`
+      }).join("")}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${layersInBar ? `<span class="lslot lbar">${this._layersBtn(true)}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = look.title !== false && c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
     const people = this._peopleHtml(a);
     if (ov === "people" && !this._people().length) emptyMsg = `<div class="empty">Add people in the card settings (People)</div>`;
-    else if (ov !== "plan" && ov !== "people" && !specs.length) {
-      let t = "Nothing to show in this overlay";
-      if (ov === "health" && this._ov("health").only_problems) t = "All good: no low batteries or offline devices";
-      if (ov === "network" && this._ov("network").only_weak) t = `No weak or fair signals.${this._skippedUnknown ? ` ${this._skippedUnknown} device${this._skippedUnknown > 1 ? "s have" : " has"} no known signal: Zigbee comes from ZHA, others need their signal sensor enabled in Home Assistant.` : ""}`;
-      if (ov === "lights" && this._lights().off === "hidden") t = "All lights are off";
-      emptyMsg = `<div class="empty">${cesc(t)}</div>`;
-    }
+    // 0.7.7: no "nothing to show" text on the plan: an empty overlay just means nothing is happening.
     const pos = btn.position === "hidden" ? "bottom" : btn.position;
     const scale = this._scale || 1;
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
@@ -2421,19 +2935,20 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names} ${hasRail ? "hasrail" : ""}"><div class="box ${boxCls}" style="--ratio:${ratio}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._nightHtml(a)}${this._airHtml(a)}${this._pulseHtml(a)}${this._barsHtml(a)}
+          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._pulseHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           <svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${people.plan}${emptyMsg}
-        </div>${hasRail ? this._railHtml(floors, layersOn) : ""}</div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${layersOn && !(layersInBar && dockShown) && !touch ? `<div class="lcorner ${lpos === "bar" ? "top-right" : lpos}">${this._layersBtn(true)}</div>` : ""}</div>${hasRail ? this._railHtml(floors, false) : ""}</div>${people.row}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
       el.stateObj = this._hass.states[el.dataset.ent];
     }
     const img = this.shadowRoot.querySelector("img.plan");
-    if (img && a.image_fallback_url && !this._imgFailed) {
+    if (img && a.image_fallback_url && !this._imgFailed && !img._dfErr) {
+      img._dfErr = true;
       img.addEventListener("error", () => {
         this._imgFailed = true;
         this._update(true);
@@ -2445,6 +2960,7 @@ class DeviceFloorplanCard extends HTMLElement {
       this._ro.observe(box);
     }
     this._layoutSoon();
+    if (this._heat) requestAnimationFrame(() => this._drawHeat());
     if (this._menu) requestAnimationFrame(() => this._placeMenu());
     if (this._pillUntil && this._pillUntil > Date.now()) {
       clearTimeout(this._pillT);
@@ -2457,6 +2973,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (box) this._boxW = box.getBoundingClientRect().width || this._boxW;
     this._announce();
     if (this._popup && this._popup.type === "readings") this._fillHistory();
+    if ((this._popup && this._popup.type === "info") || this._prevShown) requestAnimationFrame(() => this._placeInfo());
   }
 
   /** Put the layers menu next to its button, inside the card (bar below, above, left or right). */
@@ -2468,10 +2985,26 @@ class DeviceFloorplanCard extends HTMLElement {
     const c = card.getBoundingClientRect();
     const b = btn.getBoundingClientRect();
     const m = menu.getBoundingClientRect();
-    const pos = btn.closest(".rail") ? "rail" : this._buttons().position;
+    const corner = btn.closest(".lcorner");
+    const shared = btn.closest(".lslot");
+    const pos = corner ? "corner" : btn.closest(".rail") ? "rail" : shared ? `s-${this._buttons().position}` : this._buttons().position;
     let x;
     let y;
-    if (pos === "rail") {
+    if (pos.startsWith("s-")) {
+      // From a shared row / column the menu opens towards the plan.
+      const bp = pos.slice(2);
+      if (bp === "left" || bp === "right") {
+        x = bp === "right" ? b.left - m.width - 8 : b.right + 8;
+        y = b.top + b.height / 2 < c.top + c.height / 2 ? b.top : b.bottom - m.height;
+      } else {
+        x = b.left + b.width / 2 < c.left + c.width / 2 ? b.left : b.right - m.width;
+        y = bp === "top" ? b.bottom + 8 : b.top - m.height - 8;
+      }
+    } else if (pos === "corner") {
+      const lp = this._layersPos();
+      x = lp.endsWith("right") ? b.right - m.width : b.left;
+      y = lp.startsWith("top") ? b.bottom + 8 : b.top - m.height - 8;
+    } else if (pos === "rail") {
       x = b.left - m.width - 8;
       y = b.top;
     } else if (pos === "left") {
@@ -2566,10 +3099,207 @@ class DeviceFloorplanCard extends HTMLElement {
     });
   }
 
+  /** 0.7.4: Comfort heatmap. Each shaped room is coloured from the temperatures on the plan: its own
+   *  sensors count fully, rooms open to it (shapes that overlap) count less, the rest only a little, so a
+   *  room with one sensor still gets a warmer and a cooler side. A room with no sensor of its own and no
+   *  open neighbour that has one stays uncoloured. Scale: lowest to highest reading shown right now. */
+  _heatGrid(a, specs, ratio) {
+    const rooms = Object.entries(a.areas || {}).filter(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3);
+    if (!rooms.length) return null;
+    // The temperatures Comfort shows, each sensor once and at its own spot: a phantom counts with its real
+    // member sensors where they are placed (also when they are hidden from Comfort), at the phantom's
+    // spot only when a member has no spot of its own. A sensor shown both on its own and in a phantom counts once.
+    const hass = this._hass;
+    const spotOf = {};
+    for (const d of Object.values(a.devices || {})) if (d.x != null) for (const e of d.entities || []) if (!spotOf[e]) spotOf[e] = d;
+    for (const [e, d] of Object.entries(a.entities || {})) if (d && d.x != null) spotOf[e] = d;
+    const tempOf = (e) => {
+      const st = hass.states[e];
+      if (!live(st)) return null;
+      if (domainOf(e) === "climate") return num(st.attributes.current_temperature) ? Number(st.attributes.current_temperature) : null;
+      return kindOf(e, st) === "temperature" && num(st.state) ? Number(st.state) : null;
+    };
+    const byEnt = new Map();
+    for (const sp of specs) {
+      for (const e of new Set((sp.heatEnts || sp.ents || []).map((x) => String(x).split("#")[0]))) {
+        const v = tempOf(e);
+        if (v == null) continue;
+        const at = sp.phantom ? spotOf[e] || sp : sp;
+        const prev = byEnt.get(e);
+        if (prev && !(prev.viaPhantom && !sp.phantom)) continue;
+        byEnt.set(e, { x: at.x, y: at.y, v, viaPhantom: !!sp.phantom });
+      }
+    }
+    const pts = [...byEnt.values()].map((p) => ({ ...p, ri: rooms.findIndex(([, r]) => inPoly(p.x, p.y, r.shape)) }));
+    if (!pts.length) return null;
+    const GW = 120;
+    const GH = Math.max(20, Math.round(GW / ratio));
+    const cellRooms = new Array(GW * GH);
+    const link = rooms.map(() => new Set());
+    for (let j = 0; j < GH; j++) {
+      for (let i = 0; i < GW; i++) {
+        const x = ((i + 0.5) / GW) * 100;
+        const y = ((j + 0.5) / GH) * 100;
+        const inside = [];
+        rooms.forEach(([, r], k) => {
+          if (inPoly(x, y, r.shape)) inside.push(k);
+        });
+        cellRooms[j * GW + i] = inside;
+        if (inside.length > 1) for (const p of inside) for (const q of inside) if (p !== q) link[p].add(q);
+      }
+    }
+    const own = rooms.map((_r, k) => pts.some((p) => p.ri === k));
+    const lit = rooms.map((_r, k) => own[k] || [...link[k]].some((q) => own[q]));
+    let lo = Math.min(...pts.map((p) => p.v));
+    let hi = Math.max(...pts.map((p) => p.v));
+    if (hi - lo < 1.5) {
+      const mid = (hi + lo) / 2;
+      lo = mid - 0.75;
+      hi = mid + 0.75;
+    }
+    const val = new Float32Array(GW * GH).fill(NaN);
+    for (let j = 0; j < GH; j++) {
+      for (let i = 0; i < GW; i++) {
+        const inside = cellRooms[j * GW + i];
+        const k = inside.find((q) => lit[q]);
+        if (k == null) continue;
+        const x = ((i + 0.5) / GW) * 100;
+        const y = ((j + 0.5) / GH) * 100;
+        let sw = 0;
+        let sv = 0;
+        for (const p of pts) {
+          const f = inside.includes(p.ri) ? 1 : link[k].has(p.ri) ? 0.4 : 0.08;
+          const d2 = (x - p.x) ** 2 + ((y - p.y) / ratio) ** 2;
+          const w = f / (d2 + 4);
+          sw += w;
+          sv += w * p.v;
+        }
+        val[j * GW + i] = sv / sw;
+      }
+    }
+    // Smooth twice (only inside the coloured area) so the bands and contour lines come out soft.
+    for (let pass = 0; pass < 2; pass++) {
+      const src = val.slice();
+      for (let j = 0; j < GH; j++) {
+        for (let i = 0; i < GW; i++) {
+          if (Number.isNaN(src[j * GW + i])) continue;
+          let n = 0;
+          let t = 0;
+          for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+            const ii = i + di;
+            const jj = j + dj;
+            if (ii < 0 || jj < 0 || ii >= GW || jj >= GH) continue;
+            const v = src[jj * GW + ii];
+            if (!Number.isNaN(v)) {
+              n++;
+              t += v;
+            }
+          }
+          val[j * GW + i] = t / n;
+        }
+      }
+    }
+    if (!lit.some(Boolean)) return null;
+    const range = hi - lo;
+    const step = range <= 2 ? 0.25 : range <= 4 ? 0.5 : 1;
+    return { GW, GH, val, lo, hi, step, rooms: rooms.map(([, r], k) => (lit[k] ? r.shape : null)).filter(Boolean) };
+  }
+
+  _drawHeat() {
+    const h = this._heat;
+    const cv = this.shadowRoot && this.shadowRoot.querySelector("canvas.heat");
+    if (!h || !cv) return;
+    const W = cv.clientWidth;
+    const H = cv.clientHeight;
+    if (!W || !H) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    const ctx = cv.getContext("2d");
+    ctx.scale(dpr, dpr);
+    const { GW, GH, val, lo, hi, step } = h;
+    const small = document.createElement("canvas");
+    small.width = GW;
+    small.height = GH;
+    const sx = small.getContext("2d");
+    const img = sx.createImageData(GW, GH);
+    for (let k = 0; k < GW * GH; k++) {
+      const v = val[k];
+      if (Number.isNaN(v)) continue;
+      const [r, g, b] = heatRgb((v - lo) / (hi - lo));
+      img.data.set([r, g, b, 255], k * 4);
+    }
+    sx.putImageData(img, 0, 0);
+    // Only inside the rooms that get a colour.
+    ctx.save();
+    ctx.beginPath();
+    for (const sh of h.rooms) {
+      sh.forEach(([x, y], i) => (i ? ctx.lineTo((x / 100) * W, (y / 100) * H) : ctx.moveTo((x / 100) * W, (y / 100) * H)));
+      ctx.closePath();
+    }
+    ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.filter = `blur(${Math.max(4, W / 90).toFixed(1)}px)`;
+    ctx.globalAlpha = this._heatOp() / 100;
+    ctx.drawImage(small, 0, 0, W, H);
+    ctx.filter = "none";
+    ctx.globalAlpha = 1;
+    // Soft white contour lines (marching squares on the smoothed grid).
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 0.7;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const cw = W / GW;
+    const ch = H / GH;
+    const at = (i, j) => val[j * GW + i];
+    for (let lv = Math.ceil(lo / step) * step; lv < hi; lv += step) {
+      ctx.beginPath();
+      for (let j = 0; j < GH - 1; j++) {
+        for (let i = 0; i < GW - 1; i++) {
+          const a0 = at(i, j);
+          const b0 = at(i + 1, j);
+          const c0 = at(i + 1, j + 1);
+          const d0 = at(i, j + 1);
+          if (Number.isNaN(a0) || Number.isNaN(b0) || Number.isNaN(c0) || Number.isNaN(d0)) continue;
+          const e = [];
+          const cross = (v1, v2, x1, y1, x2, y2) => {
+            if ((v1 < lv) === (v2 < lv)) return;
+            const t = (lv - v1) / (v2 - v1);
+            e.push([(x1 + (x2 - x1) * t + 0.5) * cw, (y1 + (y2 - y1) * t + 0.5) * ch]);
+          };
+          cross(a0, b0, i, j, i + 1, j);
+          cross(b0, c0, i + 1, j, i + 1, j + 1);
+          cross(d0, c0, i, j + 1, i + 1, j + 1);
+          cross(a0, d0, i, j, i, j + 1);
+          for (let q = 0; q + 1 < e.length; q += 2) {
+            ctx.moveTo(e[q][0], e[q][1]);
+            ctx.lineTo(e[q + 1][0], e[q + 1][1]);
+          }
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Heatmap strength in % (viewer's slider, else the card's setting, else 52). */
+  _heatOp() {
+    const v = (this._lay.comfort || {}).heatOp;
+    const d = Number(this._ov("comfort").heatmap_opacity);
+    return Number.isFinite(v) ? v : Number.isFinite(d) && d > 0 ? d : 52;
+  }
+
+  _heatLegendHtml() {
+    const h = this._heat;
+    const f = (v) => `${this._num1 ? this._num1(v) : v.toFixed(1)}°`;
+    const grad = HEAT_STOPS.map(([t, c]) => `rgb(${c.join(",")}) ${Math.round(t * 100)}%`).join(", ");
+    return `<div class="heatleg"><span class="ht">Room temperature</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">Estimated between sensors</span><label class="hop" title="Heatmap strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="Heatmap strength"></label></div>`;
+  }
+
   /** Rooms (#53): names at their spots, in the overlays chosen in the editor. */
   _roomsHtml(a) {
     const r = this._rooms();
-    if (!Array.isArray(r.show_in) || !r.show_in.includes(this._overlay)) return "";
+    if (!this._layerOn(this._overlay, "rooms", this._roomsDefault(this._overlay))) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
     return Object.entries(a.areas || {}).filter(([id]) => !(r.hidden || []).includes(id)).map(([id, room]) => {
       const name = (r.names && r.names[id]) || room.name;
@@ -2583,14 +3313,14 @@ class DeviceFloorplanCard extends HTMLElement {
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
       const cls = ["m", edgeCls(s.x, s.y), "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
-      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon></span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
+      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon></span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     const icon = s.icon
       ? `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`
       : s.eid && this._hass.states[s.eid]
         ? `<ha-state-icon data-ent="${cesc(s.eid)}"></ha-state-icon>`
         : `<ha-icon icon="mdi:help-circle-outline"></ha-icon>`;
-    const cls = ["m", edgeCls(s.x, s.y), s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : ""].join(" ");
+    const cls = ["m", edgeCls(s.x, s.y), s.kind, s.on ? "on" : "off", s.dim ? "dim" : "", s.unavail ? "unavail" : "", this._hl === s.key ? "hl" : "", s.glow ? "glow" : "", s.extras && s.extras.length ? "hasx" : "", s.noicon ? "noi" : "", this._pick && this._selId === s.item.id ? "sel" : "", s.ghost ? "ghost" : ""].join(" ");
     // #112: a light that's on shows its real colour (or the lamp colour from the Editor).
     let lc = "";
     if (s.kind === "light" && s.on) {
@@ -2601,7 +3331,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const xs = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const bond = ""; // #86: a bond is one device on the card, no badge
     const label = `${s.name}${s.st ? ` · ${this._fmt(s.eid)}` : ""}`;
-    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
+    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
   }
 
   _chipHtml(s) {
@@ -2609,21 +3339,21 @@ class DeviceFloorplanCard extends HTMLElement {
     const xl0 = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const xl = xl0 + bdg;
     if (s.cl2 && s.compact) {
-      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word ? `<span class="mw">${cesc(s.word)}</span>` : ""}<span class="t">${cesc(s.temp || "—")}</span>${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
+      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== "Off") ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.cl2) {
-      const left = `<span class="mc"><span class="mw">${cesc(s.word)}</span>${s.set ? `<span class="st">${cesc(s.set)}</span>` : ""}</span>`;
-      const right = `<span class="tc"><span class="t">${cesc(s.temp || "—")}</span>${s.hum ? `<span class="h"><ha-icon icon="mdi:water"></ha-icon>${cesc(s.hum)}</span>` : ""}</span>`;
-      return `<button class="chip cl2 ${s.cls} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.set, s.temp, s.hum].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${left}<span class="vs"></span>${right}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
+      const left = s.word || s.set ? `<span class="mc"><span class="mw">${cesc(s.word)}</span>${s.set ? `<span class="st">${cesc(s.set)}</span>` : ""}</span>` : "";
+      const right = s.temp || s.hum ? `${left ? `<span class="vs"></span>` : ""}<span class="tc">${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${s.hum ? `<span class="h"><ha-icon icon="mdi:water"></ha-icon>${cesc(s.hum)}</span>` : ""}</span>` : "";
+      return `<button class="chip cl2 ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.set, s.temp, s.hum].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${left}${right}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.rd && !s.icon) {
       // #94: readings in the AC chip style: temperature large, 💧 humidity small under it.
       const t = s.rd.t ? `<span class="t">${cesc(s.rd.t.replace(/\s?°C|\s?°F/, "°"))}</span>` : "";
       const h = s.rd.h ? `<span class="${t ? "h" : "t"}"><ha-icon icon="mdi:water"></ha-icon>${cesc(s.rd.h)}</span>` : "";
-      return `<button class="chip rd ${s.cls} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}"><span class="tc">${t}${h}</span>${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
+      return `<button class="chip rd ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}"><span class="tc">${t}${h}</span>${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     const first = s.icon ? `<span class="ico"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.lines[0] || "")}</span>` : `<span class="l1">${cesc(s.lines[0] || "")}</span>`;
-    return `<button class="chip ${s.cls} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}">${first}${s.lines[1] ? `<span class="l2">${cesc(s.lines[1])}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}</span></button>`;
+    return `<button class="chip ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}">${first}${s.lines[1] ? `<span class="l2">${cesc(s.lines[1])}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
   }
 
   /** Connections present on this plan (for the layers menu). */
@@ -2649,8 +3379,18 @@ class DeviceFloorplanCard extends HTMLElement {
     const hasZ = present.includes("zigbee") && shown.includes("zigbee");
     const hasW = shown.includes("network") && [...(this._specs || new Map()).values()].some((s) => s.rt);
     const hasH = [...(this._specs || new Map()).values()].some((s) => s.type === "net" && s.item.via && this._specs.has(s.item.via));
+    const ov = this._overlay;
+    const rooms = this._layerOn(ov, "rooms", this._roomsDefault(ov));
+    const lay = (name, icon, label) => {
+      const on = this._layerOn(ov, name, this._layerDefault(ov, name));
+      return `<button class="${on ? "on" : ""}" data-lay="${name}">${tick(on)}<ha-icon icon="${icon}"></ha-icon>${label}</button>`;
+    };
+    const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
+    const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
+    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}`;
+    if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
     const roles = this._rolesPresent();
-    return `<div class="lmenu" role="menu" style="visibility:hidden"><h4>Connections</h4>
+    return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
       <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
       ${present.map((cn) => `<button class="chk ${custom && shown.includes(cn) ? "on" : ""}" data-conn="${cn}">${chk(custom && shown.includes(cn))}<ha-icon icon="${CONNS[cn].icon}"></ha-icon>${cesc(CONNS[cn].label)}</button>`).join("")}
       ${roles.length > 1 ? `<hr><h4>Show</h4>${roles.map((r) => `<button class="chk ${!(n.roles || []).includes(r) ? "on" : ""}" data-role="${r}">${chk(!(n.roles || []).includes(r))}<i style="display:inline-block;width:10px;height:10px;border-radius:${ROLES[r].shape === "round" ? "50%" : "2px"};background:${ROLES[r].color}"></i>${cesc(ROLES[r].label)}</button>`).join("")}` : ""}
@@ -2659,7 +3399,7 @@ class DeviceFloorplanCard extends HTMLElement {
       ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}Wi-Fi / LAN links</button>` : ""}
       ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>` : ""}
       <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}Legend</button>
-      ${hasZ ? `<div class="sl"><div><span>Minimum LQI</span><b>${n.minLqi}</b></div><input type="range" min="0" max="250" step="5" value="${n.minLqi}" data-minlqi="1" aria-label="Minimum LQI"></div>` : ""}
+      ${hasZ ? `<div class="sl"><div><span>Minimum LQI</span><b>${n.minLqi}</b></div><input type="range" min="0" max="250" step="5" value="${n.minLqi}" data-minlqi="1" aria-label="Minimum LQI"></div>` : ""}${reset}
     </div>`;
   }
 
@@ -2843,7 +3583,11 @@ class DeviceFloorplanCard extends HTMLElement {
         const cy = g.reduce((n, r) => n + r.ay, 0) / g.length;
         const left = Math.max(2, Math.min(W - gw - 2, cx - gw / 2));
         const top = Math.max(2, Math.min(H - gh - 2, cy - gh / 2));
-        g.sort((p, q) => p.ay - q.ay || p.ax - q.ax).forEach((r, i) => {
+        // Rows top to bottom; inside a row, left to right as on the plan (so neighbours never swap sides).
+        const byY = [...g].sort((p, q) => p.ay - q.ay || p.ax - q.ax);
+        const ordered = [];
+        for (let k = 0; k < byY.length; k += cols) ordered.push(...byY.slice(k, k + cols).sort((p, q) => p.ax - q.ax));
+        ordered.forEach((r, i) => {
           const row = Math.floor(i / cols);
           const inRow = Math.min(cols, g.length - row * cols);
           const col = i % cols;
@@ -2974,6 +3718,16 @@ class DeviceFloorplanCard extends HTMLElement {
 
   _onClick(e) {
     const t = e.target;
+    // Edit markers: the info card preview is only a preview, its buttons are not run.
+    if (this._pick && t.closest(".pop.prev")) {
+      if (t.closest("[data-close]")) {
+        this._prevHide = this._selId;
+        return this._update(true);
+      }
+      const b = t.closest("[data-appldone],[data-iopen],[data-itg],[data-press],[data-mi]");
+      if (b) this._toast(`Preview: “${b.textContent.trim().slice(0, 40)}” isn't run while editing`);
+      return;
+    }
     if (t.closest("[data-pen]")) {
       e.stopPropagation();
       return this._openPen();
@@ -3019,6 +3773,24 @@ class DeviceFloorplanCard extends HTMLElement {
     if (stp) return this._stepFloor(Number(stp.dataset.step));
     const pl = t.closest("[data-pulse]");
     if (pl) return this._moreInfo(pl.dataset.pulse);
+    const ad = t.closest("[data-appldone]");
+    if (ad) {
+      if (this._applDone) delete this._applDone[ad.dataset.appldone];
+      lsSet(`dfc_appl_${this._lsKey()}`, this._applDone || {});
+      this._popup = null;
+      return this._update(true);
+    }
+    const apl = t.closest("[data-appl]");
+    if (apl) {
+      if (this._held) {
+        this._held = false;
+        return;
+      }
+      const keys = apl.dataset.appl.split(",");
+      if (this._pick) return this._pick(keys[0]); // Edit markers: select it
+      this._popup = keys.length > 1 ? { type: "appl", keys } : { type: "info", appl: keys[0] };
+      return this._update(true);
+    }
     const bar = t.closest("[data-bar]");
     if (bar) return this._moreInfo(bar.dataset.bar);
     const cv = t.closest("[data-cov]");
@@ -3028,6 +3800,27 @@ class DeviceFloorplanCard extends HTMLElement {
     const tg = t.closest("[data-tg]");
     if (tg) {
       this._net = { ...this._net, [tg.dataset.tg]: !this._net[tg.dataset.tg] };
+      this._saveNet();
+      return this._update(true);
+    }
+    if (t.closest("[data-layreset]")) {
+      const ov = this._overlay;
+      const rest = { ...this._lay };
+      delete rest[ov];
+      this._lay = rest;
+      lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
+      if (ov === "network") {
+        lsSet(`dfc_net_${this._lsKey()}`, {});
+        this.setConfig(this._raw || this._config);
+      }
+      return this._update(true);
+    }
+    const ly = t.closest("[data-lay]");
+    if (ly) {
+      const ov = this._overlay;
+      const name = ly.dataset.lay;
+      const dflt = name === "rooms" ? this._roomsDefault(ov) : this._layerDefault(ov, name);
+      this._setLayer(ov, name, !this._layerOn(ov, name, dflt));
       return this._update(true);
     }
     if (t.closest(".lmenu")) return;
@@ -3060,6 +3853,28 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     const mi = t.closest("[data-mi]");
     if (mi) return this._moreInfo(mi.dataset.mi);
+    const io = t.closest("[data-iopen]");
+    if (io) {
+      const p0 = this._popup || {};
+      this._popup = null;
+      if (p0.appl) return this._moreInfo(io.dataset.iopen);
+      const s0 = this._specs && this._specs.get(io.dataset.iopen);
+      if (s0) this._details(s0);
+      return this._update(true);
+    }
+    const itg = t.closest("[data-itg]");
+    if (itg) {
+      const s0 = this._specs && this._specs.get(itg.dataset.itg);
+      if (s0) this._toggle({ ...s0, ents: this._infoToggles(s0) });
+      return;
+    }
+    const ip = t.closest("[data-press]");
+    if (ip) {
+      const e0 = ip.dataset.press;
+      this._hass.callService(domainOf(e0), "press", { entity_id: e0 });
+      ip.classList.add("done");
+      return;
+    }
     const pe = t.closest("[data-person]");
     if (pe) return this._moreInfo(pe.dataset.person);
     const k = t.closest("[data-k]");
@@ -3075,7 +3890,16 @@ class DeviceFloorplanCard extends HTMLElement {
     const s = this._specs && this._specs.get(k.dataset.k);
     if (!s) return;
     if (this._pick) return this._pick(s.item.id, s); // marker editing (#87/#95)
-    if (s.phantom) return s.type === "chip" ? this._openReadings(s) : this._openList(s);
+    // 0.7.5: bonds and phantoms (several things in one marker) open the info card; a single device does its tap action.
+    if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom)) {
+      this._popup = { type: "info", key: s.key };
+      return this._update(true);
+    }
+    return this._runAction(s);
+  }
+
+  /** The marker's own action (long press, or "Open ›" in the info card). */
+  _runAction(s) {
     const act = this._tapAction(s);
     if (act === "none") return;
     if (act === "network") {
@@ -3102,8 +3926,15 @@ class DeviceFloorplanCard extends HTMLElement {
       this._covT = setTimeout(() => this._hass.callService("cover", "set_cover_position", { entity_id: t.dataset.covpos, position: Number(t.value) }), 350);
       return;
     }
+    if (t && t.dataset && t.dataset.heatop) {
+      this._lay = { ...this._lay, comfort: { ...(this._lay.comfort || {}), heatOp: Number(t.value) } };
+      lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
+      this._drawHeat();
+      return;
+    }
     if (t && t.dataset && t.dataset.minlqi) {
       this._net = { ...this._net, minLqi: Number(t.value) };
+      this._saveNet();
       const lab = t.parentElement.querySelector("b");
       if (lab) lab.textContent = t.value;
       this._key = null;
@@ -3111,12 +3942,248 @@ class DeviceFloorplanCard extends HTMLElement {
     }
   }
 
-  /** Hold / right-click: HA's details (a list for bonds). */
+  /** Hold / right-click: Home Assistant's details (graphs for a phantom). In Edit markers it's only simulated. */
   _hold(key) {
     const s = this._specs && this._specs.get(key);
     if (!s) return;
-    if (s.item.bond || s.ents.length > 1) return this._openList(s);
-    this._moreInfo(s.ents[0]);
+    const multi = s.phantom || s.item.bond || s.item.phantom;
+    if (this._pick) {
+      const tap = multi ? "info card" : { "more-info": "details", toggle: "switch on / off", readings: "graphs", none: "nothing", network: "network info" }[this._tapAction(s)] || this._tapAction(s);
+      return this._toast(`Tap → ${tap} · long press → ${s.phantom ? "graphs" : "details"} (not run while editing)`);
+    }
+    this._details(s);
+  }
+
+  /** Home Assistant's details of a marker: graphs for a phantom, the leading entity's dialog otherwise. */
+  _details(s) {
+    if (s.phantom) return s.type === "chip" ? this._openReadings(s) : this._openList(s);
+    this._moreInfo(s.eid || (s.ents || [])[0]);
+  }
+
+  /** Hold on an appliance: its details. */
+  _holdAppl(ids) {
+    const o = (this._appls || []).find((x) => x.ap.item.id === String(ids).split(",")[0]);
+    if (!o) return;
+    if (this._pick) return this._toast("Long press → details (not run while editing)");
+    const ap = o.ap;
+    this._moreInfo(ap.status || ap.running || ap.power || ap.plug || ap.item.main_entity);
+  }
+
+  /** A short message on the card (Edit markers simulation). */
+  _toast(text) {
+    const card = this.shadowRoot && this.shadowRoot.querySelector("ha-card");
+    if (!card) return;
+    let el = card.querySelector(".ftoast");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "ftoast";
+      card.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+
+  /** "Name · state" of the thing at a screen point (markers, chips, openings, appliances, people). */
+  _tipAt(x, y) {
+    const root = this.shadowRoot;
+    const hit = root.elementFromPoint ? root.elementFromPoint(x, y) : null;
+    if (!hit || !hit.closest || hit.closest(".pop, .lmenu, .dock, .rail")) return { text: "", el: null };
+    const el = hit.closest("[data-k],[data-appl],[data-bar],[data-person]");
+    let text = "";
+    if (el && el.dataset.k) {
+      const s = this._specs && this._specs.get(el.dataset.k);
+      text = s ? this._tipText(s) : "";
+    }
+    if (el && !text) text = el.getAttribute("aria-label") || el.getAttribute("title") || "";
+    return { text, el };
+  }
+
+  /** The one tooltip, placed inside the card above the point (finger or mouse). */
+  _showTip(text, x, y, el, finger) {
+    const card = this.shadowRoot && this.shadowRoot.querySelector("ha-card");
+    if (!card) return;
+    let tip = card.querySelector(".xtip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "xtip";
+      card.appendChild(tip);
+    }
+    clearTimeout(this._xtipT);
+    if (!text) return tip.classList.remove("show");
+    tip.textContent = text;
+    const c = card.getBoundingClientRect();
+    let ax = x, ay = y - (finger ? 48 : 0);
+    if (el && !finger) {
+      const r = el.getBoundingClientRect();
+      ax = r.left + r.width / 2;
+      ay = r.top - 6;
+    }
+    const w = tip.offsetWidth || 120;
+    const h = tip.offsetHeight || 28;
+    const left = Math.max(w / 2 + 4, Math.min(c.width - w / 2 - 4, ax - c.left));
+    const top = Math.max(h + 4, ay - c.top);
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+    tip.classList.add("show");
+  }
+
+  _hideTip() {
+    clearTimeout(this._hovT);
+    this._hovEl = null;
+    const tip = this.shadowRoot && this.shadowRoot.querySelector(".xtip");
+    if (tip) tip.classList.remove("show");
+  }
+
+  /** PC hover: after a short pause over a thing, its name and state. */
+  _hoverSoon(x, y) {
+    if (this._hovRaf) return;
+    this._hovRaf = requestAnimationFrame(() => {
+      this._hovRaf = null;
+      const { text, el } = this._tipAt(x, y);
+      if (el === this._hovEl) return;
+      this._hovEl = el;
+      clearTimeout(this._hovT);
+      if (!el || !text) return this._showTip("", 0, 0);
+      this._hovT = setTimeout(() => this._showTip(text, x, y, el, false), 150);
+    });
+  }
+
+  /** Explore (touch): show the name and state of what's under the finger. */
+  _explore(x, y) {
+    const { text } = this._tipAt(x, y);
+    this._showTip(text, x, y, null, true); // above the finger, never under it
+  }
+
+  _exploreEnd() {
+    clearTimeout(this._xtipT);
+    this._xtipT = setTimeout(() => {
+      const tip = this.shadowRoot && this.shadowRoot.querySelector(".xtip");
+      if (tip) tip.classList.remove("show");
+    }, 1000);
+  }
+
+  /** "Name · state" for the hover tooltip and explore. */
+  _tipText(s) {
+    return `${s.name}${this._tipState(s) ? ` · ${this._tipState(s)}` : ""}`;
+  }
+
+  _tipState(s) {
+    if (s.type === "net") return "";
+    let t = "";
+    if (s.type === "chip") t = s.cl2 ? [s.word, s.set, s.temp].filter(Boolean).join(" · ") : (s.lines || []).filter(Boolean).join(" · ");
+    else if (s.eid || (s.ents || [])[0]) t = this._fmt(s.eid || s.ents[0]);
+    return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
+  }
+
+  /** Entities the info card can switch (lights, switches, fans, helpers). */
+  _infoToggles(s) {
+    const ents = [...new Set(s.ents || [])].filter((e) => ["light", "switch", "fan", "input_boolean"].includes(domainOf(e)) && this._hass.states[e] && !this._aux(e));
+    // Only lamp bonds get on / off, and only their lights: never an appliance's plug or a config switch.
+    if (this._applOf(s.item)) return [];
+    const lamp = domainOf(s.eid || "") === "light" || s.item.group === "lights" || s.item.actsAs === "light" || s.item.as === "light";
+    return lamp ? ents.filter((e) => domainOf(e) === "light" || (s.item.group === "lights" && e === s.eid)) : [];
+  }
+
+  /** A configuration or diagnostic entity (Home Assistant's category): never listed or switched. */
+  _aux(e) {
+    const reg = this._hass.entities && this._hass.entities[e];
+    const st = this._hass.states[e];
+    const cat = (reg && reg.entity_category) || (st && st.attributes && st.attributes.entity_category);
+    return cat === "config" || cat === "diagnostic";
+  }
+
+  /** Edit markers (0.7.5): the selected bond / phantom / appliance shows its info card as a preview. */
+  _previewPop() {
+    const id = this._pick && this._selId;
+    if (!id || this._prevHide === id) return null;
+    if ((this._appls || []).some((o) => o.ap.item.id === id)) return { type: "info", appl: id, prev: true };
+    const sp = [...((this._specs && this._specs.values()) || [])].find((x) => x.item && x.item.id === id);
+    return sp && (sp.phantom || sp.item.bond || sp.item.phantom) ? { type: "info", key: sp.key, prev: true } : null;
+  }
+
+  /** 0.7.5: the info card: name, state, every reading, buttons; "Open ›" = the marker's action. */
+  _infoHtml(p) {
+    const hass = this._hass;
+    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    let name, dot, state, item, lead, reads = [], toggles = [], open = "", anchor, attention = "";
+    if (p.appl) {
+      const o = (this._appls || []).find((x) => x.ap.item.id === p.appl);
+      if (!o) return "";
+      const { ap, st } = o;
+      item = ap.item;
+      name = this._dev(item.id).name || item.name;
+      dot = `rgb(${st.col || "150,150,150"})`;
+      const per = this._per(item, "live");
+      const chosen = per.lead && hass.states[per.lead] ? per.lead : null;
+      state = [chosen ? this._fmt(chosen) : st.word, st.time, st.w].filter(Boolean).join(" · ");
+      lead = chosen || ap.status || ap.running || ap.power || ap.plug || item.main_entity;
+      reads = Array.isArray(per.extras) ? per.extras : [ap.remaining, ap.power].filter(Boolean);
+      if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">Unloaded</button>`;
+      open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">Open ›</button>` : "";
+      anchor = `[data-appl*="${CSS.escape(item.id)}"]`;
+    } else {
+      const s = this._specs && this._specs.get(p.key);
+      if (!s) return "";
+      item = s.item;
+      name = s.name;
+      const on = s.type === "chip" ? s.cls !== "off" : s.on;
+      dot = on ? s.color || "var(--dfc-accent)" : "#9e9e9e";
+      state = this._tipState(s) || "—";
+      lead = s.eid || (s.ents || [])[0];
+      const picked = Array.isArray(this._per(item, this._overlay).extras) ? this._per(item, this._overlay).extras : null;
+      reads = picked || [...(s.ents || []), ...(s.also || []), ...(item.entities || [])];
+      if (s.phantom) lead = null; // a phantom has no one leading entity: all its sensors are listed
+      toggles = this._infoToggles(s);
+      open = `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
+      anchor = `[data-k="${CSS.escape(s.key)}"]`;
+      if (toggles.length) {
+        const anyOn = toggles.some((e) => (hass.states[e] || {}).state === "on");
+        attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? "Turn off" : "Turn on"}</button>`;
+      }
+    }
+    reads = [...new Set(reads)].filter((e) => e && e !== lead && hass.states[e] && !this._aux(e) && !["button", "input_button"].includes(domainOf(e))).slice(0, 8);
+    const pool = [...new Set([...(item.entities || []), ...(item.allEntities || [])])];
+    const presses = pool.filter((e) => ["button", "input_button"].includes(domainOf(e)) && live(hass.states[e]) && !this._aux(e)).slice(0, 3);
+    const strip = (t) => {
+      const n = String(name || "").trim();
+      return n && t.toLowerCase().startsWith(`${n.toLowerCase()} `) ? t.slice(n.length + 1).replace(/^\w/, (c) => c.toUpperCase()) : t;
+    };
+    const rows = reads.map((e) => `<button class="irow" data-mi="${cesc(e)}"><span>${cesc(strip(this._entName(e)))}</span><b>${cesc(this._extraText(e))}</b></button>`).join("");
+    const pr = presses.map((e) => `<button class="ipress" data-press="${cesc(e)}">${cesc(strip(this._entName(e)))}</button>`).join("");
+    return `<div class="pop ip ${p.prev ? "prev" : ""}"><div class="icard" role="dialog" aria-label="${cesc(name)}" data-anc="${cesc(anchor)}"><div class="ih"><b>${cesc(name)}</b>${close}</div><div class="ist"><i style="background:${dot}"></i><span>${cesc(state)}</span></div>${rows ? `<div class="irows">${rows}</div>` : ""}${attention || pr ? `<div class="ibtns">${attention}${pr}</div>` : ""}${open ? `<div class="iacts">${open}</div>` : ""}</div></div>`;
+  }
+
+  _entName(e) {
+    const st = this._hass.states[e];
+    return (st && st.attributes.friendly_name) || e;
+  }
+
+  /** Put the info card next to its marker, inside the card. */
+  _placeInfo() {
+    const ic = this.shadowRoot && this.shadowRoot.querySelector(".icard");
+    if (!ic) return;
+    const pop = ic.parentElement.getBoundingClientRect();
+    const anc = this.shadowRoot.querySelector(ic.dataset.anc);
+    const r = ic.getBoundingClientRect();
+    let x = pop.width / 2, y = pop.height / 2, below = false;
+    if (anc) {
+      const a = anc.getBoundingClientRect();
+      x = a.left + a.width / 2 - pop.left;
+      y = a.top - pop.top - 10;
+      if (y - r.height < 6) {
+        y = a.bottom - pop.top + 10;
+        below = true;
+      }
+    } else {
+      y = (pop.height + r.height) / 2;
+    }
+    const left = Math.max(6, Math.min(pop.width - r.width - 6, x - r.width / 2));
+    const top = below ? Math.min(pop.height - r.height - 6, y) : Math.max(6, y - r.height);
+    ic.style.left = `${left}px`;
+    ic.style.top = `${top}px`;
+    ic.classList.add("placed");
   }
 
   _toggle(s) {
@@ -3224,11 +4291,25 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _popupHtml() {
-    const p = this._popup;
+    const p = this._popup || this._previewPop();
+    this._prevShown = !this._popup && !!p;
     if (!p) return "";
     const close = `<button data-close="1" aria-label="Close">×</button>`;
     if (p.type === "confirm") {
       return `<div class="pop"><div class="popin" role="dialog" aria-label="All off"><h3>Turn all lights off?${close}</h3><div>${p.n ? `${p.n} light${p.n > 1 ? "s are" : " is"} on.` : "No light is on right now."}</div><div class="acts"><button data-close="1">Cancel</button><button class="pri" data-confirm="1">All off</button></div></div></div>`;
+    }
+    if (p.type === "info") return this._infoHtml(p);
+    if (p.type === "appl") {
+      const list = (this._appls || []).filter((o) => p.keys.includes(o.ap.item.id));
+      if (!list.length) return "";
+      const rows = list.map(({ ap, st }) => {
+        const lead = ap.status || ap.running || ap.power || ap.plug || ap.item.main_entity;
+        const sub = [st.word, st.time, st.w].filter(Boolean).join(" · ");
+        const done = st.phase === "done" ? `<button class="mini" data-appldone="${cesc(ap.item.id)}">Unloaded</button>` : "";
+        return `<div class="arow"><button data-mi="${cesc(lead)}"><span class="ad" style="--ac:${st.col || "150,150,150"}"></span><span class="nm">${cesc(ap.item.name)}<small>${cesc(sub)}</small></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>${done}</div>`;
+      }).join("");
+      const title = list.length > 1 ? "Appliances" : list[0].ap.item.name;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(title)}"><h3>${cesc(title)}${close}</h3><div class="alist">${rows}</div></div></div>`;
     }
     const s = this._specs && this._specs.get(p.key);
     if (!s) return "";
@@ -3340,6 +4421,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _setOverlay(o) {
+    if (o === "plan") o = "live"; // 0.7.4: Plan is gone
     if (!this._ovDef(o)) return;
     this._overlay = o;
     this._popup = null;
@@ -3432,6 +4514,11 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big .bg-t { display:flex; align-items:center; justify-content:space-between; }
 .dfe-big .bg-c { border:0; background:transparent; color: var(--secondary-text-color); font-size:16px; cursor:pointer; }
 .dfe-big .bg-sel { border-bottom:1px solid var(--divider-color, #ddd); padding-bottom:10px; margin-bottom:10px; }
+.dfe-big .bg-sel.inl { margin:2px 0 10px 8px; padding:8px 10px 10px; border:1px solid color-mix(in srgb, var(--primary-color, #03a9f4) 40%, transparent); border-left:3px solid var(--primary-color, #03a9f4); border-radius:8px; }
+.dfe-big .bg-sel.inl { padding:6px 10px 10px; }
+.dfe-big .bg-sel.inl .bg-t, .dfe-big .bg-sel.inl .qhide { display:none; }
+.dfe-big .lr.sel .lb { white-space:nowrap; }
+.dfe-big .bg-c2 { border:0; background:transparent; color: var(--secondary-text-color); font-size:15px; cursor:pointer; padding:2px 6px; }
 .dfe-big .bg-lh { display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; }
 .dfe-big .bg-q { flex:1; min-width:0; font: inherit; padding:5px 8px; border-radius:8px; border:1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
 .dfe-big h6 { margin:10px 0 4px; font-size:12px; font-weight:500; color: var(--secondary-text-color); }
@@ -3649,6 +4736,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "default_overlay", selector: { select: { options: ovOpts, mode: "dropdown" } } },
         { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
         { name: "buttons_style", selector: { select: { options: [{ value: "labels", label: "Icons and labels" }, { value: "icons", label: "Icons only" }], mode: "dropdown" } } },
+        { name: "layers_button", selector: { select: { options: [{ value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
         { type: "expandable", name: "overlay_names", title: "Overlay names", icon: "mdi:rename", schema: ovOpts.filter((o) => OVERLAYS[o.value]).map((o) => ({ name: o.value, selector: { text: {} } })) },
       ],
       overlaysA: [
@@ -3675,13 +4763,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         },
       ],
       overlaysB: [
-        { type: "expandable", name: "comfort", title: "Comfort", icon: OVERLAYS.comfort.icon, schema: [{ name: "humidity", selector: { boolean: {} } }, { name: "humidity_alone", selector: { boolean: {} } }, { name: "climate", selector: { boolean: {} } }, { name: "combine", selector: { select: { options: [{ value: "average", label: "Average" }, { value: "min", label: "Lowest" }, { value: "max", label: "Highest" }], mode: "dropdown" } } }] },
+        { type: "expandable", name: "comfort", title: "Comfort", icon: OVERLAYS.comfort.icon, schema: [{ name: "heatmap", selector: { boolean: {} } }, { name: "heatmap_opacity", selector: { number: { min: 15, max: 90, step: 5, mode: "slider", unit_of_measurement: "%" } } }, { name: "readings", selector: { boolean: {} } }, { name: "climate_shown", selector: { boolean: {} } }, { name: "airflow", selector: { boolean: {} } }, { name: "humidity", selector: { boolean: {} } }, { name: "humidity_alone", selector: { boolean: {} } }, { name: "climate", selector: { boolean: {} } }, { name: "combine", selector: { select: { options: [{ value: "average", label: "Average" }, { value: "min", label: "Lowest" }, { value: "max", label: "Highest" }], mode: "dropdown" } } }] },
         { type: "expandable", name: "security", title: "Security", icon: OVERLAYS.security.icon, schema: [{ name: "show_quiet", selector: { boolean: {} } }, { name: "quiet_small", selector: { boolean: {} } }, { name: "cameras", selector: { boolean: {} } }] },
         {
           type: "expandable", name: "network", title: "Network", icon: OVERLAYS.network.icon,
           schema: [
             { name: "connections", selector: { select: { options: conns, multiple: true, mode: "list" } } },
-            { name: "layers", selector: { boolean: {} } },
             { name: "links", selector: { boolean: {} } },
             { name: "min_lqi", selector: { number: { min: 0, max: 250, step: 5, mode: "slider" } } },
             { name: "hub_links", selector: { boolean: {} } },
@@ -3712,9 +4799,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the buttons are", buttons_style: "Button style",
+      buttons_position: "Where the buttons are", buttons_style: "Button style", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
+      heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
       show_quiet: "Also show closed / idle (not only alerts)", cameras: "Show cameras",
       connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", wifi_links: "Draw Wi-Fi / LAN links to the router / access point (needs router device tracking)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
@@ -3735,11 +4823,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       overlays: [...OVERLAY_ORDER, ...(Array.isArray(c.people) && c.people.length ? ["people"] : []), ...this._custom().map((x) => x.id)],
       default_overlay: "live",
       ...c,
+      ...(Array.isArray(c.overlays) ? { overlays: c.overlays.filter((o) => o !== "plan") } : {}),
+      ...(c.default_overlay === "plan" ? { default_overlay: "live" } : {}),
       buttons_position: b.position || (look.dock === "hidden" ? "hidden" : "bottom"),
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
+      layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "top-right"),
       live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
-      comfort: { humidity: true, humidity_alone: true, climate: true, ...(c.comfort || {}) },
+      comfort: { heatmap: true, heatmap_opacity: 52, readings: true, climate_shown: true, airflow: true, humidity: true, humidity_alone: true, climate: true, ...(c.comfort || {}) },
       security: { show_quiet: true, quiet_small: true, cameras: true, ...(c.security || {}) },
       network: { connections: ["all"], layers: true, links: true, min_lqi: 0, hub_links: true, wifi_links: true, legend: true, labels: false, only_weak: false, ...(c.network || {}) },
       health: { low: 20, only_problems: false, ...(c.health || {}) },
@@ -3773,7 +4864,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     for (const k of ["live", "lights", "comfort", "security", "network", "health", "tap", "look", "overlay_names", "rooms", "buttons", "night"]) {
       if (!out[k]) continue;
       const v = {};
-      const d0 = k === "rooms" ? { show_in: ["plan"], style: "label", size: "m" } : k === "buttons" ? { position: "bottom", style: "labels" } : defaults[k] || {};
+      const d0 = k === "rooms" ? { show_in: ["live"], style: "label", size: "m" } : k === "buttons" ? { position: "bottom", style: "labels" } : defaults[k] || {};
       for (const [kk, vv] of Object.entries(out[k])) {
         if (vv === "" || vv == null) continue;
         if (Array.isArray(vv) && !vv.length && kk !== "show" && kk !== "show_in") continue;
@@ -4190,9 +5281,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       box.innerHTML = `<p>No room names on this plan yet. Place them in the Floorplan Editor (step Rooms).</p>`;
       return;
     }
-    const r = { show_in: ["plan"], style: "label", size: "m", hidden: [], names: {}, ...(this._config.rooms || {}) };
+    const r0 = this._config.rooms || {};
+    const r = { style: "label", size: "m", hidden: [], names: {}, ...r0, show_in: Array.isArray(r0.show_in) ? r0.show_in.map((o) => (o === "plan" ? "live" : o)) : ["live"] };
     const roomOpts = Object.entries(areas).map(([value, a]) => ({ value, label: a.name }));
-    const labels = { show_in: "Show room names in these overlays", style: "Style", size: "Size", hidden: "Hide these rooms on the card" };
+    const labels = { show_in: "Room names shown by default in (viewers can switch them under Layers)", style: "Style", size: "Size", hidden: "Hide these rooms on the card" };
     for (const [id, a] of Object.entries(areas)) labels[id] = `${a.name}: name on the card`;
     box.appendChild(this._form(
       [
@@ -4391,7 +5483,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       });
       const leadEl = sec.querySelector('[data-k="lead"]');
       if (leadEl) leadEl.addEventListener("change", () => {
-        this._savePer(id, ov, { lead: leadEl.value });
+        const x0 = per().extras;
+        this._savePer(id, ov, { lead: leadEl.value, ...(Array.isArray(x0) ? { extras: x0.filter((e) => e !== leadEl.value) } : {}) });
         done();
       });
       const addEl = sec.querySelector('[data-k="xadd"]');
@@ -4426,10 +5519,17 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       body.appendChild(this._form([
         { name: "icon", selector: { icon: {} } },
         { name: "tap", selector: { select: { options: [{ value: "default", label: "Default for its kind" }, ...TAP_OPTIONS], mode: "dropdown" } } },
-      ], { icon: p0.icon || dev().icon || "", tap: p0.tap || dev().tap || "default" }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: `Tap in ${ovLabel}` }, (v) => {
+      ], { icon: p0.icon || dev().icon || "", tap: p0.tap || dev().tap || "default" }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: item.bond || item.phantom ? `Tap in ${ovLabel} (bonds and phantoms open their info card)` : `Tap in ${ovLabel}` }, (v) => {
         this._savePer(id, ov, { icon: v.icon, tap: v.tap === "default" ? "" : v.tap });
         saved();
       }));
+      // 0.7.5: an appliance's status pill in Live.
+      if (ov === "live" && eng._applOf(item)) {
+        body.appendChild(this._form([{ name: "pill", selector: { select: { options: [{ value: "auto", label: "For a few minutes after it changes" }, { value: "always", label: "Always" }, { value: "never", label: "Never" }], mode: "dropdown" } } }], { pill: p0.pill || "auto" }, { pill: "Status label on the plan (finished stays until unloaded)" }, (v) => {
+          this._savePer(id, ov, { pill: v.pill === "auto" ? "" : v.pill });
+          saved();
+        }));
+      }
     } else if (ov === "plan") {
       const p = document.createElement("p");
       p.className = "bg-hint";
@@ -4446,6 +5546,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._saveDev(id, { value: v.value === "default" ? "" : v.value, one: v.value === "one" ? v.one : "" });
         if ((v.value === "one") !== prevOne) rerender();
         else saved();
+      }));
+    }
+    // 0.7.5: a climate unit's own temperature (a wrong built-in sensor can be left out everywhere).
+    if (!item.phantom && cands.some((e) => domainOf(e) === "climate")) {
+      body.appendChild(this._form([{ name: "own", selector: { boolean: {} } }], { own: dev().own_temp !== "off" }, { own: "Count this unit's own temperature in Comfort and the heatmap (a bonded room thermometer always wins)" }, (v) => {
+        this._saveDev(id, { own_temp: v.own ? "" : "off" });
+        saved();
       }));
     }
     const hasTemp = (item.entities || []).some((e) => kindOf(e, this._hass.states[e]) === "temperature");
@@ -4566,7 +5673,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         if (item) {
           selBox.innerHTML = `<div class="bg-t"><span></span><button class="bg-c" aria-label="Close">✕</button></div><div class="bg-p"></div>`;
           selBox.querySelector(".bg-t span").textContent = ((this._config.devices || {})[id] || {}).name || item.name;
-          this._markerPanel(selBox.querySelector(".bg-p"), item, a, eng, ovs, { current: ov, rerender: () => render(id), saved: () => list() });
+          this._markerPanel(selBox.querySelector(".bg-p"), item, a, eng, ovs, { current: ov, rerender: () => render(id), saved: () => {
+            const nm = side.querySelector(`.lr[data-id="${CSS.escape(id)}"] .lnm`);
+            if (nm) nm.innerHTML = `${cesc(((this._config.devices || {})[id] || {}).name || item.name)}${item.bond ? " <small>(bonded)</small>" : item.phantom ? " <small>(phantom)</small>" : ""}`;
+          } });
         }
       } else {
         selBox.innerHTML = `<p class="bg-hint">${ov === "plan" ? "Pick an overlay under the plan to edit its markers." : `Click a marker on the plan to change it in <b>${cesc(def ? def.label : "")}</b>: what it shows, extra readings, icon, tap. ✕ on a selected marker hides it here.`}</p>`;
@@ -4576,6 +5686,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const list = () => {
         const box = side.querySelector(".bg-groups");
         if (!box) return;
+        if (box.contains(selBox)) side.prepend(selBox); // keep the open settings while the list is rebuilt
         const e2 = this._engine();
         const ql = q.trim().toLowerCase();
         const name = (it) => ((this._config.devices || {})[it.id] || {}).name || it.name;
@@ -4588,7 +5699,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           else if (qual) rows.on.push(it);
           else rows.off.push(it);
         }
-        const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}</div>`;
+        for (const k of Object.keys(rows)) rows[k].sort((x, y) => name(x).localeCompare(name(y), undefined, { sensitivity: "base" }));
+        const hideBtn = (it) => (sel === it.id && rows.on.includes(it) ? `<button class="lb" data-hide="${cesc(it.id)}">Hide in ${cesc(def ? def.label : "")}</button>` : "");
+        const closeBtn = (it) => (sel === it.id ? `<button class="bg-c2" data-unpick="1" aria-label="Close">✕</button>` : "");
+        const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}${hideBtn(it)}${closeBtn(it)}</div>`;
         const custom = def && def.custom;
         box.innerHTML = (rows.hidden.length ? `<h6>Hidden here (${rows.hidden.length})</h6>${rows.hidden.map((it) => row(it, `<button class="lb" data-show="${cesc(it.id)}">↩ Show</button>`)).join("")}` : "")
           + (rows.on.length ? `<h6>On this overlay (${rows.on.length})</h6>${rows.on.map((it) => row(it, "")).join("")}` : "")
@@ -4596,7 +5710,25 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             ? `<h6>Not in this overlay (${rows.off.length})</h6>${rows.off.map((it) => row(it, custom ? `<button class="lb" data-add="${cesc(it.id)}">+ Add</button>` : `<small class="na">not for ${cesc(def ? def.label : "")}</small>`)).join("")}`
             : `<details><summary><h6 style="display:inline">Not for ${cesc(def ? def.label : "")} (${rows.off.length})</h6></summary>${rows.off.map((it) => row(it, "")).join("")}</details>`) : "")
           + `<p class="bg-hint" style="margin-top:10px">Devices that aren't on the plan yet: place them in the Floorplan Editor first.</p>`;
-        for (const b of box.querySelectorAll("[data-pick]")) b.addEventListener("click", () => render(b.dataset.pick));
+        for (const b of box.querySelectorAll("[data-pick]")) b.addEventListener("click", () => render(b.dataset.pick === sel ? null : b.dataset.pick));
+        for (const b of box.querySelectorAll("[data-unpick]")) b.addEventListener("click", () => render(null));
+        for (const b of box.querySelectorAll("[data-hide]")) b.addEventListener("click", () => {
+          const cur = (this._config.devices || {})[b.dataset.hide] || {};
+          this._saveDev(b.dataset.hide, { hide_in: [...new Set([...(cur.hide_in || []), ov])] });
+          render(b.dataset.hide);
+        });
+        // 0.7.5: the selected marker's settings open right under its row, and the row scrolls into view.
+        const r0 = sel && !String(sel).startsWith("person:") && box.querySelector(`.lr[data-id="${CSS.escape(sel)}"]`);
+        if (r0) {
+          const det = r0.closest("details");
+          if (det) det.open = true;
+          r0.after(selBox);
+          selBox.classList.add("inl");
+          if (!this._big || this._big.scrolled !== sel) {
+            if (this._big) this._big.scrolled = sel;
+            requestAnimationFrame(() => r0.scrollIntoView({ block: "start", behavior: "smooth" }));
+          }
+        } else selBox.classList.remove("inl");
         for (const b of box.querySelectorAll("[data-show]")) b.addEventListener("click", () => {
           const cur = (this._config.devices || {})[b.dataset.show] || {};
           this._saveDev(b.dataset.show, { hide_in: (cur.hide_in || []).filter((x) => x !== ov) });
@@ -4676,6 +5808,7 @@ class DeviceFloorplanChip extends HTMLElement {
 
   set hass(h) {
     this._hass = h;
+    this._tplSub();
     this._render();
   }
 
@@ -4690,11 +5823,15 @@ class DeviceFloorplanChip extends HTMLElement {
   connectedCallback() {
     this._onOv = this._onOv || (() => this._render(true));
     window.addEventListener("device-floorplan-overlay", this._onOv);
+    this._tplSub();
     this._render(true);
   }
 
   disconnectedCallback() {
     window.removeEventListener("device-floorplan-overlay", this._onOv);
+    this._tplFor = undefined;
+    if (this._tplUnsub) this._tplUnsub.then((u) => u && u()).catch(() => {});
+    this._tplUnsub = null;
   }
 
   _active() {
@@ -4713,8 +5850,10 @@ class DeviceFloorplanChip extends HTMLElement {
     if (!ph) return null;
     // #126: like the card, a member counts with its main entity (not every entity of its device).
     const devs = s.attributes.devices || {};
-    const mains = (ph.members || []).map((m) => (String(m).startsWith("entity:") ? String(m).slice(7) : (devs[m] || {}).main_entity)).filter(Boolean);
-    return { ...ph, mains };
+    const ents = s.attributes.entities || {};
+    const mem = (ph.members || []).map((m) => (String(m).startsWith("entity:") ? { ...(ents[String(m).slice(7)] || {}), main_entity: String(m).slice(7) } : devs[m] || {}));
+    const mains = mem.map((d) => d.main_entity).filter(Boolean);
+    return { ...ph, mains, units: phUnits(mem) };
   }
 
   /** #96: a bond ("plan_id:bond_id") as the value source. */
@@ -4741,10 +5880,50 @@ class DeviceFloorplanChip extends HTMLElement {
     return on === 0 ? "Off" : on === ents.length ? "On" : `${on} of ${ents.length} on`;
   }
 
+  /** 0.7.4: what the value counts, when it counts something: { n, total, word: "on" | "open" }. */
+  _count() {
+    const c = this._config || {};
+    const h = this._hass;
+    if (!h) return null;
+    const ON = ["on", "open", "opening", "playing", "home", "unlocked"];
+    const isOn = (e) => !!h.states[e] && ON.includes(h.states[e].state);
+    const wordOf = (list) => (list.some((e) => kindOf(e, h.states[e]) === "opening" || domainOf(e) === "cover") ? "open" : "on");
+    if (c.entity && h.states[c.entity]) {
+      const grp = h.states[c.entity].attributes.entity_id;
+      if (!Array.isArray(grp) || !grp.length || c.count === false) return null;
+      const all = grp.flatMap((e) => (h.states[e] && Array.isArray(h.states[e].attributes.entity_id) ? h.states[e].attributes.entity_id : [e]));
+      return { n: all.filter(isOn).length, total: all.length, word: wordOf(all) };
+    }
+    const b = this._bond();
+    if (b) {
+      const ents = (b.entities || []).filter((e) => h.states[e]);
+      if (ents.length < 2 || ents.every((e) => num(h.states[e].state))) return null;
+      return { n: ents.filter(isOn).length, total: ents.length, word: wordOf(ents) };
+    }
+    const ph = this._phantom();
+    if (!ph) return null;
+    const mains = ph.mains || [];
+    const kinds = mains.map((e) => kindOf(e, h.states[e]));
+    if (kinds.some((k) => ["temperature", "humidity", "motion"].includes(k))) return null;
+    if (kinds.includes("opening")) {
+      const ops = mains.filter((e, i) => kinds[i] === "opening");
+      return { n: ops.filter(isOn).length, total: ops.length, word: "open" };
+    }
+    const units = (ph.units || mains.map((e) => [e])).filter((u) => u.some((e) => ["light", "switch", "fan"].includes(kindOf(e, h.states[e]))));
+    if (!units.length) return null;
+    return { n: units.filter((u) => u.some(isOn)).length, total: units.length, word: "on" };
+  }
+
   _value() {
     const c = this._config || {};
     const h = this._hass;
     if (!h) return "";
+    const k = this._count();
+    if (k) {
+      // 0.7.4: value style: full "3 of 8 on" (default) or short "3 on" / "All off".
+      if (c.value_style === "short") return k.n ? `${k.n} ${k.word}` : k.word === "open" ? "All closed" : "All off";
+      return `${k.n} of ${k.total} ${k.word}`;
+    }
     if (c.entity && h.states[c.entity]) return h.formatEntityState ? h.formatEntityState(h.states[c.entity]) : h.states[c.entity].state;
     const b = this._bond();
     if (b) return this._bondValue(b);
@@ -4752,11 +5931,63 @@ class DeviceFloorplanChip extends HTMLElement {
     return ph ? phantomSummary(h, ph) : "";
   }
 
+  /** 0.7.4: the icon's glow colour ("" = none). Standard: while something is on; custom: a template. */
+  _glow() {
+    const c = this._config || {};
+    if (c.glow === "custom") return String(this._tplRes || "").trim();
+    if (c.glow !== "standard") return "";
+    const k = this._count();
+    const h = this._hass;
+    const on = k ? k.n > 0 : !!(c.entity && h && h.states[c.entity] && ["on", "open", "opening", "playing", "home", "unlocked"].includes(h.states[c.entity].state));
+    if (!on) return "";
+    if (c.glow_color) return c.glow_color;
+    return k && k.word === "open" ? "#5aa9ff" : c.overlay === "lights" || (k && k.word === "on") ? "#F2B84B" : "var(--primary-color)";
+  }
+
+  /** Custom glow: Home Assistant renders the template and sends every new result. */
+  _tplSub() {
+    const c = this._config || {};
+    const want = c.glow === "custom" && c.glow_template && this.isConnected && this._hass && this._hass.connection ? c.glow_template : null;
+    if (want === this._tplFor) return;
+    if (this._tplUnsub) this._tplUnsub.then((u) => u && u()).catch(() => {});
+    this._tplUnsub = null;
+    this._tplFor = want;
+    this._tplRes = "";
+    if (!want) return;
+    this._tplUnsub = this._hass.connection
+      .subscribeMessage((m) => {
+        this._tplRes = m && m.result != null ? m.result : "";
+        this._render(true);
+      }, { type: "render_template", template: want, report_errors: false })
+      .catch(() => null);
+  }
+
   _render(force = false) {
     if (!this._config) return;
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
-      this.shadowRoot.addEventListener("click", () => this._tap());
+      // 0.7.4: tap, and hold (hold_action: any Home Assistant action, e.g. a browser_mod popup).
+      const R = this.shadowRoot;
+      R.addEventListener("pointerdown", (e) => {
+        if (e.button > 0 || !(this._config || {}).hold_action) return;
+        this._held = false;
+        clearTimeout(this._holdT);
+        this._holdT = setTimeout(() => {
+          this._held = true;
+          this._runHold();
+        }, 500);
+      });
+      for (const ev of ["pointerup", "pointerleave", "pointercancel"]) R.addEventListener(ev, () => clearTimeout(this._holdT));
+      R.addEventListener("contextmenu", (e) => {
+        if ((this._config || {}).hold_action) e.preventDefault();
+      });
+      R.addEventListener("click", () => {
+        if (this._held) {
+          this._held = false;
+          return;
+        }
+        this._tap();
+      });
     }
     const c = this._config;
     const ph = this._phantom();
@@ -4765,7 +5996,9 @@ class DeviceFloorplanChip extends HTMLElement {
     const icon = c.icon || (bd ? bd.icon || (bd.domain === "light" ? "mdi:lightbulb-group" : "mdi:link-variant") : ph ? ph.icon || "dfp:phantom" : c.overlay && OVERLAYS[c.overlay] ? OVERLAYS[c.overlay].icon : "mdi:floor-plan");
     const val = this._value();
     const on = this._active();
-    const key = [label, icon, val, on].join("|");
+    const glow = this._glow();
+    const custom = c.glow === "custom" && glow;
+    const key = [label, icon, val, on, glow].join("|");
     if (!force && key === this._key) return;
     this._key = key;
     setShadow(this, `<style>
@@ -4776,9 +6009,11 @@ class DeviceFloorplanChip extends HTMLElement {
       .t { display:flex; flex-direction:column; min-width:0; line-height:1.2; }
       .l { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .v { font-size:12px; color: var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-      ha-card.on { background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color, #fff)); box-shadow: 0 0 0 2px var(--primary-color), 0 0 14px 2px color-mix(in srgb, var(--primary-color) 45%, transparent); }
-      ha-card.on ha-icon { color: var(--primary-color); }
-    </style><ha-card class="${on ? "on" : ""}"><button aria-pressed="${on}" aria-label="${cesc([label, val].filter(Boolean).join(": "))}"><ha-icon icon="${cesc(icon)}"></ha-icon><span class="t"><span class="l">${cesc(label)}</span>${val ? `<span class="v">${cesc(val)}</span>` : ""}</span></button></ha-card>`);
+      /* 0.7.4: the border says "selected" (its overlay shows); the icon glows while something is on. */
+      ha-card.on { box-shadow: inset 0 0 0 2px var(--primary-color), 0 0 10px 0 color-mix(in srgb, var(--primary-color) 35%, transparent); }
+      ha-icon.glow { color: var(--dfc-glow); filter: drop-shadow(0 0 5px var(--dfc-glow)); }
+      .val.alert { color: var(--dfc-glow) !important; }
+    </style><ha-card class="${on ? "on" : ""}" style="${glow ? `--dfc-glow:${cesc(glow)}` : ""}"><button aria-pressed="${on}" aria-label="${cesc([label, val].filter(Boolean).join(": "))}"><ha-icon class="${glow ? "glow" : ""}" icon="${cesc(icon)}"></ha-icon><span class="t">${c.value_first && val ? `<span class="l val${custom ? " alert" : ""}">${cesc(val)}</span><span class="v">${cesc(label)}</span>` : `<span class="l">${cesc(label)}</span>${val ? `<span class="v val${custom ? " alert" : ""}">${cesc(val)}</span>` : ""}`}</span></button></ha-card>`);
   }
 
   _tap() {
@@ -4797,7 +6032,17 @@ class DeviceFloorplanChip extends HTMLElement {
       this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: c.entity }, bubbles: true, composed: true }));
       return;
     }
-    if (c.overlay) window.dispatchEvent(new CustomEvent("device-floorplan-action", { detail: { card_id: c.card_id || null, overlay: c.overlay } }));
+    if (!c.overlay) return;
+    // 0.7.4: tapping the chip of the overlay that already shows goes back to the card's default overlay.
+    const back = c.toggle !== false && this._active();
+    window.dispatchEvent(new CustomEvent("device-floorplan-action", { detail: { card_id: c.card_id || null, overlay: back ? "reset" : c.overlay } }));
+  }
+
+  _runHold() {
+    const c = this._config || {};
+    if (!c.hold_action) return;
+    if (navigator.vibrate) navigator.vibrate(30);
+    this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { ...c, tap_action: undefined, hold_action: c.hold_action }, action: "hold" }, bubbles: true, composed: true }));
   }
 }
 
@@ -4826,9 +6071,16 @@ class DeviceFloorplanChipEditor extends HTMLElement {
       { name: "entity", selector: { entity: {} } },
       { name: "phantom", selector: { select: { options: phOpts, mode: "dropdown" } } },
       { name: "bond", selector: { select: { options: bdOpts, mode: "dropdown" } } },
+      { name: "value_first", selector: { boolean: {} } },
+      { name: "value_style", selector: { select: { options: [{ value: "full", label: "Full: 3 of 8 on" }, { value: "short", label: "Short: 3 on / All off" }], mode: "dropdown" } } },
+      { name: "glow", selector: { select: { options: [{ value: "off", label: "Off" }, { value: "standard", label: "Standard: while something is on (amber lights, blue openings)" }, { value: "custom", label: "Custom: a template returns the colour" }], mode: "dropdown" } } },
+      ...(this._config.glow === "standard" ? [{ name: "glow_color", selector: { text: {} } }] : []),
+      ...(this._config.glow === "custom" ? [{ name: "glow_template", selector: { template: {} } }] : []),
+      { name: "toggle", selector: { boolean: {} } },
+      { name: "hold_action", selector: { ui_action: {} } },
       { name: "tap", selector: { select: { options: [{ value: "overlay", label: "Switch the floorplan to this overlay" }, { value: "more-info", label: "Open the value's details" }, { value: "bond", label: "Switch the bond (all together)" }, { value: "none", label: "Nothing" }], mode: "dropdown" } } },
     ];
-    const labels = { overlay: "Overlay it opens (and glows for)", card_id: "Card ID of the floorplan card (empty = any on this screen)", label: "Label", icon: "Icon", entity: "Value from an entity (optional)", phantom: "…or from a phantom (optional)", bond: "…or from a bond (optional)", tap: "Tap" };
+    const labels = { overlay: "Overlay it opens (and glows for)", card_id: "Card ID of the floorplan card (empty = any on this screen)", label: "Label", icon: "Icon", entity: "Value from an entity (optional)", phantom: "…or from a phantom (optional)", bond: "…or from a bond (optional)", tap: "Tap", value_first: "Value big, label small", value_style: "Value style", glow: "Icon glow", glow_color: "Glow colour (optional, e.g. #F2B84B; empty = by kind)", glow_template: "Template: returns a colour (e.g. #E5534B) or nothing", toggle: "Tap again goes back to the default overlay", hold_action: "Hold (long press)" };
     if (!this._f) {
       this._f = document.createElement("ha-form");
       this._f.computeLabel = (s) => labels[s.name] || s.name;
@@ -4837,14 +6089,19 @@ class DeviceFloorplanChipEditor extends HTMLElement {
         const v = { ...e.detail.value };
         for (const k of Object.keys(v)) if (v[k] === "" || v[k] == null) delete v[k];
         if (v.tap === "overlay") delete v.tap;
+        if (v.toggle === true) delete v.toggle;
+        if (v.value_first === false) delete v.value_first;
+        if (v.value_style === "full") delete v.value_style;
+        if (v.glow === "off") delete v.glow;
         this._config = { type: "custom:device-floorplan-chip", ...v };
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+        this._render();
       });
       this.appendChild(this._f);
     }
     this._f.hass = this._hass;
     this._f.schema = schema;
-    this._f.data = { tap: "overlay", ...this._config };
+    this._f.data = { tap: "overlay", toggle: true, value_style: "full", glow: "off", ...this._config };
   }
 }
 

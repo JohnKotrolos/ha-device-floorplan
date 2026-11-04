@@ -26,8 +26,9 @@ _POSITION = {
     vol.Optional("light"): vol.Any(None, dict),
     vol.Optional("air"): vol.Any(None, dict),
     vol.Optional("of"): vol.Any(None, str),  # split device (#91): entity spot of this device
-    vol.Optional("as"): vol.Any(None, vol.In(("light", "switch", "fan", "other", "door", "window", "shutter"))),
+    vol.Optional("as"): vol.Any(None, vol.In(("light", "switch", "fan", "other", "door", "window", "shutter", "washer", "dryer", "dishwasher", "none_appl"))),
     vol.Optional("opening"): vol.Any(None, dict),
+    vol.Optional("label"): vol.Any(None, vol.All(str, vol.Length(max=60))),  # 0.8.0: name on the plan
 }
 _ANCHOR = {vol.Required("x"): _PCT, vol.Required("y"): _PCT}
 _REF = {

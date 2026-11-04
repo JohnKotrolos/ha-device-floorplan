@@ -615,11 +615,13 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         entry["approx"] = True
     if pos.get("z"):
         entry["z"] = int(pos["z"])
+    if isinstance(pos.get("label"), str) and pos["label"].strip():
+        entry["label"] = pos["label"].strip()[:60]  # 0.8.0: an automatic bond's name on the plan
     light = pos.get("light")
-    if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "none"):
+    if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "screen", "drum", "line", "none"):
         # Light shape on the plan (#74), in percent of the image (x / y axes).
         clean: dict[str, Any] = {"type": light["type"]}
-        for k in ("r", "x2", "y2", "w", "h", "a"):
+        for k in ("r", "x1", "y1", "x2", "y2", "w", "h", "a"):
             if light.get(k) is not None:
                 clean[k] = round(float(light[k]), 3)
         col = light.get("color")
@@ -629,7 +631,7 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         entry["light"] = clean
     if pos.get("of"):
         entry["of"] = str(pos["of"])  # split device (#91): this entity acts here
-    if pos.get("as") in ("light", "switch", "fan", "other", "door", "window", "shutter"):
+    if pos.get("as") in ("light", "switch", "fan", "other", "door", "window", "shutter", "washer", "dryer", "dishwasher", "none_appl"):
         entry["as"] = pos["as"]  # #105: what a split spot acts as; 0.7.0: door / window / shutter
     op = pos.get("opening")
     if isinstance(op, dict) and all(op.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
@@ -637,6 +639,8 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         entry["opening"] = {k: round(min(100.0, max(0.0, float(op[k]))), 3) for k in ("x1", "y1", "x2", "y2")}
         if op.get("swap"):
             entry["opening"]["swap"] = True  # 0.7.2: its twins sit on the other side
+        if op.get("roll") in ("sliding", "roller"):
+            entry["opening"]["roll"] = op["roll"]  # 0.7.4: how a shutter closes (from one end / from the centre)
     elif isinstance(op, dict) and op.get("link"):
         # 0.7.2: shares the bar of another spot ("Next to"), on side 1 or -1.
         entry["opening"] = {"link": str(op["link"]), "side": -1 if op.get("side") == -1 else 1}
@@ -644,11 +648,15 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
             entry["opening"]["merge"] = True  # 0.7.3: one combined bar (shutter + contact)
     air = pos.get("air")
     if isinstance(air, dict):
-        # #115: AC air flow cone: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.
+        # #115: AC air flow: a = direction (deg), r = reach (% of width), s = spread (deg); type none = off.
+        # 0.7.7: x1/y1/x2/y2 = the unit's line on the wall (%), where the trapezoid starts.
         if air.get("type") == "none":
             entry["air"] = {"type": "none"}
         else:
             entry["air"] = {k: round(float(air[k]), 2) for k in ("a", "r", "s") if air.get(k) is not None}
+            line = [air.get(k) for k in ("x1", "y1", "x2", "y2")]
+            if all(isinstance(v, (int, float)) for v in line):
+                entry["air"].update({k: round(min(100.0, max(0.0, float(v))), 3) for k, v in zip(("x1", "y1", "x2", "y2"), line)})
     box = pos.get("box")
     if box:
         entry["box"] = {

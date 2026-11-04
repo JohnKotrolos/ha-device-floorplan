@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.7.3";
+const VERSION = "0.8.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -70,6 +70,55 @@ const STATUSES = [
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/** 0.7.4: TV glow: the light leaves the whole screen (a line) and widens into the room.
+ *  x/y in % of the image; reach r in % of the width; spread a in degrees; it faces (tx, ty). */
+/** 0.7.7: AC air flow as a trapezoid from the unit's line on the wall. Works in square units (y / ratio).
+ *  c: { x, y (marker, %), x1..y2 (the unit's line, % — optional), a (direction, deg), r (reach, %), s (spread, deg), L (default length, %) }
+ *  The flow leaves the line at right angles towards a, widening by s / 2 on each side; arcs are centred on
+ *  the point where the two sides meet, so the waves look like before. */
+function airGeom(c, ratio) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dir = [Math.cos(rad(c.a ?? 90)), Math.sin(rad(c.a ?? 90))];
+  let e1, e2;
+  if (c.x1 != null && c.x2 != null) {
+    e1 = [c.x1, c.y1 / ratio];
+    e2 = [c.x2, c.y2 / ratio];
+  } else {
+    const L = c.L || 4;
+    const u = [-dir[1], dir[0]];
+    const m = [c.x, c.y / ratio];
+    e1 = [m[0] - (u[0] * L) / 2, m[1] - (u[1] * L) / 2];
+    e2 = [m[0] + (u[0] * L) / 2, m[1] + (u[1] * L) / 2];
+  }
+  const dx = e2[0] - e1[0], dy = e2[1] - e1[1];
+  const len = Math.hypot(dx, dy) || 0.01;
+  let n = [-dy / len, dx / len];
+  if (n[0] * dir[0] + n[1] * dir[1] < 0) n = [-n[0], -n[1]];
+  const h = rad(Math.max(10, Math.min(60, (c.s ?? 60) / 2)));
+  const mid = [(e1[0] + e2[0]) / 2, (e1[1] + e2[1]) / 2];
+  const d0 = len / 2 / Math.tan(h);
+  const apex = [mid[0] - n[0] * d0, mid[1] - n[1] * d0];
+  const R = d0 + Math.max(0.5, c.r || 10);
+  const th = Math.atan2(n[1], n[0]);
+  const far = (sg) => [apex[0] + Math.cos(th + sg * h) * (R / Math.cos(h)), apex[1] + Math.sin(th + sg * h) * (R / Math.cos(h))];
+  const P = (q) => [q[0], q[1] * ratio];
+  const f1 = far(-1), f2 = far(1);
+  return { e1: P(e1), e2: P(e2), f1: P(f1), f2: P(f2), mid: P(mid), tip: P([mid[0] + n[0] * (R - d0), mid[1] + n[1] * (R - d0)]), apex: P(apex), d0, R, th: (th * 180) / Math.PI, h: (h * 180) / Math.PI, n };
+}
+
+function screenPoly(x, y, x2, y2, r, a, ratio, tx, ty) {
+  const Y = (v) => v / ratio;
+  const dx = x2 - x, dy = Y(y2) - Y(y);
+  const L = Math.hypot(dx, dy) || 1;
+  const ux = dx / L, uy = dy / L;
+  let nx = -uy, ny = ux;
+  const mx = (x + x2) / 2, my = (Y(y) + Y(y2)) / 2;
+  if (tx != null && ty != null && (tx - mx) * nx + (Y(ty) - my) * ny < 0) { nx = -nx; ny = -ny; }
+  const sp = Math.tan((Math.max(0, Math.min(60, a ?? 20)) * Math.PI) / 180) * r;
+  const P = [[x, Y(y)], [x2, Y(y2)], [x2 + nx * r + ux * sp, Y(y2) + ny * r + uy * sp], [x + nx * r - ux * sp, Y(y) + ny * r - uy * sp]];
+  return { pts: P.map(([px, py]) => [px, py * ratio]), from: [mx, my * ratio], to: [mx + nx * r, (my + ny * r) * ratio] };
+}
 const clone = (o) => JSON.parse(JSON.stringify(o ?? null));
 
 function lsGet(key, dflt) {
@@ -1726,7 +1775,11 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (s.sel && this.work.positions[s.sel] && !fade && this._isLight(s.sel)) parts.push(this._shapeHandles(this._shape(s.sel)));
       if (s.sel && this.work.positions[s.sel] && !fade && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) {
         const c = this._air(s.sel);
-        if (c.type === "cone") parts.push(`<span class="ahd" data-ah="1" data-x="${c.x + Math.cos((c.a * Math.PI) / 180) * c.r}" data-y="${c.y + Math.sin((c.a * Math.PI) / 180) * c.r * this._ratio()}" title="Drag: direction and reach of the air flow"></span>`);
+        if (c.type === "cone") {
+          // 0.7.7: both ends of the unit (drag them onto the real AC on the wall) + the reach.
+          const g = airGeom(c, this._ratio());
+          parts.push(`<span class="ahd" data-ah="1" data-x="${g.e1[0]}" data-y="${g.e1[1]}" title="Drag: one end of the AC unit"></span><span class="ahd" data-ah="2" data-x="${g.e2[0]}" data-y="${g.e2[1]}" title="Drag: the other end of the AC unit"></span><span class="ahd" data-ah="r" data-x="${g.tip[0]}" data-y="${g.tip[1]}" title="Drag: how far the air flows (and to which side)"></span>`);
+        }
       }
       // 0.7.0: the selected opening's two ends.
       if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening && this.work.positions[s.sel].opening.x1 != null) {
@@ -2027,7 +2080,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _zoomTo(nz, vx = 50, vy = 50) {
     const s = this.s;
-    nz = clamp(Math.round(nz * 100) / 100, 0.25, 6);
+    nz = clamp(Math.round(nz * 1000) / 1000, 0.25, 6);
     if (nz <= 1) {
       const c = (100 - 100 * nz) / 2;
       Object.assign(s, { z: nz, tx: c, ty: c });
@@ -2278,7 +2331,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const meta = isNew + bat + area + parts + ent + hit;
     return `<div class="row ${done ? "done" : "todo"} ${s.sel === d.id || s.placing === d.id ? "sel" : ""}" draggable="${st === "skipped" ? "false" : "true"}" data-dev="${esc(d.id)}">
       <button class="main" data-act="pick" data-id="${esc(d.id)}">${this._avatarHtml(d)}
-        <span class="rtxt"><span class="rname">${esc(d.name)}</span>${meta ? `<span class="rmeta">${meta}</span>` : ""}</span>${pill}</button>
+        <span class="rtxt"><span class="rname">${esc(this._pl(d))}</span>${meta ? `<span class="rmeta">${meta}</span>` : ""}</span>${pill}</button>
       ${st === "placed" || st === "approx" ? `<button class="small" data-act="locate" data-id="${esc(d.id)}" title="Show on plan" aria-label="Show on plan">${SVG.locate}</button>` : ""}
       <button class="small" data-act="info" data-id="${esc(d.id)}" title="More info" aria-label="More info">${SVG.info}</button></div>`;
   }
@@ -2443,7 +2496,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
     const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
     return `<div class="details">${back}<div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
-      <div style="flex:1;min-width:0"><div class="nm">${esc(d.name)}</div><div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
+      <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
       ${conn}${bondNote}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
@@ -2461,6 +2514,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     const m = (v, pct) => (W ? (v / W) * 100 : pct);
     if (type === "spot") return lamp ? { type, r: m(0.8, 3.5) } : { type, r: m(0.5, 2.2) };
     if (type === "strip") return { type, r: m(0.5, 2.5) };
+    if (type === "screen") return { type, r: m(2.5, 10), a: 20 };
+    if (type === "drum") return { type, r: m(0.25, 1.4) };
+    if (type === "line") return { type, r: 0 };
     if (type === "panel") return { type, w: m(1.2, 6) };
     if (type === "wall") return { type, r: m(1.2, 5), a: 90 };
     if (type === "none") return { type };
@@ -2506,18 +2562,24 @@ class DeviceFloorplanPanel extends HTMLElement {
     let a = 90;
     const anc = d && d.area_id && this.work.anchors[d.area_id];
     if (anc && (Math.abs(anc.x - pos.x) > 0.5 || Math.abs(anc.y - pos.y) > 0.5)) a = Math.round((Math.atan2((anc.y - pos.y) / R, anc.x - pos.x) * 180) / Math.PI);
-    const def = { a, r: W ? (2 / W) * 100 : 10, s: 60 };
+    const def = { a, r: W ? (2 / W) * 100 : 10, s: 60, L: W ? (0.8 / W) * 100 : 4 };
     if (pos.air && pos.air.type === "none") return { type: "none", ...def, x: pos.x, y: pos.y };
     return { type: "cone", ...def, ...(pos.air || {}), x: pos.x, y: pos.y, auto: !pos.air };
   }
 
+  /** The stored part of an air flow (direction, reach, spread and, when drawn, the unit's line). */
+  _airKeep(c) {
+    const o = { a: c.a, r: c.r, s: c.s };
+    if (c.x1 != null) Object.assign(o, { x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 });
+    return o;
+  }
+
   _airSvg(c, sel) {
     if (!c || c.type === "none") return "";
-    const R = this._ratio();
-    const pt = (deg, r) => [(c.x + Math.cos((deg * Math.PI) / 180) * r) * 10, (c.y + Math.sin((deg * Math.PI) / 180) * r * R) * 10];
-    const [x1, y1] = pt(c.a - c.s / 2, c.r);
-    const [x2, y2] = pt(c.a + c.s / 2, c.r);
-    return `<path d="M${c.x * 10},${c.y * 10} L${x1},${y1} A${c.r * 10},${c.r * R * 10} 0 0 1 ${x2},${y2} Z" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>`;
+    // 0.7.7: a trapezoid from the unit's line on the wall (the line itself drawn solid).
+    const g = airGeom(c, this._ratio());
+    const f = (q) => `${(q[0] * 10).toFixed(1)},${(q[1] * 10).toFixed(1)}`;
+    return `<polygon points="${f(g.e1)} ${f(g.f1)} ${f(g.f2)} ${f(g.e2)}" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/><line x1="${(g.e1[0] * 10).toFixed(1)}" y1="${(g.e1[1] * 10).toFixed(1)}" x2="${(g.e2[0] * 10).toFixed(1)}" y2="${(g.e2[1] * 10).toFixed(1)}" stroke="#4fa3ff" stroke-width="${sel ? 4 : 2.5}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
   }
 
   _airSectionHtml(d) {
@@ -2531,7 +2593,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     return `<div class="lsec air"><div class="lh">🌬 Air flow on the plan<small>${c.auto ? "automatic" : "set by you"}</small></div>
       <div class="lchips"><button class="${c.type === "cone" ? "on" : ""}" data-act="airtype" data-type="cone">Air flow</button><button class="${c.type === "none" ? "on" : ""}" data-act="airtype" data-type="none">None</button></div>
       ${c.type === "cone" ? `<div class="lsz"><label>Reach <input id="airr" inputmode="decimal" value="${v(c.r)}"></label>${W ? "m" : "% of the plan"}<label>Spread <select id="airs"><option value="35" ${sp === "35" ? "selected" : ""}>Narrow</option><option value="60" ${sp === "60" ? "selected" : ""}>Normal</option><option value="90" ${sp === "90" ? "selected" : ""}>Wide</option></select></label></div>` : ""}
-      <div style="font-size:12px;color:var(--df-sec)">${c.type === "none" ? "No air flow on the card." : "Drag the blue handle on the plan to point it into the room. While cooling or heating, the card shows the air flowing (blue cool, orange heat), kept inside the room's shape."}</div></div>`;
+      <div style="font-size:12px;color:var(--df-sec)">${c.type === "none" ? "No air flow on the card." : "Drag the two end handles onto the AC unit on the wall, and the third one to set how far the air reaches into the room. While cooling or heating, the card shows the air flowing (blue cool, orange heat), kept inside the room's shape."}</div></div>`;
   }
 
   /** 0.7.0: the door / window / shutter of this spot: a cover, or a door/window contact. */
@@ -2587,7 +2649,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     const g = this._openGeo(d.id);
     const nm = (k) => esc(((this.byId.get(k) || {}).name) || String(k).replace(/^entity:/, ""));
     const chips = [["door", "Door"], ["window", "Window"], ["shutter", "Shutter"]].map(([k, l]) => `<button class="${as === k ? "on" : ""}" data-act="openas" data-as="${k}">${l}</button>`).join("");
-    const what = as === "shutter" ? (eid.startsWith("cover.") ? "a white bar filled as far as it's closed; fully closed it fades away and the room gets darker by day" : "a white outlined bar while open; closed, the bar goes away and the room gets darker by day") : as === "window" ? "a light blue bar while open; a window always lets daylight in" : "a light blue bar while open, nothing while closed";
+    // 0.7.4: a shutter is a white bar for the part that is closed: open = nothing, closed = full bar.
+    const P0 = this.work.positions;
+    const rollKey = g && g.kind === "own" ? d.id : g && g.merged ? g.base : null;
+    const rollGeo = rollKey && P0[rollKey] && P0[rollKey].opening;
+    const roll = rollGeo && rollGeo.roll ? rollGeo.roll : (eid.startsWith("cover.") && this._hass && this._hass.states[eid] && this._hass.states[eid].attributes.current_position != null ? "roller" : "sliding");
+    const what = as === "shutter" ? `a white bar for the part that is closed (open: nothing, closed: a full bar${roll === "roller" ? ", growing from the centre to both ends" : ", growing from the bar's first end"}); the room gets darker by day as it closes` : as === "window" ? "a light blue bar while open; a window always lets daylight in" : "a light blue bar while open, nothing while closed";
+    const rollChips = as === "shutter" && rollGeo ? `<div class="lchips">${[["sliding", "Sliding"], ["roller", "Roller"]].map(([k, l]) => `<button class="${roll === k ? "on" : ""}" data-act="openroll" data-roll="${k}" data-key="${esc(rollKey)}">${l}</button>`).join("")}</div>` : "";
     let acts;
     let hint;
     if (g && g.kind === "own") {
@@ -2613,13 +2681,54 @@ class DeviceFloorplanPanel extends HTMLElement {
       hint = `Mark where the ${as} is: the card then shows ${what}, instead of a marker. Already a bar for this opening (the shutter, say)? Put this sensor on the same spot, or pick it under <b>Next to…</b>.`;
     }
     return `<div class="lsec opn"><div class="lh">🪟 Opening on the plan<small>${["door", "window", "shutter"].includes(pos.as) ? "set by you" : "automatic"}</small></div>
-      <div class="lchips">${chips}</div>
+      <div class="lchips">${chips}</div>${rollChips}
       <div class="lchips">${acts}</div>
       <div style="font-size:12px;color:var(--df-sec)">${hint}</div></div>`;
   }
 
   /** Has this device (or its bond) a light? Light shapes live on the bond's leader (#84). */
+  /** 0.7.4: a TV (media player of class tv), or anything set to a Screen glow by hand. */
+  _isTv(id) {
+    const pos = this.work && this.work.positions[id];
+    if (pos && pos.light && pos.light.type === "screen") return true;
+    const d = this.byId.get(id);
+    if (!d || !this._hass) return false;
+    const ents = d.split || d.loose ? [d.entity_id] : (d.entities || []).map((x) => x.entity_id);
+    return ents.some((e) => String(e || "").startsWith("media_player.") && ((this._hass.states[e] || {}).attributes || {}).device_class === "tv");
+  }
+
+  /** 0.7.4: a washer, dryer or dishwasher (chosen, drawn, or recognised by its name and readings). */
+  _applType(id) {
+    const lead = this._bondLeader(id);
+    const pos = this.work && this.work.positions[lead];
+    if (pos && ["washer", "dryer", "dishwasher"].includes(pos.as)) return pos.as;
+    if (pos && pos.as === "none_appl") return null;
+    const b = this._bondOf(id);
+    const ids = b ? b[1] : [id];
+    const txt = [];
+    let readings = false;
+    for (const m of ids) {
+      const d = this.byId.get(m);
+      if (!d) continue;
+      txt.push(d.name || "");
+      const ents = d.split || d.loose ? [d.entity_id] : (d.entities || []).map((x) => x.entity_id);
+      for (const e of ents) {
+        txt.push(e || "");
+        const st = this._hass && this._hass.states[e];
+        const dc = st && st.attributes ? st.attributes.device_class : null;
+        if (dc === "power" || dc === "running" || /run_state|operation_state|remain/.test(e || "")) readings = true;
+      }
+    }
+    const t = txt.join(" ").toLowerCase();
+    const g = /dish|πιάτ|geschirr|lave-vaisselle|lavastoviglie|lavavajillas/.test(t) ? "dishwasher" : /dryer|tumble|στεγν|trockner|sèche|asciuga|secadora/.test(t) ? "dryer" : /wash|πλυντ|waschmaschine|lave-linge|lavatrice|lavadora/.test(t) ? "washer" : null;
+    if (g && readings) return g;
+    if (pos && pos.light && ["drum", "line"].includes(pos.light.type)) return "washer";
+    return null;
+  }
+
   _isLight(id) {
+    if (this._isTv(id)) return true;
+    if (this._applType(id) || ((this.work.positions[this._bondLeader(id)] || {}).as === "none_appl")) return true;
     const b = this._bondOf(id);
     const ids = b ? b[1] : [id];
     return ids.some((m) => {
@@ -2651,8 +2760,23 @@ class DeviceFloorplanPanel extends HTMLElement {
     const pos = this.work.positions[lead];
     if (!pos) return null;
     const lamp = this._isLamp(id);
-    const s = pos.light && pos.light.type ? { ...this._defaultShape(pos.light.type, lamp), ...pos.light } : this._defaultShape(lamp ? "bulb" : "none");
+    const tv = this._isTv(id);
+    const appl = !tv && this._applType(id);
+    const s = pos.light && pos.light.type ? { ...this._defaultShape(pos.light.type, lamp), ...pos.light } : this._defaultShape(tv ? "screen" : appl ? (appl === "dishwasher" ? "line" : "drum") : lamp ? "bulb" : "none");
     if (s.type === "strip" && (s.x2 == null || s.y2 == null)) Object.assign(s, { x2: clamp(pos.x + 8, 0, 100), y2: pos.y });
+    if (s.type === "line") {
+      if (s.x1 == null) Object.assign(s, { x1: clamp(pos.x - 3, 0, 100), y1: pos.y });
+      if (s.x2 == null) Object.assign(s, { x2: clamp(pos.x + 3, 0, 100), y2: pos.y });
+    }
+    if (s.type === "screen") {
+      // 0.7.4: the screen is its own line: both ends free; new screens are centred on the marker.
+      if (s.x1 == null) Object.assign(s, s.x2 != null ? { x1: pos.x, y1: pos.y } : { x1: clamp(pos.x - 3, 0, 100), y1: pos.y });
+      if (s.x2 == null) Object.assign(s, { x2: clamp(pos.x + 3, 0, 100), y2: pos.y });
+      const d = this.byId.get(lead);
+      const anc = d && d.area_id && this.work.anchors[d.area_id];
+      s.tx = anc ? anc.x : 50;
+      s.ty = anc ? anc.y : 50;
+    }
     if (s.type === "panel" && s.h == null) s.h = s.w * this._ratio();
     return { ...s, x: pos.x, y: pos.y, auto: !pos.light, lead };
   }
@@ -2669,6 +2793,12 @@ class DeviceFloorplanPanel extends HTMLElement {
     const st = cls === "sel" ? `${fill} stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 4"` : `${fill} stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3 4" opacity=".7"`;
     const ve = `vector-effect="non-scaling-stroke"`;
     if (s.type === "none") return "";
+    if (s.type === "drum") return `<ellipse cx="${s.x * 10}" cy="${s.y * 10}" rx="${s.r * 10}" ry="${s.r * R * 10}" fill="rgba(79,209,197,${cls === "sel" ? ".18" : ".08"})" stroke="#4fd1c5" stroke-width="${cls === "sel" ? 2 : 1.2}" stroke-dasharray="5 3" ${ve}/>`;
+    if (s.type === "line") return `<line x1="${s.x1 * 10}" y1="${s.y1 * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" stroke="#4fd1c5" stroke-opacity="${cls === "sel" ? 1 : 0.6}" stroke-width="${cls === "sel" ? 3 : 2}" stroke-linecap="round" ${ve}/>`;
+    if (s.type === "screen") {
+      const g = screenPoly(s.x1, s.y1, s.x2, s.y2, s.r, s.a, R, s.tx, s.ty);
+      return `<polygon points="${g.pts.map((q) => `${q[0] * 10},${q[1] * 10}`).join(" ")}" fill="rgba(170,200,255,${cls === "sel" ? ".22" : ".1"})" stroke="#8fb8ff" stroke-width="${cls === "sel" ? 2 : 1.2}" stroke-dasharray="6 4" ${ve}/><line x1="${s.x1 * 10}" y1="${s.y1 * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" stroke="#eaf2ff" stroke-width="2" stroke-linecap="round" ${ve}/>`;
+    }
     if (s.type === "strip") return `<line x1="${s.x * 10}" y1="${s.y * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" stroke="rgba(245,158,11,.35)" stroke-width="${Math.max(4, s.r * 6)}" stroke-linecap="round"/><line x1="${s.x * 10}" y1="${s.y * 10}" x2="${s.x2 * 10}" y2="${s.y2 * 10}" ${st} ${ve}/>`;
     if (s.type === "panel") return `<rect x="${(s.x - s.w / 2) * 10}" y="${(s.y - s.h / 2) * 10}" width="${s.w * 10}" height="${s.h * 10}" rx="4" ${st} ${ve}/>`;
     if (s.type === "wall") {
@@ -2687,6 +2817,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     const R = this._ratio();
     if (!s || s.type === "none") return "";
     if (s.type === "strip") return `<span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag the end of the strip"></span>`;
+    if (s.type === "line") return `<span class="lhd" data-lh="start" data-x="${s.x1}" data-y="${s.y1}" title="Drag: one end of the machine"></span><span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag: the other end of the machine"></span>`;
+    if (s.type === "screen") return `<span class="lhd" data-lh="start" data-x="${s.x1}" data-y="${s.y1}" title="Drag: one end of the screen"></span><span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag: the other end of the screen"></span>`;
     if (s.type === "panel") return `<span class="lhd" data-lh="corner" data-x="${s.x + s.w / 2}" data-y="${s.y + s.h / 2}" title="Drag to size the panel"></span>`;
     if (s.type === "wall") {
       const a = ((s.a ?? 90) * Math.PI) / 180;
@@ -2711,6 +2843,26 @@ class DeviceFloorplanPanel extends HTMLElement {
     const W = this._realW();
     const v = (pct) => (W ? ((pct * W) / 100).toFixed(1) : pct.toFixed(1));
     const u = W ? "m" : "% of the plan";
+    const appl = !this._isTv(d.id) && (this._applType(d.id) || ((this.work.positions[this._bondLeader(d.id)] || {}).as === "none_appl" ? "none_appl" : null));
+    if (appl) {
+      // 0.7.4: appliances: a drum (machine seen from the front) or a line (seen from above / built in).
+      const kinds = [["washer", "Washer"], ["dryer", "Dryer"], ["dishwasher", "Dishwasher"], ["none_appl", "Not an appliance"]];
+      const shapes = [["drum", "Drum"], ["line", "Line"], ["none", "None"]];
+      const lead = this._bondLeader(d.id);
+      const setBy = (this.work.positions[lead] || {}).as;
+      return `<div class="lsec"><div class="lh">🫧 Appliance on the plan<small>${setBy ? "set by you" : "recognised"}</small></div>
+        <div class="lchips">${kinds.map(([k, l]) => `<button class="${appl === k ? "on" : ""}" data-act="applas" data-as="${k}">${l}</button>`).join("")}</div>
+        ${appl === "none_appl" ? "" : `<div class="lchips">${shapes.map(([k, l]) => `<button class="${s.type === k ? "on" : ""}" data-act="lighttype" data-type="${k}">${l}</button>`).join("")}</div>`}
+        <div style="font-size:12px;color:var(--df-sec)">${appl === "none_appl" ? "Treated as a normal device." : s.type === "drum" ? "Put the marker on the machine's drum in your plan and drag the handle to its size." : s.type === "line" ? "Drag the two handles to the ends of the machine (e.g. under the kitchen counter)." : "No effect on the card."} On the card (Live), it glows while it works: aqua for water, warm for drying, green when finished. Tap shows its status, never the plug.${this._bondOf(d.id) ? " Readings come from the whole bond (plug power, door, status)." : " Tip: bond its plug and door sensor with it."}</div></div>`;
+    }
+    if (this._isTv(d.id)) {
+      // 0.7.4: TV glow: the screen is a line (drag its other end), the glow reaches into the room and widens.
+      const on = s.type === "screen";
+      return `<div class="lsec"><div class="lh">📺 TV glow on the plan<small>${s.auto ? "automatic" : "set by you"}</small></div>
+        <div class="lchips"><button class="${on ? "on" : ""}" data-act="lighttype" data-type="screen">Screen</button><button class="${!on ? "on" : ""}" data-act="lighttype" data-type="none">None</button></div>
+        ${on ? `<div class="lsz"><label>Reach <input id="lightr" inputmode="decimal" value="${v(s.r)}"></label>${u}<label>Spread <input id="lighta" inputmode="numeric" value="${Math.round(s.a ?? 20)}"></label>°</div>` : ""}
+        <div style="font-size:12px;color:var(--df-sec)">${on ? "Drag the two orange handles to the ends of the screen, along the wall; the TV marker can sit anywhere. While the TV is on, the card shows a soft, slowly changing glow from the screen into the room." : "No glow on the card."}</div></div>`;
+    }
     const types = [["bulb", "Bulb"], ["spot", "Spot"], ["strip", "Strip"], ["panel", "Panel"], ["wall", "Wall lamp"], ["none", "None"]];
     let size = "";
     if (s.type === "panel") size = `<label>Width <input id="lightw" inputmode="decimal" value="${v(s.w)}"></label><label>Height <input id="lighth" inputmode="decimal" value="${v((s.h / this._ratio()))}"></label>${u}`;
@@ -2745,7 +2897,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       out += `<defs><radialGradient id="lglow"><stop offset="0" stop-color="rgb(255,196,120)" stop-opacity=".95"/><stop offset=".55" stop-color="rgb(255,180,90)" stop-opacity=".45"/><stop offset="1" stop-color="rgb(255,170,80)" stop-opacity="0"/></radialGradient></defs><rect x="0" y="0" width="1000" height="1000" fill="rgba(10,16,38,.72)"/>`;
       for (const id of lights) {
         const sh = this._shape(id);
-        if (!sh || sh.type === "none") continue;
+        if (!sh || ["none", "screen", "drum", "line"].includes(sh.type)) continue;
         const ells = sh.type === "strip" ? [0, 1, 2, 3, 4].map((i) => ({ x: sh.x + ((sh.x2 - sh.x) * i) / 4, y: sh.y + ((sh.y2 - sh.y) * i) / 4, rx: sh.r, ry: sh.r * R }))
           : sh.type === "panel" ? [{ x: sh.x, y: sh.y, rx: sh.w * 0.8, ry: sh.h * 0.8 }]
             : sh.type === "wall" ? [{ x: sh.x + Math.cos(((sh.a ?? 90) * Math.PI) / 180) * sh.r * 0.45, y: sh.y + Math.sin(((sh.a ?? 90) * Math.PI) / 180) * sh.r * 0.45 * R, rx: sh.r * 0.9, ry: sh.r * 0.9 * R }]
@@ -2813,6 +2965,12 @@ class DeviceFloorplanPanel extends HTMLElement {
     return names.map((n) => n.slice(p.length).replace(/^[\s\-_·.,]+/, "").trim() || n);
   }
 
+  /** 0.8.0: an automatic bond's name on the plan (set in the Editor), else Home Assistant's device name. */
+  _pl(d) {
+    const pos = this.work && this.work.positions && this.work.positions[d.id];
+    return (pos && pos.label) || d.name;
+  }
+
   _bondName(b) {
     const meta = this._bondMeta(b[0]);
     if (meta.name) return meta.name;
@@ -2838,6 +2996,20 @@ class DeviceFloorplanPanel extends HTMLElement {
     const so = ent && this._hass ? this._hass.states[ent] : null;
     const state = so ? (this._hass.formatEntityState ? this._hass.formatEntityState(so) : so.state) : "";
     return `<div class="mem"><span class="cring" style="--c1:${v.c1}">${d ? this._iconHtml(d) : "?"}</span><button class="link" data-act="memopen" data-id="${esc(m)}" title="${esc(d ? d.name : m)}">${esc(label)}</button><span class="mst">${esc(state)}</span><button class="small" data-act="${actOut}" data-id="${esc(m)}" aria-label="Take ${esc(d ? d.name : m)} out" title="Take out">${SVG.close}</button></div>`;
+  }
+
+  /** 0.7.4: a bond inside a phantom: one row, its name, the ×N badge, its combined state. */
+  _bondMemberRow(b, ids) {
+    const lead = this.byId.get(ids[0]);
+    const meta = this._bondMeta(b[0]);
+    const v = lead ? this._ringVars(lead) : { c1: "var(--df-sec)" };
+    const sts = ids.map((m) => { const d = this.byId.get(m); const e = d && (this.mainEntity[d.id] || d.main_entity); return e && this._hass ? this._hass.states[e] : null; }).filter(Boolean);
+    const live = sts.filter((x) => !["unavailable", "unknown"].includes(x.state));
+    const on = live.filter((x) => ["on", "open", "playing", "home"].includes(x.state)).length;
+    const state = !sts.length ? "" : !live.length ? "Unavailable" : on === 0 ? "Off" : on === sts.length ? "On" : `${on} of ${sts.length} on`;
+    const name = this._bondName(b);
+    const icon = meta.icon ? `<ha-icon icon="${esc(meta.icon)}"></ha-icon>` : lead ? this._iconHtml(lead) : SVG.link;
+    return `<div class="mem"><span class="cring" style="--c1:${v.c1}">${icon}</span><button class="link" data-act="selid" data-id="${esc(ids[0])}" title="${esc(name)}">${esc(name)}</button><span class="bcount" style="margin-left:6px">×${ids.length}</span><span class="mst">${esc(state)}</span><button class="small" data-act="phoutbond" data-id="${esc(b[0])}" aria-label="Take ${esc(name)} out" title="Take out">${SVG.close}</button></div>`;
   }
 
   _bondCardHtml(b) {
@@ -2878,11 +3050,23 @@ class DeviceFloorplanPanel extends HTMLElement {
     const ids = (ph.members || []).filter((m) => this.work.positions[m]);
     const names = ids.map((m) => (this.byId.get(m) || {}).name || m);
     const vsel = ph.value || "average";
+    // 0.7.4: a bond is one member here too (one row with its ×N badge), as on the plan and the card.
+    const rows = [];
+    const seen = new Set();
+    ids.forEach((m, i) => {
+      const b = this._bondOf(m);
+      const inPh = b ? b[1].filter((x) => ids.includes(x)) : [];
+      if (b && inPh.length > 1) {
+        if (seen.has(b[0])) return;
+        seen.add(b[0]);
+        rows.push(this._bondMemberRow(b, inPh));
+      } else rows.push(this._memberRow(m, "phout", names[i]) + this._phUsesHtml(pid, ph, m));
+    });
     return `<div class="details phcard"><div class="top"><span class="ico" style="width:36px;height:36px"><ha-icon icon="${esc(ph.icon || "dfp:phantom")}"></ha-icon></span>
-      <div style="flex:1;min-width:0"><input class="nmin" id="phname" data-ph="${esc(pid)}" value="${esc(ph.name || "Phantom")}" aria-label="Phantom name" maxlength="60"><div class="sub bh"><span class="bcount ph">${ids.length}</span>Phantom · combined value ${this._tip("phantom")}</div></div>
+      <div style="flex:1;min-width:0"><input class="nmin" id="phname" data-ph="${esc(pid)}" value="${esc(ph.name || "Phantom")}" aria-label="Phantom name" maxlength="60"><div class="sub bh"><span class="bcount ph">${rows.length}</span>Phantom · combined value ${this._tip("phantom")}</div></div>
       <button class="small" data-act="desel" aria-label="Close">${SVG.close}</button></div>
-      ${ids.length < 2 ? `<div class="note"><b>Drag devices that are already on the plan onto this phantom.</b> They join it and jump back to their own spot. With 2 or more it's ready: move it wherever you want it shown.</div>` : ""}
-      ${ids.length ? `<div style="font-size:12px;font-weight:500">Combined devices</div><div class="mems">${ids.map((m, i) => this._memberRow(m, "phout", names[i]) + this._phUsesHtml(pid, ph, m)).join("")}</div>` : ""}
+      ${rows.length < 2 ? `<div class="note"><b>Drag devices that are already on the plan onto this phantom.</b> They join it and jump back to their own spot. With 2 or more it's ready: move it wherever you want it shown.</div>` : ""}
+      ${ids.length ? `<div style="font-size:12px;font-weight:500">Combined devices</div><div class="mems">${rows.join("")}</div>` : ""}
       <label class="fl">Value on the card (numbers)<select data-act="phvalue"><option value="average" ${vsel === "average" ? "selected" : ""}>Average</option><option value="min" ${vsel === "min" ? "selected" : ""}>Lowest</option><option value="max" ${vsel === "max" ? "selected" : ""}>Highest</option><option value="one" ${vsel === "one" ? "selected" : ""}>One device</option></select></label>
       ${vsel === "one" ? `<label class="fl">Which device<select data-act="phone">${ids.map((m, i) => `<option value="${esc(m)}" ${ph.one === m ? "selected" : ""}>${esc(names[i])}</option>`).join("")}</select></label>` : ""}
       <div style="font-size:12px;color:var(--df-sec)">Motion: detected if any · doors and windows: open if any. The card can show it with its own popup and graph.</div>
@@ -3181,6 +3365,31 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       this._onDrop(e);
     });
+    // 0.7.5: trackpad pinch / Ctrl-⌘ + wheel zooms at the pointer; two-finger swipe / wheel pans a zoomed plan.
+    root.addEventListener("wheel", (e) => {
+      if (!this._vp || !this._vp.contains(e.composedPath()[0])) return;
+      if (e.target.closest && e.target.closest(".mbox, .refpop, .stackpop, .ipop, .lmenu")) return;
+      const s = this.s;
+      const r = this._vp.getBoundingClientRect();
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const vx = ((e.clientX - r.left) / r.width) * 100;
+        const vy = ((e.clientY - r.top) / r.height) * 100;
+        this._zoomTo(s.z * Math.exp(-e.deltaY * k * 0.01), vx, vy);
+        return;
+      }
+      if (s.z <= 1) return; // nothing to pan: let the page scroll
+      e.preventDefault();
+      const dx = (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * k;
+      const dy = (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * k;
+      const lim = (v) => clamp(v, 100 * (1 - s.z), 0);
+      s.tx = lim(s.tx - (dx / r.width) * 100);
+      s.ty = lim(s.ty - (dy / r.height) * 100);
+      this._layout();
+      clearTimeout(this._zoomT);
+      this._zoomT = setTimeout(() => this._render(), 160);
+    }, { passive: false });
     root.addEventListener("keydown", (e) => {
       if (e.target.id === "lenin" && e.key === "Enter") this._applyScale();
       // Esc also works while typing in the length fields: cancel the line / close the popup.
@@ -3215,6 +3424,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     } else if (t.id === "otherent") {
       const v = t.value.trim();
       if (this._hass && this._hass.states[v] && this.s.sel) this._setMain(this.s.sel, v, true);
+    } else if (t.id === "devlabel") {
+      const pos = this.work.positions[this.s.sel];
+      const d = this.byId.get(this.s.sel);
+      if (!pos || !d) return;
+      const v = t.value.trim();
+      if (v && v !== d.name) pos.label = v.slice(0, 60);
+      else delete pos.label;
+      this._scheduleSave();
     } else if (t.id === "bondname" || t.id === "bondicon") {
       const b = this._bondOf(this.s.sel);
       if (!b) return;
@@ -3248,7 +3465,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
       return;
     }
-    if (t.id === "bondname" || t.id === "bondicon" || t.id === "phname") return this._render();
+    if (t.id === "bondname" || t.id === "bondicon" || t.id === "phname" || t.id === "devlabel") return this._render();
     if (act === "phuse") {
       const ph = (this.work.phantoms || {})[t.dataset.ph];
       const m = t.dataset.m;
@@ -3287,7 +3504,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (!(v > 0)) return this._render();
       const W = this._realW();
       this._change(() => {
-        pos.air = { a: cur.a, r: cur.r, s: cur.s, ...(t.id === "airr" ? { r: W ? (v / W) * 100 : v } : { s: v }) };
+        pos.air = { ...this._airKeep(cur), ...(t.id === "airr" ? { r: W ? (v / W) * 100 : v } : { s: v }) };
       });
       return;
     }
@@ -3314,9 +3531,19 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (t.id === "lightr") l.r = pct;
         if (t.id === "lightw") { l.w = pct; if (l.h == null) l.h = cur.h; }
         if (t.id === "lighth") { l.h = pct * this._ratio(); if (l.w == null) l.w = cur.w; }
-        if (cur.type === "strip" && l.x2 == null) Object.assign(l, { x2: cur.x2, y2: cur.y2 });
+        if (["strip", "screen", "line"].includes(cur.type) && l.x2 == null) Object.assign(l, { x2: cur.x2, y2: cur.y2 });
+        if (["screen", "line"].includes(cur.type) && l.x1 == null) Object.assign(l, { x1: cur.x1, y1: cur.y1 });
         pos.light = l;
       });
+      return;
+    }
+    if (t.id === "lighta") {
+      const lead = this._bondLeader(this.s.sel);
+      const pos = this.work.positions[lead];
+      const v = parseFloat(String(t.value).replace(",", "."));
+      if (!pos || !(v >= 0)) return this._render();
+      const cur = this._shape(lead);
+      this._change(() => (pos.light = { ...(pos.light || {}), type: cur.type, x1: cur.x1, y1: cur.y1, x2: cur.x2, y2: cur.y2, r: (pos.light && pos.light.r) ?? cur.r, a: Math.min(60, v) }));
       return;
     }
     if (act === "bondtap" || act === "bondshow") {
@@ -3783,6 +4010,11 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.phUses = s.phUses === el.dataset.id ? null : el.dataset.id;
         this._render();
         break;
+      case "openroll": {
+        const pos = this.work.positions[el.dataset.key];
+        if (pos && pos.opening) this._change(() => (pos.opening.roll = el.dataset.roll));
+        break;
+      }
       case "openas": {
         const pos = this.work.positions[s.sel];
         if (pos) this._change(() => (pos.as = el.dataset.as));
@@ -3845,7 +4077,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         const pos = this.work.positions[s.sel];
         if (!pos) break;
         const cur = this._air(s.sel);
-        this._change(() => (pos.air = el.dataset.type === "none" ? { type: "none" } : { a: cur.a, r: cur.r, s: cur.s }));
+        this._change(() => (pos.air = el.dataset.type === "none" ? { type: "none" } : this._airKeep(cur)));
         break;
       }
       case "lightauto": {
@@ -4053,6 +4285,14 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.nightPrev = !s.nightPrev;
         this._render();
         break;
+      case "applas": {
+        const pos = this.work.positions[this._bondLeader(s.sel)];
+        if (pos) this._change(() => {
+          pos.as = el.dataset.as;
+          if (el.dataset.as === "none_appl" && pos.light && ["drum", "line"].includes(pos.light.type)) delete pos.light;
+        });
+        break;
+      }
       case "lighttype": {
         const lead = this._bondLeader(s.sel);
         const pos = this.work.positions[lead];
@@ -4062,6 +4302,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         this._change(() => {
           pos.light = { ...keep, type: t };
           if (t === "strip" && pos.light.x2 == null) Object.assign(pos.light, { x2: clamp(pos.x + 8, 0, 100), y2: pos.y });
+          if ((t === "screen" || t === "line") && pos.light.x2 == null) Object.assign(pos.light, { x1: clamp(pos.x - 3, 0, 100), y1: pos.y, x2: clamp(pos.x + 3, 0, 100), y2: pos.y });
           if (t === "panel" && pos.light.h == null) pos.light.h = pos.light.w * this._ratio();
         });
         break;
@@ -4075,6 +4316,12 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.sel = `ph:${pid}`;
         this._render();
         this._toast("New phantom: drag devices that are already on the plan onto it", false);
+        break;
+      }
+      case "phoutbond": {
+        const ph = (this.work.phantoms || {})[String(s.sel).slice(3)];
+        const mem = ((this.work.bonds || {})[id]) || [];
+        if (ph) this._change(() => (ph.members = (ph.members || []).filter((m) => !mem.includes(m))));
         break;
       }
       case "phout": {
@@ -4386,7 +4633,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _moveTo(id, x, y, approx = false) {
     const old = this.work.positions[id] || {};
     const keep = {};
-    for (const k of ["of", "as", "light", "air", "z"]) if (old[k] != null) keep[k] = old[k];
+    for (const k of ["of", "as", "light", "air", "z", "label"]) if (old[k] != null) keep[k] = old[k];
     this.work.positions[id] = { ...keep, x, y, ...(approx ? { approx: true } : {}) };
   }
 
@@ -4591,7 +4838,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (mh) this._gesture = { kind: "mh", which: mh.dataset.mh, start, moved: false };
     else if (pin) this._gesture = { kind: "pin", id: pin.dataset.pin, el: pin, start, moved: false, snap: this._snap() };
     else if (bx) this._gesture = { kind: "box", id: bx.dataset.box, el: bx, start, moved: false, snap: this._snap() };
-    else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", id: this.s.sel, start, moved: false, snap: this._snap() };
+    else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", which: e.target.closest("[data-ah]").dataset.ah, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-oh]")) this._gesture = { kind: "oh", which: e.target.closest("[data-oh]").dataset.oh, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
@@ -4680,7 +4927,23 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (!pos) return;
       const R = this._ratio();
       const cur = this._air(g.id);
-      pos.air = { a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI), r: Math.max(1, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), s: cur.s };
+      const geo = airGeom(cur, R);
+      const keep = this._airKeep(cur);
+      if (keep.x1 == null) Object.assign(keep, { x1: geo.e1[0], y1: geo.e1[1], x2: geo.e2[0], y2: geo.e2[1] });
+      if (g.which === "1" || g.which === "2") {
+        // An end of the unit's line; the air keeps flowing to the same side.
+        keep[`x${g.which}`] = clamp(p.x, 0, 100);
+        keep[`y${g.which}`] = clamp(p.y, 0, 100);
+      } else {
+        // Reach (distance from the line) and side (the direction it points to).
+        const mid = [(keep.x1 + keep.x2) / 2, (keep.y1 + keep.y2) / 2 / R];
+        const v = [p.x - mid[0], p.y / R - mid[1]];
+        const side = v[0] * geo.n[0] + v[1] * geo.n[1];
+        const nn = side < 0 ? [-geo.n[0], -geo.n[1]] : geo.n;
+        keep.a = Math.round((Math.atan2(nn[1], nn[0]) * 180) / Math.PI);
+        keep.r = Math.max(1, Math.abs(side));
+      }
+      pos.air = keep;
       this._renderOverlay();
       return;
     }
@@ -4722,7 +4985,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       const R = this._ratio();
       const l = { ...(pos.light || {}), type: cur.type };
       if (g.which === "r") l.r = Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R));
-      if (g.which === "end") Object.assign(l, { x2: p.x, y2: p.y, r: l.r ?? cur.r });
+      if (g.which === "end") Object.assign(l, { x2: p.x, y2: p.y, r: l.r ?? cur.r }, ["screen", "line"].includes(cur.type) ? { x1: l.x1 ?? cur.x1, y1: l.y1 ?? cur.y1 } : {});
+      if (g.which === "start") Object.assign(l, { x1: p.x, y1: p.y, x2: l.x2 ?? cur.x2, y2: l.y2 ?? cur.y2, r: l.r ?? cur.r });
       if (g.which === "corner") Object.assign(l, { w: Math.max(1, Math.abs(p.x - pos.x) * 2), h: Math.max(1, Math.abs(p.y - pos.y) * 2) });
       if (g.which === "wall") Object.assign(l, { r: Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI) });
       pos.light = l;
@@ -5281,6 +5545,25 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    // 0.7.5: nothing selected: the arrows move the plan (Shift = bigger steps); + / − zoom, 0 fits.
+    if (!mod && !e.altKey && ["+", "=", "-", "_", "0"].includes(e.key)) {
+      e.preventDefault();
+      if (e.key === "0") this._zoomTo(1);
+      else this._zoomTo(s.z * (e.key === "-" || e.key === "_" ? 1 / 1.25 : 1.25));
+      return;
+    }
+    if (arrows[e.key] && !(s.sel && this.work.positions[s.sel]) && s.z > 1) {
+      e.preventDefault();
+      const [dx, dy] = arrows[e.key];
+      const step = e.shiftKey ? 25 : 6;
+      const lim = (v) => clamp(v, 100 * (1 - s.z), 0);
+      s.tx = lim(s.tx - dx * step);
+      s.ty = lim(s.ty - dy * step);
+      this._layout();
+      clearTimeout(this._zoomT);
+      this._zoomT = setTimeout(() => this._render(), 160);
+      return;
+    }
     if (arrows[e.key] && s.sel && this.work.positions[s.sel]) {
       e.preventDefault();
       const step = (e.shiftKey ? 1 : 0.2) / s.z;
@@ -5749,7 +6032,7 @@ class DeviceFloorplanPanel extends HTMLElement {
             refs: this.work.refs,
             hidden_rooms: this.work.hidden_rooms.map((a) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a })),
             anchors: Object.entries(this.work.anchors).map(([a, p]) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a, x: p.x, y: p.y })),
-            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0, ...(r.pos.box ? { box: r.pos.box } : {}), ...(r.pos.light ? { light: r.pos.light } : {}), ...(r.pos.of ? { of: r.pos.of } : {}), ...(r.pos.as ? { as: r.pos.as } : {}), ...(r.pos.air ? { air: r.pos.air } : {}), ...(r.pos.opening ? { opening: r.pos.opening } : {}) })),
+            devices: this._planRows().map((r) => ({ device_id: r.id, name: r.d ? r.d.name : null, ieee: r.d ? r.d.ieee : null, mac: r.d ? r.d.mac : null, area: r.d ? r.d.area_name : null, x: r.pos.x, y: r.pos.y, approx: !!r.pos.approx, z: r.pos.z || 0, ...(r.pos.box ? { box: r.pos.box } : {}), ...(r.pos.light ? { light: r.pos.light } : {}), ...(r.pos.of ? { of: r.pos.of } : {}), ...(r.pos.as ? { as: r.pos.as } : {}), ...(r.pos.air ? { air: r.pos.air } : {}), ...(r.pos.label ? { label: r.pos.label } : {}), ...(r.pos.opening ? { opening: r.pos.opening } : {}) })),
             shapes: Object.entries(this.work.shapes || {}).map(([a, pts]) => ({ area_id: a, name: (this.areaById.get(a) || {}).name || a, points: pts })),
             bonds: Object.entries(this.work.bonds || {}).map(([id, m]) => ({ id, members: m, ...((this.work.bond_meta || {})[id] || {}) })),
             phantoms: Object.entries(this.work.phantoms || {}).map(([id, ph]) => ({ id, ...ph })),
@@ -5859,7 +6142,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       const idMap = {};
       let matched = 0;
       let missing = 0;
-      const extra = (dv) => ({ ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}), ...(dv.box ? { box: dv.box } : {}), ...(dv.light ? { light: dv.light } : {}), ...(dv.as ? { as: dv.as } : {}), ...(dv.air ? { air: dv.air } : {}), ...(dv.opening ? { opening: dv.opening } : {}) });
+      const extra = (dv) => ({ ...(dv.approx ? { approx: true } : {}), ...(dv.z ? { z: dv.z } : {}), ...(dv.box ? { box: dv.box } : {}), ...(dv.light ? { light: dv.light } : {}), ...(dv.as ? { as: dv.as } : {}), ...(dv.air ? { air: dv.air } : {}), ...(dv.label ? { label: dv.label } : {}), ...(dv.opening ? { opening: dv.opening } : {}) });
       const spots = [];
       for (const dv of P.devices || []) {
         // 0.7.0: split spots and entities placed on their own come back when the entity exists here.

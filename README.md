@@ -219,6 +219,7 @@ Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
 
 ## Changelog
 
+- 0.8.0 – Comfort heatmap; room thermometer beats an AC's built-in sensor; appliances (washer, dryer, dishwasher) with "Done · tap to unload"; info card on tap for bonds, phantoms and appliances; one tooltip with hold-and-slide on touch screens; AC air flow from the real unit; TV glow; layers per viewer; Edit markers live preview; trackpad and keyboard zoom in the Editor.
 - 0.7.3 – Room pulse for motion; move whole room shapes and bars; shutter + contact combined into one bar with an alert; Wi-Fi / LAN map from your router (FRITZ!Box and others); Network layers show only what applies; option to hide the "N new" button; edge-aware marker labels.
 - 0.7.2 – Daylight spreads through the home from windows and shutters; twin bars for window + shutter on one opening.
 - 0.7.1 – Softer shutter shading, fading smoothly into open-plan rooms.
