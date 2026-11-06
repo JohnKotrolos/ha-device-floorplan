@@ -14,13 +14,13 @@ much more. Things that usually take custom cards, templates and lots of YAML,
 done with clicks: upload your picture (or start from a sample plan), drag your
 rooms onto it, press Auto-place and fine-tune by dragging.
 
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-lights.webp" width="32%" alt="Lights overlay with scenes">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-comfort.webp" width="32%" alt="Comfort overlay with climate chips">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/screens/card-network.webp" width="32%" alt="Network overlay with Zigbee links">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/demo/assets/device-floorplan-hero-refined.webp" width="100%" alt="Live View of your house in action">
 </p>
 
 📖 **Full guide:** https://johnkotrolos.github.io/ha-device-floorplan/
+
 🎮 **Live demo:** https://johnkotrolos.github.io/ha-device-floorplan/demo/    
 
 ## Beta
