@@ -22,17 +22,16 @@ const stages = [
   ]}
 ];
 
-export function startEditorTour(hass) {
+export function startEditorTour(hass, editorView) {
   if (document.querySelector('.editor-tour')) return;
   const sample = makeInitial();
   const [plan] = sample.plans;
-  const dialog = document.createElement('dialog');
+  const dialog = document.createElement('section');
   dialog.className = 'editor-tour';
   dialog.setAttribute('aria-labelledby', 'editor-tour-title');
   dialog.innerHTML = `
     <header><small id="editor-tour-progress"></small><h2 id="editor-tour-title"></h2>
       <p id="editor-tour-narration" aria-live="polite"></p></header>
-    <div class="tour-preview" inert></div>
     <footer><button class="ha-button" data-action="skip">Skip tour</button><div>
       <button class="ha-button" data-action="back">Back</button>
       <button class="ha-button" data-action="replay">Replay step</button>
@@ -53,8 +52,17 @@ export function startEditorTour(hass) {
     panel.shadowRoot.append(style);
     showStage();
   };
-  dialog.querySelector('.tour-preview').append(panel);
-  document.body.append(dialog);
+  const original = editorView.querySelector('device-floorplan-panel');
+  original.hidden = true;
+  panel.classList.add('tour-preview');
+  panel.inert = true;
+  editorView.classList.add('editor-touring');
+  editorView.append(panel, dialog);
+  const cursor = document.createElement('span');
+  cursor.className = 'tour-cursor';
+  cursor.hidden = true;
+  cursor.setAttribute('aria-hidden', 'true');
+  editorView.append(cursor);
   const button = name => dialog.querySelector(`[data-action="${name}"]`);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let stage = 0;
@@ -82,6 +90,25 @@ export function startEditorTour(hass) {
       layers:{refs:true,rooms:true,devices:true,roomshapes:true}
     });
     panel._render();
+    const targets = {
+      measuring: {x:plan.refs[0].ax,y:plan.refs[0].ay},
+      horizontal: {x:plan.refs[0].bx,y:plan.refs[0].by},
+      vertical: {x:plan.refs[1].bx,y:plan.refs[1].by},
+      pin: plan.anchors.kitchen,
+      shape: {x:plan.shapes.kitchen[0][0],y:plan.shapes.kitchen[0][1]},
+      dishwasher: plan.positions.dishwasher,
+      selected: plan.positions.dishwasher
+    };
+    const point = targets[frame];
+    if (reducedMotion || !point) { cursor.hidden = true; return; }
+    requestAnimationFrame(() => {
+      const image = panel.shadowRoot.querySelector('#planimg');
+      if (!image || !cursor.isConnected) return;
+      const rect = image.getBoundingClientRect();
+      cursor.style.left = `${rect.left + rect.width * point.x / 100}px`;
+      cursor.style.top = `${rect.top + rect.height * point.y / 100}px`;
+      cursor.hidden = false;
+    });
   }
 
   function showStage() {
@@ -103,18 +130,28 @@ export function startEditorTour(hass) {
     }
   }
 
-  button('skip').onclick = () => dialog.close();
+  button('skip').onclick = stop;
   button('back').onclick = () => { stage--; showStage(); button('next').focus(); };
   button('replay').onclick = showStage;
   button('next').onclick = () => {
-    if (stage === stages.length - 1) dialog.close();
+    if (stage === stages.length - 1) stop();
     else { stage++; showStage(); }
   };
-  dialog.addEventListener('close', () => {
+  function stop() {
+    if (!dialog.isConnected) return;
     timers.forEach(clearTimeout);
+    panel.remove();
+    cursor.remove();
     dialog.remove();
-  }, {once:true});
-  dialog.showModal();
+    editorView.classList.remove('editor-touring');
+    original.hidden = false;
+    window.dispatchEvent(new Event('resize'));
+  }
+  dialog.addEventListener('keydown', event => {
+    event.stopPropagation();
+    if (event.key === 'Escape') stop();
+  });
   panel.hass = {...hass, callWS: async () => ({})};
   button('next').focus();
+  return stop;
 }
