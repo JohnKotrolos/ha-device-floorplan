@@ -6,18 +6,27 @@ const stages = [
     [2200, 'The horizontal edge measures 1.48 m.', 'horizontal'],
     [4900, 'Measure the short edge too. The 0.86 m reference sets the vertical scale.', 'vertical']
   ]},
-  { tool: 'rooms', title: 'Mark rooms and draw their boundaries', frames: [
-    [0, 'Kitchen is in the room list on the right. Start by placing its room pin.'],
-    [2400, 'The Kitchen pin is on the plan. Choose Shape to define its boundary.', 'pin'],
-    [5000, 'Trace the Kitchen outline. The shape tells the integration where the room ends.', 'shape'],
-    [8200, 'The other rooms have now been marked and outlined too.', 'rooms']
-  ]},
+  { tool: 'rooms', title: 'Draw room shapes' },
   { tool: 'place', title: 'Place a device and inspect it', frames: [
     [0, 'The Editor switches to device placement. The filled room boundaries disappear, and the room names remain.'],
     [2500, 'Place the dishwasher at its actual location in the Kitchen.', 'dishwasher'],
     [5200, 'Select the dishwasher marker to open its details in the right panel.', 'selected']
   ]}
 ];
+
+const roomLesson = [
+  ['Why draw room shapes?', 'Room shapes tell Device Floorplan where rooms begin and end so lighting and other overlays can follow their boundaries. Device Floorplan does not detect walls or draw room boundaries automatically. You need to draw a shape for every room.'],
+  ['Place the Bedroom pin', 'In Mark rooms, choose Bedroom in the right panel and click inside the bedroom. The pin uses the name of the existing Home Assistant area.', '[data-act="pickroom"][data-id="bedroom"]'],
+  ['Open Shape', 'Once the pin is on the plan, click Shape beside Bedroom. The Editor gives you a starter rectangle to fit by hand.', '[data-act="shapeedit"][data-id="bedroom"]'],
+  ...['top-left', 'top-right', 'bottom-right', 'bottom-left'].map((corner, i) => [
+    `Move corner ${i + 1} of 4`,
+    `Drag the ${corner} handle to the matching inside corner of the bedroom walls. The blue dot marks the wall corner.`,
+    `[data-shc="${i}"]`
+  ]),
+  ['Finish the Bedroom shape', 'Click Done in the shape toolbox. For a room with a jog in the wall, use + on an edge to add a corner before finishing.', '[data-act="shapedone"]'],
+  ['One room is ready', 'The Bedroom outline now follows its walls. That defines one room. Repeat the same process by hand for every remaining room on your floorplan.']
+];
+const roomPractice = 'In Mark rooms, select Living room and click inside it on the plan. Click Shape beside its name, then drag the four corners to match the room and click Done. You can practise other rooms here too. These edits are for practice only.';
 
 const practice = [
   {
@@ -57,15 +66,16 @@ export function startEditorTour(hass, editorView) {
   const panel = document.createElement('device-floorplan-panel');
   panel._showIntro = () => {};
   panel._onKey = () => {};
+  panel._scheduleSave = () => {};
+  const tourStyle = document.createElement('style');
+  const editorHeight = '.app { height: 100%; }';
   panel._load = async () => {
     panel._applyState(sample);
     panel._applyDevices({devices:sample.devices, areas:Object.entries(AREA_NAMES).map(([area_id,name]) => ({area_id,name,floor_id:plan.floor_id})),floors:[{floor_id:plan.floor_id,name:plan.name}]});
     panel.s.planId = plan.id;
     panel.s.img[plan.image_url] = plan.image_url;
     panel.work = {};
-    const style = document.createElement("style");
-    style.textContent = ".app { height: 100%; }";
-    panel.shadowRoot.append(style);
+    panel.shadowRoot.append(tourStyle);
     showStage();
   };
   const original = editorView.querySelector('device-floorplan-panel');
@@ -85,21 +95,96 @@ export function startEditorTour(hass, editorView) {
   let timers = [];
   let practiceIndex = -1;
   let placementCheck;
+  let roomFrame = 0;
+  let practiceFinished = false;
+  const bedroom = 'bedroom';
+  const living = 'living_room';
+  const hasAdjustedLivingShape = () => {
+    const points = panel.work.shapes[living];
+    return Boolean(panel.work.anchors[living] && points?.length >= 3 &&
+      JSON.stringify(points) !== JSON.stringify(panel._shapeRect(living)));
+  };
+
+  panel.shadowRoot.addEventListener('click', event => {
+    if (stage !== 1 || roomFrame !== roomLesson.length ||
+        panel.s.shapeEdit !== living || !event.target.closest('[data-act="shapedone"]')) return;
+    practiceFinished = hasAdjustedLivingShape();
+    if (!practiceFinished) {
+      dialog.querySelector('#editor-tour-narration').textContent =
+        'The Living room still has its starter rectangle. Open Shape again, drag the corners to the walls, then click Done.';
+    }
+  }, {capture:true});
+
+  function showRoomFrame() {
+    const practising = roomFrame === roomLesson.length;
+    const example = roomFrame > roomLesson.length;
+    const [title, copy, target] = practising
+      ? ['Draw the Living room yourself', roomPractice]
+      : example
+        ? ['Completed example · 6 rooms', 'This is how your floorplan will look once all rooms are drawn. The six outlines here are a reference for the demo apartment. On your own plan, place a pin and fit a shape for each room before placing devices.']
+        : roomLesson[roomFrame];
+    dialog.querySelector('#editor-tour-progress').textContent = practising
+      ? 'Step 2 of 6 · Your turn'
+      : example ? 'Step 2 of 6 · Finished result'
+      : `Step 2 of 6 · Watch me · ${roomFrame + 1} of ${roomLesson.length}`;
+    dialog.querySelector('#editor-tour-title').textContent = title;
+    button('next').textContent = practising ? 'View completed example' : example
+      ? 'Continue to device placement →' : roomFrame === roomLesson.length - 1
+        ? 'Try it yourself →' : 'Next action →';
+    panel.inert = !practising;
+    practiceFinished = false;
+
+    applyFrame('rooms', copy, example ? 'rooms' : undefined);
+    if (!example && roomFrame >= 2) panel.work.anchors[bedroom] = clone(plan.anchors[bedroom]);
+    if (!example && roomFrame >= 3) {
+      const points = panel._shapeRect(bedroom);
+      const moved = Math.min(roomFrame - 3, points.length);
+      panel.work.shapes[bedroom] = points.map((point, i) =>
+        i < moved ? clone(plan.shapes[bedroom][i]) : point);
+      panel.s.shapeEdit = roomFrame <= 7 ? bedroom : null;
+    }
+    panel._undo = [];
+    panel._redo = [];
+    panel._render();
+
+    if (target) tourStyle.textContent += `
+${target} { outline: 3px solid #00a6ce; outline-offset: 2px; }`;
+    const corner = roomFrame - 3;
+    if (!practising && !example && corner >= 0 && corner < 4) {
+      const [x, y] = plan.shapes[bedroom][corner];
+      const showTarget = () => {
+        const image = panel.shadowRoot.querySelector('#planimg');
+        if (!image) return;
+        const rect = image.getBoundingClientRect();
+        cursor.style.left = `${rect.left + rect.width * x / 100}px`;
+        cursor.style.top = `${rect.top + rect.height * y / 100}px`;
+        cursor.hidden = false;
+      };
+      // Let the learner find the highlighted handle before pointing to its destination.
+      if (reducedMotion) requestAnimationFrame(showTarget);
+      else timers.push(setTimeout(showTarget, 800));
+    }
+    if (practising) {
+      button('next').disabled = true;
+      placementCheck = setInterval(() => {
+        button('next').disabled = !practiceFinished || !hasAdjustedLivingShape() || Boolean(panel.s.shapeEdit);
+      }, 150);
+    }
+  }
 
   function applyFrame(tool, copy, frame) {
     dialog.querySelector('#editor-tour-narration').textContent = copy;
     const allRooms = stage >= 2 || frame === 'rooms';
-    const kitchen = frame === 'pin' || frame === 'shape';
     const dishwasher = frame === 'dishwasher' || frame === 'selected';
     Object.assign(panel.work, {
       refs: clone(stage > 0 || frame === 'vertical' ? plan.refs : frame === 'horizontal' ? plan.refs.slice(0,1) : []),
-      anchors: clone(allRooms ? plan.anchors : kitchen ? {kitchen:plan.anchors.kitchen} : {}),
-      shapes: clone(allRooms ? plan.shapes : frame === 'shape' ? {kitchen:plan.shapes.kitchen} : {}),
+      anchors: clone(allRooms ? plan.anchors : {}),
+      shapes: clone(allRooms ? plan.shapes : {}),
       positions: clone(dishwasher ? {dishwasher:plan.positions.dishwasher} : {}),
       hidden_rooms: [], bonds: {}, bond_meta: {}, phantoms: {}
     });
     Object.assign(panel.s, {
-      tool, guide:false, loading:false, shapeEdit:frame === 'shape' ? 'kitchen' : null,
+      tool, guide:false, loading:false, shapeEdit:null, placingRoom:null, queue:false,
       m1:frame === "measuring" ? {x:plan.refs[0].ax,y:plan.refs[0].ay} : null,
       mh:frame === "measuring" ? {x:plan.refs[0].bx,y:plan.refs[0].by} : null,
       sel:frame === 'selected' ? 'dishwasher' : null,
@@ -110,8 +195,6 @@ export function startEditorTour(hass, editorView) {
       measuring: {x:plan.refs[0].ax,y:plan.refs[0].ay},
       horizontal: {x:plan.refs[0].bx,y:plan.refs[0].by},
       vertical: {x:plan.refs[1].bx,y:plan.refs[1].by},
-      pin: plan.anchors.kitchen,
-      shape: {x:plan.shapes.kitchen[0][0],y:plan.shapes.kitchen[0][1]},
       dishwasher: plan.positions.dishwasher,
       selected: plan.positions.dishwasher
     };
@@ -130,10 +213,15 @@ export function startEditorTour(hass, editorView) {
   function showStage() {
     timers.forEach(clearTimeout);
     timers = [];
+    clearInterval(placementCheck);
+    button('next').disabled = false;
+    tourStyle.textContent = editorHeight;
+    button('back').disabled = stage === 0;
+    if (stage === 1) { showRoomFrame(); return; }
+    panel.inert = true;
     const {tool,title,frames} = stages[stage];
     dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stage + 1} of ${stages.length + practice.length}`;
     dialog.querySelector('#editor-tour-title').textContent = title;
-    button('back').disabled = stage === 0;
     button('next').textContent = 'Next →';
     if (reducedMotion) {
       const [,copy,frame] = frames.at(-1);
@@ -161,13 +249,22 @@ export function startEditorTour(hass, editorView) {
   }
 
   button('skip').onclick = stop;
-  button('back').onclick = () => { stage--; showStage(); button('next').focus(); };
-  button('replay').onclick = showStage;
+  button('back').onclick = () => {
+    if (stage === 1 && roomFrame > 0) roomFrame--;
+    else { stage--; roomFrame = stage === 1 ? roomLesson.length + 1 : 0; }
+    showStage();
+  };
+  button('replay').onclick = () => { roomFrame = 0; showStage(); };
   button('next').onclick = () => {
     if (practiceIndex >= 0) {
       if (!original.work || !practice[practiceIndex].ready(original.work)) return;
       if (practiceIndex === practice.length - 1) stop();
       else { practiceIndex++; showPractice(); }
+    } else if (stage === 1 && roomFrame <= roomLesson.length) {
+      if (roomFrame === roomLesson.length &&
+          (!practiceFinished || !hasAdjustedLivingShape() || panel.s.shapeEdit)) return;
+      roomFrame++;
+      showStage();
     } else if (stage === stages.length - 1) {
       timers.forEach(clearTimeout);
       panel.remove();
