@@ -196,6 +196,14 @@ def find_parts(
     for device in entries.values():
         if device.id in skip:
             continue
+        if isinstance(device, ChildDevice):
+            # 0.8.1: a child device (one outlet of a strip) is part of its parent, unless the user gave it
+            # an area of its own, then it is its own marker. "part" / "own" in the device options still win.
+            pid = device.parent_device_id
+            override = data.device_opts.get(device.id, {}).get("part")
+            if pid in entries and override != "own" and (override == "part" or not device.own_area):
+                parent_of[device.id] = pid
+            continue
         pid = device.via_device_id
         parent = entries.get(pid) if pid else None
         if parent is None:
@@ -204,7 +212,7 @@ def find_parts(
         if override == "own":
             continue
         if override != "part":
-            if set(device.config_entries or ()) .isdisjoint(parent.config_entries or ()):
+            if _entry_ids(device).isdisjoint(_entry_ids(parent)):
                 continue
             if _own_connection(device):
                 continue
@@ -229,13 +237,82 @@ def find_parts(
     return roots
 
 
+def _entry_ids(device: Any) -> set[str]:
+    """Config entries of a device (HA 2026.10+: one, config_entry_id; older: config_entries)."""
+    single = getattr(device, "config_entry_id", None)
+    if single is not None:
+        return {single}
+    return set(getattr(device, "config_entries", ()) or ())
+
+
+class ChildDevice:
+    """0.8.1: a child device (HA 2026.9+, e.g. one outlet of a power strip) seen like a device.
+
+    It has its own id, name, area and entities, no hardware data of its own (taken from its parent, but not
+    the parent's radio identifiers, so it never doubles the parent on the Network map), and its parent's
+    area when it has none of its own. `own_area` says whether the user gave it an area of its own.
+    """
+
+    def __init__(self, child: Any, parent: Any) -> None:
+        self._c = child
+        self._p = parent
+        self.id = child.id
+        self.parent_device_id = getattr(child, "parent_device_id", None)
+        own = getattr(child, "area_id", None)
+        self.own_area = bool(own) and (parent is None or own != getattr(parent, "area_id", None))
+        self.area_id = own or (getattr(parent, "area_id", None) if parent is not None else None)
+        self.via_device_id = None
+        self.connections: set = set()
+        self.identifiers: set = set()
+
+    def __getattr__(self, key: str) -> Any:
+        val = getattr(self._c, key, None)
+        if val is None and self._p is not None and key in ("manufacturer", "model", "name", "entry_type", "config_entry_id", "config_entries", "primary_config_entry", "hw_version", "sw_version"):
+            val = getattr(self._p, key, None)
+        return val
+
+
+def _iter_reg(coll: Any, dev_reg: Any) -> list[Any]:
+    """Entries of a registry collection: old HA iterates ids (a mapping), new HA iterates entries."""
+    if coll is None:
+        return []
+    out = []
+    for item in coll:
+        out.append(dev_reg.async_get(item) if isinstance(item, str) else item)
+    return [d for d in out if d is not None]
+
+
+def active_devices(dev_reg: Any) -> dict[str, Any]:
+    """All enabled devices incl. child devices (HA 2026.9+), without our own plan devices."""
+    out: dict[str, Any] = {}
+    children = []
+    for device in _iter_reg(dev_reg.devices, dev_reg):
+        if getattr(device, "parent_device_id", None):
+            children.append(device)  # in case a registry lists children with the devices
+        elif device.disabled_by is None and not is_plan_device(device):
+            out[device.id] = device
+    for child in children + _iter_reg(getattr(dev_reg, "child_devices", None), dev_reg):
+        if getattr(child, "disabled_by", None) is not None or child.id in out:
+            continue
+        pid = getattr(child, "parent_device_id", None)
+        parent = out.get(pid) if pid else None
+        if pid and parent is None:
+            continue  # parent disabled: its parts too
+        out[child.id] = ChildDevice(child, parent)
+    return out
+
+
 def entity_name(hass: HomeAssistant, entity_id: str) -> str:
     state = hass.states.get(entity_id)
     if state is not None and state.attributes.get("friendly_name"):
         return str(state.attributes["friendly_name"])
+    # 0.8.1: friendly_name is planned to go (HA 2026.11): device name + entity name from the registries.
     ent = er.async_get(hass).async_get(entity_id)
     if ent is not None:
-        return ent.name or ent.original_name or entity_id
+        own = ent.name or ent.original_name
+        dev = dr.async_get(hass).async_get(ent.device_id) if ent.device_id else None
+        dname = (dev.name_by_user or dev.name) if dev is not None else None
+        return " ".join(x for x in (dname, own) if x) or entity_id
     return entity_id
 
 
@@ -431,6 +508,7 @@ def _group(entities: list[er.RegistryEntry], integrations: list[str] | None = No
 
 
 def _entity_rank(ent: er.RegistryEntry) -> tuple[int, int, str]:
+    """Which entity leads a device: HA's main entity, then by domain and kind."""
     dc = ent.device_class or ent.original_device_class
     try:
         dom = _MAIN_DOMAINS.index(ent.domain)
@@ -444,6 +522,9 @@ def _entity_rank(ent: er.RegistryEntry) -> tuple[int, int, str]:
     if ent.domain == "button" and ent.entity_id.endswith("_identify"):
         bonus = 3
     category = 0 if ent.entity_category is None else 10
+    # 0.8.1: HA 2026.11 "Main entity of the device" leads: the user said it is what the device is.
+    if getattr(ent, "uses_device_name", False) is True:
+        category = -1
     return (category, dom * 4 + bonus, ent.entity_id)
 
 
@@ -454,14 +535,7 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
     ent_reg = er.async_get(hass)
     area_reg = ar.async_get(hass)
 
-    entries: dict[str, dr.DeviceEntry] = {}
-    for item in dev_reg.devices:
-        device = item if isinstance(item, dr.DeviceEntry) else dev_reg.async_get(item)
-        if device is None or device.disabled_by is not None:
-            continue
-        if is_plan_device(device):
-            continue  # our own "plan" devices never go on a plan
-        entries[device.id] = device
+    entries = active_devices(dev_reg)  # our own "plan" devices never go on a plan
 
     ents_by_device: dict[str, list[er.RegistryEntry]] = {}
     for device_id in entries:
@@ -665,7 +739,7 @@ def loose_entities(hass: HomeAssistant) -> list[dict[str, Any]]:
         out.append(
             {
                 "entity_id": eid,
-                "name": str(state.attributes.get("friendly_name") or eid),
+                "name": entity_name(hass, eid),
                 "domain": state.domain,
                 "platform": None,
                 "area_id": None,
@@ -694,9 +768,7 @@ def build_plan_payload(
         return round(x * width / 100), round(y * height / 100)
 
     ent_reg = er.async_get(hass)
-    entries = {
-        d.id: d for d in dev_reg.devices.values() if d.disabled_by is None and not is_plan_device(d)
-    }
+    entries = active_devices(dev_reg)
     part_of = find_parts(hass, data, entries, set())
     parts_by_root: dict[str, list[str]] = {}
     for child, root in part_of.items():

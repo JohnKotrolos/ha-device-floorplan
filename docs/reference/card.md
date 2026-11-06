@@ -53,9 +53,9 @@ Close markers spread out side by side so each stays readable; a thin line points
 
 ## Several floors
 
-A card can show several plans: in the card editor's **General** section, floor tabs **1 · 2 · +** like Home Assistant's stack editors, each tab one plan from the Floorplan Editor. The card opens the first floor (or the one you last looked at on that screen).
+A card can show several plans: at the top of the card editor, floor tabs **1 · 2 · +** like Home Assistant's stack editors, each tab one plan from the Floorplan Editor. The card opens the first floor (or the one you last looked at on that screen).
 
-On the card a **floor rail** sits on the right of the plan (never on top of it): ▲ · 1 · G · ▼ with the floor's level, the name as a tooltip. Swipe up / down on a touch screen to change floors. The Network **Layers** button joins the rail. With one floor there is no rail and the plan uses the full width.
+On the card a round **floor button** sits right next to the **Layers** button, on its right (with one floor, Layers keeps that spot), with the floor's level from Home Assistant as a badge (0, 1, -1…). Tap it: it turns into a slim floor rail opening towards the plan (▲ · floors, highest on top · ▼); pick a floor and it folds back into the button. Swipe up / down on a touch screen also changes floors. The plan always keeps its full width.
 
 Switch floors from other cards too: `floor:` in the action, or `?floor=first_floor` in a link (see below).
 
@@ -65,9 +65,10 @@ Switch floors from other cards too: `floor:` in the action, or `?floor=first_flo
 - **Colour and shape** = role: coordinator (amber diamond), router / repeater (blue square), hub or bridge (blue square), end device (green), other devices (grey), unavailable (red).
 - **Ring** = Zigbee link quality: 0–99 red, 100–149 orange, 150–199 yellow-green, 200–255 green. It comes straight from ZHA; you don't need to enable any LQI sensor.
 - **Lines**: Zigbee links between placed devices (ZHA), coloured by LQI, and dashed lines from devices to their hub or bridge.
+- **Links to another floor**: a device here whose router, coordinator, access point or hub is on another floor shows that device **faded at its spot** from its own floor, with a normal line. Hover it for its name and floor. For Zigbee this is shown for devices without a router next to them on this floor, with their strongest link. It works best when your floor plans line up (same outline and scale).
 - **Wi-Fi / LAN from your router**: with a router integration that tracks network devices and reports the access point (FRITZ!Box: *Configure* → device tracking on), each Wi-Fi / LAN device gets a line to the router or repeater it's connected to: **solid = cable, dotted = Wi-Fi**, one colour per access point. The router and repeaters are found by name among the devices on your plan and show as diamonds (*Router / access point*). The legend counts the devices per access point (*FRITZ!Box: 30 Wi-Fi, 6 cable*), the popup shows the access point, cable or Wi-Fi, the Wi-Fi network and the IP. The ring is the device's own signal sensor (good / fair / weak), when it has one.
-- **Legend** under the plan: tap a role to hide or show it, **Refresh** reloads the Zigbee data (the time of the last update is next to it; it also refreshes by itself every few minutes while Network is open).
-- **Layers**: show **several connections at once** (Zigbee + Matter, for example) or *Default*, lines and legend on or off, and a **Minimum LQI** for links. Only what applies to the connections shown is offered: with just Wi-Fi / LAN there's no Zigbee links, LQI or Refresh. What a viewer picks is remembered on that screen.
+- **Legend** under the plan: tap a role to hide or show it, tap an **LQI range** to hide or show its Zigbee links, **Refresh** reloads the Zigbee data (the time of the last update is next to it; it also refreshes by itself every few minutes while Network is open).
+- **Layers**: show **several connections at once** (Zigbee + Matter, for example) or *Default*, lines and legend on or off. Only what applies to the connections shown is offered: with just Wi-Fi / LAN there's no Zigbee links, LQI or Refresh. What a viewer picks is remembered on that screen.
 - **Popup**: connection, role, LQI / RSSI, the **path** to the coordinator, and **Connected devices**: for a router, the Zigbee devices that connect through it; for a hub or bridge, the devices behind it. Tap one to highlight it on the plan.
 
 ## Climate chips
@@ -134,7 +135,10 @@ The state is matched to a room pin by the area's name, its id or one of its alia
 
 ## In the card editor: everything adjustable
 
-Open the dashboard's edit mode and edit the card. The sections, in order: **General** (floors, title, card ID) · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** · **People** · **Day & night** · **Look and tap behaviour** · **Markers**.
+Open the dashboard's edit mode and edit the card. It has two parts:
+
+- **Per floor**, in a frame with the floor tabs: for the floor you picked, **Markers** (the **Edit markers** button) and **Rooms on this floor** (custom Room names, Rooms hidden on the card). Nothing else depends on the floor.
+- **Card settings (the whole house, all floors)**: the floor the card opens with and swiping · title and card ID · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** (how names look, where they show) · **People** · **Day & night** · **Look and tap behaviour**. Overlays are the same on every floor.
 
 - **Overlay buttons on the card**: which ones and in which order (drag), the one shown when the card opens, **where the buttons are** (below, above, left or right of the plan, or hidden) and their **style** (icons and labels, or icons only). **Overlay names** renames them.
 - **Live**: which kinds of devices it shows, **things that are off** hidden (default) or faint, values next to icons, **lights show as** glow only (default: no light markers, lights that are on just glow, tap the glow to switch off; switch lights on in the Lights overlay) or markers.
@@ -145,14 +149,13 @@ Open the dashboard's edit mode and edit the card. The sections, in order: **Gene
 - **Health**: low-battery threshold, only problems.
 - **Tap behaviour** per kind: switch on/off, details, readings popup or nothing.
 - **Look**: marker size (at full width; smaller cards scale down), **markers** with icon and text or icon only, reading chips (dark glass, light, follow the theme), device names, title.
-- **Markers**: the **Edit markers** button (below). Everything about single markers is edited on the plan.
 
 ### Edit markers
 
 The **Marker Editor** opens the card full-screen. Two ways in:
 
 - **✎ Edit markers** in the overlay button bar, while the dashboard is in edit mode (panel and masonry dashboards). Changes are saved to the dashboard right away.
-- **Edit card → Markers → Edit markers**: works on every dashboard. On *sections* dashboards Home Assistant doesn't let you click inside cards in edit mode, so the card shows a small hint pointing here. Press **Done**, then **Save** in the card editor.
+- **Edit card → Markers → Edit markers** (on the floor picked in the tabs): works on every dashboard. On *sections* dashboards Home Assistant doesn't let you click inside cards in edit mode, so the card shows a small hint pointing here. Press **Done**, then **Save** in the card editor.
 
 **Pick an overlay** with the buttons under the plan: everything you change applies to **that overlay**.
 

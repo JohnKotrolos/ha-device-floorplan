@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -630,11 +630,27 @@ function ptInPoly(x, y, poly) {
 function guessOpenAs(eid, hass, name) {
   const st = eid && hass && hass.states[eid];
   const dc = (st && st.attributes.device_class) || "";
-  const n = `${eid || ""} ${name || ""} ${(st && st.attributes.friendly_name) || ""}`.toLowerCase();
+  const n = `${eid || ""} ${name || ""} ${eid ? entName({ states: { [eid]: st } }, eid) : ""}`.toLowerCase();
   if (/shutter|roller|blind|rolet|ρολ|jalous|persian|store|tapparell|persiana/.test(n)) return "shutter";
   if (String(eid || "").startsWith("cover.")) return ["door", "garage", "gate"].includes(dc) ? "door" : dc === "window" ? "window" : "shutter";
   if (["door", "garage_door"].includes(dc)) return "door";
   return "window";
+}
+
+/** 0.8.1: an entity's display name. HA 2026.11 plans to drop friendly_name: then device name + entity name from the
+ *  registries (hass.devices / hass.entities), else the entity id. One place for every name on the card and in the Editor. */
+function entName(hass, e) {
+  const st = hass && hass.states && hass.states[e];
+  const fn = st && st.attributes && st.attributes.friendly_name;
+  if (fn) return fn;
+  const re = hass && hass.entities && hass.entities[e];
+  if (re) {
+    const dv = re.device_id && hass.devices && hass.devices[re.device_id];
+    const dn = dv && (dv.name_by_user || dv.name);
+    const en = re.name || "";
+    if (dn || en) return [dn, en].filter(Boolean).join(" ");
+  }
+  return e;
 }
 
 class DeviceFloorplanPanel extends HTMLElement {
@@ -1862,11 +1878,10 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (old && old.split && old.as === (pos.as || "")) continue;
       const eid = key.slice(7);
       const dev = this.byId.get(pos.of);
-      const so = this._hass && this._hass.states[eid];
       const ent = dev && (dev.entities || []).find((e) => e.entity_id === eid);
       const item = {
         id: key, entity_id: eid, loose: true, split: true, of: pos.of, as: pos.as || "",
-        name: (ent && ent.name !== eid && ent.name) || (so && so.attributes.friendly_name) || eid,
+        name: (ent && ent.name !== eid && ent.name) || entName(this._hass, eid),
         manufacturer: null, model: null, area_id: dev ? dev.area_id : null, area_name: dev ? dev.area_name : null,
         floor_id: dev ? dev.floor_id : null, integration: null, conns: [], virtual: false,
         group: pos.as === "light" || eid.startsWith("light.") ? "lights" : pos.as === "fan" ? "climate" : "plugs_switches",
@@ -2428,8 +2443,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const own = d.entities.filter((e) => !e.other);
     const cands = own.slice();
     if (cur && !own.some((e) => e.entity_id === cur)) {
-      const so = this._hass && this._hass.states[cur];
-      cands.unshift({ entity_id: cur, name: (so && so.attributes.friendly_name) || cur, domain: cur.split(".")[0], other: true });
+      cands.unshift({ entity_id: cur, name: entName(this._hass, cur), domain: cur.split(".")[0], other: true });
     }
     const picking = s.otherEnt === d.id;
     let entIds = [];
@@ -2449,7 +2463,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       // Entities named after their device have no own name: use HA's friendly name.
       if (e.name && e.name !== e.entity_id) return e.name;
       const st = this._hass && this._hass.states[e.entity_id];
-      return (st && st.attributes.friendly_name) || e.entity_id;
+      return entName(this._hass, e.entity_id);
     };
     const opt = (e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === cur && !picking ? "selected" : ""}>${esc(nm(e))} (${esc(e.domain)})${e.other ? " · linked" : ""}</option>`;
     const optsHtml = groups.length > 1 ? groups.map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(opt).join("")}</optgroup>`).join("") : shownCands.map(opt).join("");
@@ -2474,7 +2488,7 @@ class DeviceFloorplanPanel extends HTMLElement {
             const key = `entity:${e.entity_id}`;
             const placed = spots.includes(key);
             const placing = s.placingBox === `${d.id}|${e.entity_id}`;
-            const nm = (e.name && e.name !== e.entity_id ? e.name : null) || ((this._hass && this._hass.states[e.entity_id] && this._hass.states[e.entity_id].attributes.friendly_name) || e.entity_id);
+            const nm = (e.name && e.name !== e.entity_id ? e.name : null) || entName(this._hass, e.entity_id);
             const btn = placed
               ? `<span class="pill ok">✓ placed</span><button class="small" data-act="locate" data-id="${esc(key)}" title="Show on plan" aria-label="Show on plan">${SVG.locate}</button><button class="small" data-act="splitdel" data-id="${esc(key)}" title="Back to the device" aria-label="Back to the device">✕</button>`
               : placing ? `<span style="font-size:12px">Click on the plan…</span><button class="link" data-act="boxcancel">Cancel</button>`

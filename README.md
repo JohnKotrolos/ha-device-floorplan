@@ -3,7 +3,7 @@
 # Device Floorplan
 
 [![Beta](https://img.shields.io/badge/status-beta-orange)](#beta)
-[![HACS Custom](https://img.shields.io/badge/HACS-custom-41BDF5)](#install)
+[![Marketplace custom](https://img.shields.io/badge/Marketplace-custom-41BDF5)](#install)
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
 
@@ -113,17 +113,19 @@ No floorplan yet? See
 
 ## Install
 
-**With HACS (recommended)**
+**From the Marketplace (Home Assistant 2026.11 and later, recommended)**
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
+1. Settings → **Marketplace** → add a custom repository by its link:
+   `https://github.com/JohnKotrolos/ha-device-floorplan` (the first time,
+   Home Assistant asks you to sign in to GitHub, read-only).
+2. Find **Device Floorplan** → install, accept the community notice.
+3. Restart Home Assistant.
 
-One click opens Device Floorplan in HACS on your Home Assistant. Or by hand:
+An install made with HACS moves to the Marketplace by itself.
 
-1. HACS → ⋮ (top right) → **Custom repositories**.
-2. Repository: `https://github.com/JohnKotrolos/ha-device-floorplan`, type
-   **Integration** → Add.
-3. Find **Device Floorplan** in HACS → **Download**.
-4. Restart Home Assistant.
+**With HACS (Home Assistant before 2026.11):** HACS → ⋮ → **Custom repositories**
+→ the link above, type **Integration** → find **Device Floorplan** → **Download**
+→ restart Home Assistant.
 
 **Manually:** copy `custom_components/device_floorplan` from the
 [latest release](https://github.com/JohnKotrolos/ha-device-floorplan/releases)

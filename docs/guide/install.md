@@ -29,20 +29,28 @@ Everything works with Home Assistant alone; a few extras need a data source.
 | AC air flow | A climate entity on the device |
 | Bars for doors, windows and shutters | A door / window contact or a cover, and the [opening drawn](/using/openings) |
 
-## With HACS (custom repository)
+## From the Marketplace (Home Assistant 2026.11 and later)
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
+Since Home Assistant 2026.11, custom integrations come from **Settings → Marketplace** (it replaced HACS; a Device Floorplan installed with HACS moves over by itself).
 
-One click opens Device Floorplan in HACS on your Home Assistant: press **Download**, then restart. Or add it by hand:
-
-1. In HACS, open the ⋮ menu → **Custom repositories**.
-2. Add this repository's URL with type **Integration**:
+1. In the Marketplace, add a custom repository by its link:
 
    ```
    https://github.com/JohnKotrolos/ha-device-floorplan
    ```
-3. Find **Device Floorplan** in HACS and download it.
-4. Restart Home Assistant.
+   The first time, Home Assistant asks you to sign in to GitHub (read-only access to public repositories).
+2. Find **Device Floorplan**, install it and accept the community notice.
+3. Restart Home Assistant.
+
+New versions show up as an update in Home Assistant; updating still needs a restart.
+
+## With HACS (Home Assistant before 2026.11)
+
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
+
+1. In HACS, open the ⋮ menu → **Custom repositories**, add the link above with type **Integration**.
+2. Find **Device Floorplan** in HACS and download it.
+3. Restart Home Assistant.
 
 ## Manually
 

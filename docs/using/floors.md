@@ -17,7 +17,7 @@ A device can be on **one floor plan** at a time. If you place it on another floo
 1. **One plan per floor.** In the Floorplan Editor, **+ New plan** for each floor and pick its Home Assistant floor under *This plan is*. The floor tabs are sorted by level.
 2. **Rooms on floors in Home Assistant** (optional but helpful): with your areas assigned to floors (**Settings → Areas, labels & zones**), each plan offers only the devices of its floor and Auto-place works per floor. Without it, every plan offers all devices.
 3. **Place devices on each floor.** A device placed on the ground floor shows *On Ground floor* in the other floors' lists; *Devices from all floors* shows them, *Move to this floor* moves one.
-4. **One card for all floors.** In the card editor's **General** section, the floor tabs **1 · 2 · +**: add a tab per floor and choose its plan. On the card, the floor rail on the right switches floors (or swipe up / down).
+4. **One card for all floors.** At the top of the card editor, the floor tabs **1 · 2 · +**: add a tab per floor and choose its plan. On the card, the floor button under Layers switches floors (or swipe up / down).
 
 ![A card with two floors and the floor rail](/screens/card-floors.webp){.shot}
 

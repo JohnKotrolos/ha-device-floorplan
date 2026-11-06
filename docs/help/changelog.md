@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.1
+
+**Floors without losing space, overlays for the whole house, and a comfort colour for every room.**
+
+- **Floor button**: the floor switch is now a round button right next to **Layers**, on its right, never on the plan, with the floor's level from Home Assistant as a small badge (0, 1, -1…). Tap it and a slim floor rail (▲ · floors · ▼) opens towards the plan; pick a floor and it folds back. The plan keeps its full width.
+- **Card editor in two parts**: **Per floor**, framed with the floor tabs: the floor's **Markers** and **Rooms on this floor** (custom names, hidden Rooms). Then **Card settings (the whole house, all floors)**: overlays, Rooms look, People, Day & night, Look and tap. *Edit markers* opens on the floor you picked.
+- **Network across floors**: a device whose router, coordinator, access point or hub is on another floor shows that device faded at its spot, with a normal line; hover it for its name and floor.
+- **Network legend**: smaller and grouped, and it shows only what's drawn (no Wi-Fi or hub entries while only Zigbee is shown). Tap an LQI range (0–99, 100–149…) to hide or show its Zigbee links, like the roles. The Minimum LQI slider and the *Show* section are gone from the Layers menu; a long Layers menu now scrolls.
+- **Comfort heatmap**: rooms are open to each other where their shapes touch or overlap (also a thin overlap), and a room without a thermometer (a hallway) gets a gradient from the rooms it opens into, also step by step, slightly faded as an estimate.
+- **Appliances**: *Done* clears by itself after 30 minutes (per appliance: 30 min, 1 hour, or only when unloaded); hovering a drum, line or label shows "name · state · time".
+- **Device before room**: the AC air flow can be tapped (details) and held, and hover names it; room-wide layers (the motion pulse) sit below the devices.
+- **Bond names**: an unnamed bond has the same name on the card as in the Floorplan Editor ("Kitchen Spot ×3", else the first member).
+- **Home Assistant 2026.11**:
+  - **Child devices** (one outlet of a power strip, one channel of a switch) are part of their parent's marker; give a child a Room of its own in Home Assistant and it becomes its own marker (you can still choose per device).
+  - **Main entity of the device**: the entity you mark as the device's main entity in Home Assistant leads its marker automatically.
+  - **Green Power** battery-free Zigbee switches show as their own role in Network, without lines.
+  - Names: friendly names are on their way out; the card and the Editor now take names from one place that falls back to device + entity name.
+  - Install from the **Marketplace** (it replaced HACS): guide and README updated.
+- **Edit markers**: works on the values from when it opened (nothing redraws while you edit); *Also show* starts from what the marker shows now, so adding a reading keeps the others. On the dashboard, the info card stays put while its values update.
+
 ## 0.8.0
 
 **Comfort heatmap, appliances and a card that tells you more with a tap.**
