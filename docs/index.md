@@ -10,6 +10,9 @@ hero:
     alt: "A floorplan at night: lights glowing in their rooms, two ACs with their air flow, a person in the living room"
   actions:
     - theme: brand
+      text: Try the live demo
+      link: /demo/
+    - theme: brand
       text: Get started
       link: /guide/what-is
     - theme: alt

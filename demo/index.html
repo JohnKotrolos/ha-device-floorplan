@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+if (location.hash === '#dashboard') location.replace('./demo.html' + location.search + location.hash);
+</script>
+<title>Device Floorplan · Interactive demo</title>
+<style>
+:root{color-scheme:light dark;--bg:#faf9f6;--surface:#fff;--ink:#222b35;--muted:#54616b;--border:#dce3e4;--accent:#007e80}
+@media(prefers-color-scheme:dark){:root{--bg:#12191c;--surface:#1b2428;--ink:#eff4f5;--muted:#bac7cc;--border:#35454b;--accent:#71dad4}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
+main{max-width:1240px;margin:auto;padding:42px 24px}
+header{margin-bottom:24px}
+.masthead,.top-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.masthead{justify-content:space-between;gap:16px}
+.brand h1{font-size:clamp(1.45rem,3vw,2rem);line-height:1.15}
+.brand img{width:clamp(52px,6vw,60px);height:auto;aspect-ratio:1;object-fit:contain;flex-shrink:0}
+.eyebrow{font-size:.73rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:5px}
+.intro{margin-top:20px;padding:14px 16px;background:var(--surface);border-radius:10px}
+.intro strong{color:var(--ink)}
+.top-actions .secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.brand{display:flex;align-items:center;gap:12px}
+h1,h2,p{margin:0} h1{font-size:1.25rem} h2{font-size:1.12rem}
+p{color:var(--muted)}
+.previews,.features{display:grid;gap:16px}
+.previews{grid-template-columns:repeat(2,minmax(0,1fr))}
+.features{grid-template-columns:repeat(3,minmax(0,1fr));margin:20px 0}
+article,.features div{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+article p{min-height:3.2em;margin:6px 0 12px}
+.preview{aspect-ratio:16/9;overflow:hidden;background:var(--bg);border:1px solid var(--border);border-radius:9px;margin-bottom:14px}
+.preview img{display:block;width:100%;height:100%;object-fit:contain}
+.editor img{height:auto;transform:translateY(-9.8%)}
+a{color:var(--accent)} .action{display:inline-block;background:var(--accent);color:var(--bg);font-weight:700;padding:8px 13px;border-radius:8px;text-decoration:none}
+@media(max-width:760px){.previews{grid-template-columns:1fr}.features{grid-template-columns:repeat(2,minmax(0,1fr))}article p{min-height:0}}
+@font-face{font-family:OverlayIcons;src:url('./assets/mdi.woff2') format('woff2');font-display:block}
+.overlay-showcase{margin-top:22px;padding:clamp(16px,3vw,28px);border:1px solid var(--border);border-radius:18px;background:linear-gradient(130deg,color-mix(in srgb,var(--accent) 9%,var(--bg)),var(--bg) 76%)}
+.overlay-heading{display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap}
+.overlay-heading h2{font-size:clamp(1.25rem,2.6vw,1.65rem);letter-spacing:-.025em}
+.overlay-heading h2 span{color:var(--muted);font-weight:500}
+.overlay-description{margin:8px 0 16px}
+.overlay-dock{display:flex;align-items:center;gap:2px;padding:4px;border-radius:30px;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 85%,var(--accent));max-width:100%}
+.overlay-icon{font-family:OverlayIcons;display:inline-grid;place-items:center;font-size:20px;font-weight:400;line-height:1}
+.overlay-dock .overlay-icon{width:clamp(26px,4vw,34px);height:32px;border-radius:50%;color:var(--muted)}
+.overlay-dock button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 2px 5px #0002}
+.overlay-showcase .features{margin:0;gap:12px}
+.features h3{display:flex;align-items:center;gap:8px;margin:0 0 5px;font-size:1rem}
+.features h3 .overlay-icon{color:var(--accent)}
+.features p{font-size:.92rem}
+@media(max-width:470px){.overlay-showcase .features{grid-template-columns:1fr}.overlay-heading h2 span{display:block}}
+.floorplans-callout{margin-top:16px;padding:16px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.floorplans-callout h2{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.floorplans-callout .overlay-icon{color:var(--accent)}
+.overlay-dock button{position:relative;border:0;border-radius:50%;background:transparent;cursor:pointer;padding:0}
+.overlay-dock button:hover,.overlay-dock button:focus-visible{background:var(--surface)}
+.overlay-tooltip{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:6px;padding:3px 7px;font-size:.75rem;white-space:nowrap;z-index:2;opacity:0;pointer-events:none}
+.overlay-dock button:hover .overlay-tooltip,.overlay-dock button:focus-visible .overlay-tooltip{opacity:1}
+.dashboard-preview{position:relative}
+.preview-label{position:absolute;top:8px;left:8px;padding:3px 8px;background:#111e;color:#fff;border-radius:6px;font-size:.75rem}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="masthead">
+  <div class="brand"><img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/icon.png" alt=""><div><h1>Device Floorplan</h1><p class="eyebrow">Built for Home Assistant · Live Demo</p></div></div>
+  <nav class="top-actions" aria-label="Documentation and installation">
+    <a class="action secondary" href="https://johnkotrolos.github.io/ha-device-floorplan/">Read the guide</a>
+    <a class="action" href="https://github.com/JohnKotrolos/ha-device-floorplan#install">Install from GitHub</a>
+  </nav>
+</div>
+<p class="intro"><strong>Give it a try !!!</strong> Explore a simulated apartment. Mark rooms and place devices in the Editor, then open the dashboard to switch on a light, view the temperature heatmap or explore Zigbee links. Nothing is installed, and your demo changes stay in this browser.</p>
+</header>
+<section class="previews" aria-label="Try the demo">
+<article><h2>Floorplan Editor</h2><p>Try the Editor in the sample apartment. Mark rooms, auto-place demo devices and drag them into position.</p><div class="preview editor"><img src="./assets/editor-preview.webp" alt="Floorplan Editor with devices placed on the demo apartment"></div><a class="action" href="./demo.html">Open Editor Demo →</a></article>
+<article><h2>Floorplan Card</h2><p>See the demo apartment come alive after dark. Open the demo, switch on a light and watch it glow right where it belongs.</p><div class="preview dashboard-preview" style="background:#121212"><img id="overlay-preview-image" src="./assets/live-night-preview.webp" alt="Live floorplan at night with glowing lights, AC airflow and a highlighted hallway"><span id="overlay-preview-label" class="preview-label" aria-live="polite">Live preview</span></div><a class="action" href="./demo.html?demo=live#dashboard">Open Live Dashboard →</a></article>
+</section>
+<section class="overlay-showcase" aria-labelledby="overlay-heading">
+<div class="overlay-heading"><h2 id="overlay-heading">Overlays <span>· See your devices in action</span></h2><div class="overlay-dock" role="group" aria-label="Dashboard preview"><button type="button" data-overlay="live" aria-label="Live" aria-pressed="true"><span class="overlay-icon" aria-hidden="true">󱉒</span><span class="overlay-tooltip" aria-hidden="true">Live</span></button><button type="button" data-overlay="lights" aria-label="Lights" aria-pressed="false"><span class="overlay-icon" aria-hidden="true">󱉔</span><span class="overlay-tooltip" aria-hidden="true">Lights</span></button><button type="button" data-overlay="comfort" aria-label="Comfort" aria-pressed="false"><span class="overlay-icon" aria-hidden="true">󰔏</span><span class="overlay-tooltip" aria-hidden="true">Comfort</span></button><button type="button" data-overlay="security" aria-label="Security" aria-pressed="false"><span class="overlay-icon" aria-hidden="true">󰳋</span><span class="overlay-tooltip" aria-hidden="true">Security</span></button><button type="button" data-overlay="network" aria-label="Network" aria-pressed="false"><span class="overlay-icon" aria-hidden="true">󰀂</span><span class="overlay-tooltip" aria-hidden="true">Network</span></button><button type="button" data-overlay="health" aria-label="Health" aria-pressed="false"><span class="overlay-icon" aria-hidden="true">󱈑</span><span class="overlay-tooltip" aria-hidden="true">Health</span></button></div></div>
+<p class="overlay-description">Select an icon to preview an overlay above. In Device Floorplan, choose a built-in overlay or create your own.</p>
+<div class="features">
+<div><h3><span class="overlay-icon" aria-hidden="true">󱉒</span>Live</h3><p>See what’s on, what’s running and where it’s all happening in your home right now.</p></div>
+<div><h3><span class="overlay-icon" aria-hidden="true">󱉔</span>Lights</h3><p>See which lights are on, control them from the floorplan and create scenes for TV time or relaxing without Home Assistant scripting.</p></div>
+<div><h3><span class="overlay-icon" aria-hidden="true">󰔏</span>Comfort</h3><p>Check room temperature and humidity, explore the heatmap and control your climate devices to keep your home in the comfort zone.</p></div>
+<div><h3><span class="overlay-icon" aria-hidden="true">󰳋</span>Security</h3><p>See motion, cameras, door and window sensors, and your Home Assistant alarm in one floorplan view.</p></div>
+<div><h3><span class="overlay-icon" aria-hidden="true">󰀂</span>Network</h3><p>See how your network performs. Check Zigbee connections and link quality with ZHA, and locate Wi-Fi and Bluetooth devices.</p></div>
+<div><h3><span class="overlay-icon" aria-hidden="true">󱈑</span>Health</h3><p>Spot offline devices, low batteries and other warnings right where those devices are on the plan.</p></div>
+</div>
+</section>
+
+<section class="floorplans-callout"><h2><span class="overlay-icon" aria-hidden="true">󰠡</span>Multiple floorplans</h2><p>Have more than one floor? Switch between floorplans and views from the same dashboard card.</p></section>
+</main>
+<script src="./overlay-previews.js" defer></script>
+</body>
+</html>

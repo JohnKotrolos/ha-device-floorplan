@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#faf8f3"><meta name="description" content="Try the real Device Floorplan Editor and Dashboard card with a simulated Home Assistant home."><title>Device Floorplan — Interactive demo</title><link rel="stylesheet" href="demo-shell.css"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%2320b7a7'/%3E%3Cpath d='M5 19V5h14v6h-7v8H5m7-7-7 0m7-7v7m3 7 5-5' stroke='white' fill='none' stroke-width='2'/%3E%3C/svg%3E"><script src="./device_floorplan_static/device-floorplan-icons.js"></script><script type="module" src="demo-app.js"></script></head>
+<body><aside class="ha-sidebar"><div class="ha-brand"><button id="collapse-sidebar" class="icon-btn" aria-label="Collapse sidebar"><ha-icon icon="mdi:menu"></ha-icon></button><span class="demo-brand"><img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/icon.png" alt=""><span><b>Device Floorplan</b><small>Home Assistant · Live Demo</small></span></span></div><nav aria-label="Home Assistant navigation"><button id="nav-dashboard" data-view="dashboard"><ha-icon icon="mdi:view-dashboard"></ha-icon><span>Dashboard</span></button><button id="nav-editor" data-view="editor" class="active" aria-current="page"><ha-icon icon="dfp:floorplan-edit"></ha-icon><span>Floorplan Editor</span></button></nav><div class="sidebar-bottom"><div class="demo-group-title">Demo</div><a class="source-link demo-intro-link" href="./" aria-label="Demo introduction"><ha-icon icon="mdi:information-outline"></ha-icon><span>Demo introduction</span></a><p class="sidebar-note">A simulated home.<br>Your changes stay in this browser.</p><label class="theme-select"><ha-icon icon="mdi:palette-outline"></ha-icon><select id="theme-select" aria-label="Home Assistant theme"><option value="light">Light</option><option value="dark">Dark</option></select></label><a class="source-link" href="https://github.com/JohnKotrolos/ha-device-floorplan" target="_blank" rel="noopener"><ha-icon icon="mdi:github"></ha-icon><span>Device Floorplan · v0.8.1</span></a></div><button type="button" id="reset-demo" class="ha-button demo-reset" title="Restore the original demo layout and device states"><ha-icon icon="mdi:restart"></ha-icon><span>Reset demo</span></button></aside>
+<main class="ha-main"><section id="editor-view" aria-label="Floorplan Editor"></section><section id="dashboard-view" hidden><header class="dash-header"><div><h1>Dashboard</h1><span>Demo home</span><p class="dashboard-help">Choose <strong>Edit dashboard → Edit card</strong> to change card and overlay settings. At the bottom of Edit card, choose <strong>Edit markers</strong> to set which devices appear in each overlay and what they show.</p></div><div><button id="edit-dashboard" class="ha-button"><ha-icon icon="mdi:pencil"></ha-icon><span>Edit dashboard</span></button></div></header><div id="dashboard-content"></div>
+<div class="simulation-dock" role="group" aria-label="Demo controls">
+  <strong>Demo controls <small>Simulation</small></strong>
+  <div class="dock-group" role="group" aria-label="Ambience">
+    <button type="button" id="dock-day" aria-pressed="false">Day</button>
+    <button type="button" id="dock-night" aria-pressed="false">Night</button>
+    <button type="button" id="dock-lights" aria-pressed="false">Living room lights</button>
+    <button type="button" id="dock-kitchen" aria-pressed="false">Kitchen light</button>
+  </div>
+  <div class="dock-group" role="group" aria-label="Activity">
+    <button type="button" id="dock-motion" aria-pressed="false">Hallway motion</button>
+    <button type="button" id="dock-door" aria-pressed="false">Front door</button>
+    <button type="button" id="dock-window" aria-pressed="false">Bedroom 2 window</button>
+  </div>
+  <div class="dock-group" role="group" aria-label="Climate and overlay controls">
+    <select id="dock-ac" aria-label="Living room air conditioning"><option value="off">AC · Off</option><option value="cool">AC · Cooling</option><option value="heat">AC · Heating</option></select>
+    <button type="button" id="dock-temp-button" data-dock-overlay="comfort" popovertarget="dock-temperature" hidden>Bedroom temperature</button>
+    <button type="button" id="dock-shutter-button" data-dock-overlay="security" popovertarget="dock-shutter" hidden>Bedroom 2 shutter</button>
+  </div>
+  <div class="dock-group dock-context" aria-label="Overlay simulation controls">
+    <select id="demo-dishwasher" aria-label="Dishwasher cycle" data-dock-overlay="live"><option value="Washing">Dishwasher · Washing</option><option value="Drying">Dishwasher · Drying</option><option value="Finished">Dishwasher · Finished</option><option value="Off">Dishwasher · Off</option></select>
+    <button type="button" id="demo-zigbee-online" data-dock-overlay="network" aria-pressed="true">Zigbee router · Online</button>
+    <button type="button" popovertarget="dock-health" data-dock-overlay="health">Device health</button>
+  </div>
+  <div popover id="dock-temperature" class="dock-popover"><label>Bedroom temperature <input id="dock-temp-range" type="range" min="18" max="29" step=".5"></label></div>
+  <div popover id="dock-shutter" class="dock-popover"><label>Bedroom 2 shutter position <input id="dock-shutter-range" type="range" min="0" max="100"></label><label><input id="demo-leak" type="checkbox"> Bathroom leak detected</label></div>
+  <div popover id="dock-health" class="dock-popover">
+    <label>Bedroom 2 thermometer battery <select id="demo-battery"><option value="12">12% · Low battery</option><option value="100">100% · Replaced</option></select></label>
+    <label><input id="demo-desk-online" type="checkbox"> Bedroom 2 desk plug online</label>
+  </div>
+</div></section></main>
+<dialog id="details-dialog" aria-label="Home Assistant demo details"><div id="details-content"></div></dialog><dialog id="card-editor-dialog" aria-label="Edit Device Floorplan card"><header><h2>Edit card</h2><button id="close-card-editor" class="icon-btn" aria-label="Close card editor"><ha-icon icon="mdi:close"></ha-icon></button></header><div class="card-edit-layout"><div id="card-editor-controls"></div><div id="card-editor-preview"></div></div><footer><span>Demo dashboard · changes saved in this browser</span><button id="done-card-editor" class="ha-button primary">Done</button></footer></dialog><div id="shell-toast" role="status"></div>
+</body></html>

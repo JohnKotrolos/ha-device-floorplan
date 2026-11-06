@@ -13,6 +13,7 @@ export default defineConfig({
   themeConfig: {
     logo: "/icon.png",
     nav: [
+      { text: "Live demo", link: "/demo/" },
       { text: "Getting started", link: "/guide/what-is" },
       { text: "Using Device Floorplan", link: "/using/editor" },
       { text: "Floorplan images", link: "/images/choosing" },
