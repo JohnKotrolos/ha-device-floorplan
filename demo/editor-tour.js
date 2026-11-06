@@ -46,6 +46,7 @@ export function startEditorTour(hass, editorView) {
     panel._applyState(sample);
     panel._applyDevices({devices:sample.devices, areas:Object.entries(AREA_NAMES).map(([area_id,name]) => ({area_id,name,floor_id:plan.floor_id})),floors:[{floor_id:plan.floor_id,name:plan.name}]});
     panel.s.planId = plan.id;
+    panel.s.img[plan.image_url] = plan.image_url;
     panel.work = {};
     const style = document.createElement("style");
     style.textContent = ".app { height: 100%; }";
