@@ -1,18 +1,58 @@
 import { makeInitial, clone, AREA_NAMES } from './demo-data.js';
 
-const stages = [
-  { tool: 'measure', title: 'Measure the kitchen table', frames: [
-    [0, 'Start with an object of known size. Pick the two ends of the long edge.', 'measuring'],
-    [2200, 'The horizontal edge measures 1.48 m.', 'horizontal'],
-    [4900, 'Measure the short edge too. The 0.86 m reference sets the vertical scale.', 'vertical']
-  ]},
-  { tool: 'rooms', title: 'Draw room shapes' },
-  { tool: 'place', title: 'Place a device and inspect it', frames: [
-    [0, 'The Editor switches to device placement. The filled room boundaries disappear, and the room names remain.'],
-    [2500, 'Place the dishwasher at its actual location in the Kitchen.', 'dishwasher'],
-    [5200, 'Select the dishwasher marker to open its details in the right panel.', 'selected']
-  ]}
-];
+const lightEntity = 'light.bathroom_light';
+const lightId = `entity:${lightEntity}`;
+const switchPoint = {x:55, y:43};
+const lightPoint = {x:52, y:23};
+const near = (point, target, tolerance = 5) => Boolean(point &&
+  Math.abs(point.x - target.x) <= tolerance && Math.abs(point.y - target.y) <= tolerance);
+const hasReference = (work, ref) => work.refs.some(candidate =>
+  candidate.dir === ref.dir && Math.abs(candidate.length - ref.length) < 0.005 &&
+  ((near({x:candidate.ax,y:candidate.ay}, {x:ref.ax,y:ref.ay}, 3) &&
+    near({x:candidate.bx,y:candidate.by}, {x:ref.bx,y:ref.by}, 3)) ||
+   (near({x:candidate.bx,y:candidate.by}, {x:ref.ax,y:ref.ay}, 3) &&
+    near({x:candidate.ax,y:candidate.ay}, {x:ref.bx,y:ref.by}, 3))));
+
+function makeLessons(plan) {
+  const [horizontal, vertical] = plan.refs;
+  const dishwasher = plan.positions.dishwasher;
+  const light = panel => panel.work.positions[lightId]?.light;
+  return [
+    [
+      { title:'Give the floorplan a scale', copy:'A floorplan image has pixels. Two known lengths give the Editor a horizontal and vertical scale in metres. Use straight edges you can measure, such as the sides of this kitchen table.', watch:true, target:'[data-act="tool"][data-tool="measure"]' },
+      { title:'Watch the long edge', copy:'Click the two ends of the long edge of the table, enter 1.48 m in Real length, then choose Set scale. The line on the plan shows the saved horizontal reference.', watch:true, refs:[horizontal], point:{x:horizontal.bx,y:horizontal.by} },
+      { title:'Set the horizontal scale yourself', copy:'Click each end of the long edge nearest the top of the plan, starting at the blue dot. Type 1.48 in Real length and click Set scale. If you miss an end, use the × beside the measurement and try again.', reference:horizontal, ready:panel => hasReference(panel.work, horizontal) },
+      { title:'Set the vertical scale', copy:'Starting at the blue dot, click the two ends of the short left edge of the table. Replace the estimated length with 0.86 m and choose Set scale. You should now see one reference for each direction.', reference:vertical, ready:panel => hasReference(panel.work, vertical) },
+      { title:'Check both references', copy:'The two lines show 1.48 m horizontally and 0.86 m vertically. On your own plan, use lengths you measured in the room. The Editor now has a scale for sizing effects such as a light’s radius.', watch:true }
+    ],
+    [],
+    [
+      { title:'Place devices where they are', copy:'Room names stay visible in Place devices. Put each device where it actually sits so its marker and effects make sense on the plan. We’ll use the Kitchen dishwasher as an example.', watch:true, target:'[data-act="tool"][data-tool="place"]' },
+      { title:'Place the Kitchen dishwasher', copy:'Select Dishwasher in the Kitchen group on the right, then click its location at the blue dot. You can also drag it from the list to that spot.', target:'[data-act="pick"][data-id="dishwasher"]', point:dishwasher, ready:panel => near(panel.work.positions.dishwasher, dishwasher) },
+      { title:'Inspect the device you placed', copy:'Click the Dishwasher marker. The right panel shows the device and its entities. Click Next when those details are open.', target:'[data-mk="dishwasher"]', ready:panel => panel.s.sel === 'dishwasher' }
+    ],
+    [
+      { title:'Find the physical switch', copy:'The Bathroom light switch is mounted on the hallway side of the wall. Its ceiling light is inside the bathroom. Start with the spot you would reach to press the switch.', watch:true, point:switchPoint },
+      { title:'Place the switch by the door', copy:'Select Bathroom light switch in the Bathroom group, then click the blue dot beside the doorway. You can also drag it there from the list.', target:'[data-act="pick"][data-id="bath_switch"]', point:switchPoint, ready:panel => near(panel.work.positions.bath_switch, switchPoint, 3) }
+    ],
+    [
+      { title:'Open the switch details', copy:'Click the Bathroom light switch marker on the plan. We’ll keep it by the door and give the light it controls a location of its own.', target:'[data-mk="bath_switch"]', ready:panel => panel.s.sel === 'bath_switch' },
+      { title:'Open Split', copy:'In the switch details, choose “Split: it controls something elsewhere”. This reveals the entities you can place separately.', target:'[data-act="splitopen"]', ready:panel => panel.s.sel === 'bath_switch' && panel.s.splitOpen === 'bath_switch' },
+      { title:'Place the ceiling light', copy:'Beside Bathroom ceiling light, choose “Place where it acts”. Then click the blue dot inside the bathroom. If you place it outside the room, move the light marker back inside.', target:`[data-act="splitplace"][data-id="${lightEntity}"]`, point:lightPoint, ready:panel => {
+        const position = panel.work.positions[lightId];
+        return position?.of === 'bath_switch' && near(position, lightPoint);
+      } },
+      { title:'Check the two locations', copy:'The switch stays beside the door. The ceiling light has its own marker inside the bathroom, where its glow will appear.', watch:true, point:lightPoint }
+    ],
+    [
+      { title:'Choose the light shape', copy:'Select the Bathroom ceiling light marker. In Light on the plan, choose Bulb for a round pool of light.', target:`[data-mk="${lightId}"], [data-act="lighttype"][data-type="bulb"]`, ready:panel => light(panel)?.type === 'bulb' },
+      { title:'Size the light pool', copy:'Set Radius to 1.2 m, then press Tab. Use the size that matches the fixture when you work on your own plan.', target:'#lightr', ready:panel => Math.abs((light(panel)?.r ?? 0) * panel._realW() / 100 - 1.2) < 0.03 },
+      { title:'Choose a colour', copy:'Move the warm-to-cool slider or pick a custom colour. Auto is useful for smart lights that report their own colour.', target:'#lightk, #lighthex', ready:panel => Boolean(light(panel)?.color) },
+      { title:'Preview the result at night', copy:'Click the moon button on the plan to preview the glow. Look for the light pool inside the bathroom and the switch marker beside the door.', target:'[data-act="nightprev"]', ready:panel => Boolean(panel.s.nightPrev) },
+      { title:'Your bathroom light is ready', copy:'You measured the plan, traced room boundaries, placed devices, and previewed the glow from a separately placed light. Finish to return to the demo Editor. The practice copy closes when you finish.', watch:true }
+    ]
+  ];
+}
 
 const roomLesson = [
   ['Why draw room shapes?', 'Room shapes tell Device Floorplan where rooms begin and end so lighting and other overlays can follow their boundaries. Device Floorplan does not detect walls or draw room boundaries automatically. You need to draw a shape for every room.'],
@@ -28,28 +68,11 @@ const roomLesson = [
 ];
 const roomPractice = 'In Mark rooms, select Living room and click inside it on the plan. Click Shape beside its name, then drag the four corners to match the room and click Done. You can practise other rooms here too. These edits are for practice only.';
 
-const practice = [
-  {
-    title: 'Place the bathroom switch',
-    copy: 'Your turn. In the right-hand device list, find Bathroom light switch under Bathroom. Drag it onto the hallway side of the wall beside the bathroom door, where the physical switch is located. Then click Next.',
-    ready: work => Boolean(work.positions.bath_switch)
-  },
-  {
-    title: 'Place the light separately',
-    copy: 'This switch controls a ceiling light inside the bathroom. Device Floorplan calls this a Split device. Select the switch marker, then choose “Split: it controls something elsewhere” in the right panel. Beside Bathroom ceiling light, choose “Place where it acts”, then click where the fixture is inside the bathroom. Click Next once the light is on the plan.',
-    ready: work => Boolean(work.positions['entity:light.bathroom_light'])
-  },
-  {
-    title: 'Set the light’s shape and colour',
-    copy: 'Select the new ceiling light marker. In the yellow “Light on the plan” section on the right, choose the shape that matches the fixture, such as Bulb for a round light pool. Set its Radius or drag the orange handle on the plan, then choose a Colour. Click Finish when you’re happy with the result.',
-    ready: () => true
-  }
-];
-
 export function startEditorTour(hass, editorView) {
   if (document.querySelector('.editor-tour')) return;
   const sample = makeInitial();
   const [plan] = sample.plans;
+  const lessons = makeLessons(plan);
   const dialog = document.createElement('section');
   dialog.className = 'editor-tour';
   dialog.setAttribute('aria-labelledby', 'editor-tour-title');
@@ -90,18 +113,18 @@ export function startEditorTour(hass, editorView) {
   cursor.setAttribute('aria-hidden', 'true');
   editorView.append(cursor);
   const button = name => dialog.querySelector(`[data-action="${name}"]`);
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let stage = 0;
-  let timers = [];
-  let practiceIndex = -1;
+  let lessonFrame = 0;
+  let pointFrame;
+  const checkpoints = [];
   let placementCheck;
   let roomFrame = 0;
   let practiceFinished = false;
   const bedroom = 'bedroom';
   const living = 'living_room';
   const hasAdjustedLivingShape = () => {
-    const points = panel.work.shapes[living];
-    return Boolean(panel.work.anchors[living] && points?.length >= 3 &&
+    const points = panel.work?.shapes?.[living];
+    return Boolean(panel.work?.anchors?.[living] && points?.length >= 3 &&
       JSON.stringify(points) !== JSON.stringify(panel._shapeRect(living)));
   };
 
@@ -134,7 +157,12 @@ export function startEditorTour(hass, editorView) {
     panel.inert = !practising;
     practiceFinished = false;
 
-    applyFrame('rooms', copy, example ? 'rooms' : undefined);
+    narrate(copy);
+    resetEditor('rooms', {
+      refs: checkpoints[1].refs,
+      anchors: example ? plan.anchors : {},
+      shapes: example ? plan.shapes : {}
+    });
     if (!example && roomFrame >= 2) panel.work.anchors[bedroom] = clone(plan.anchors[bedroom]);
     if (!example && roomFrame >= 3) {
       const points = panel._shapeRect(bedroom);
@@ -143,26 +171,13 @@ export function startEditorTour(hass, editorView) {
         i < moved ? clone(plan.shapes[bedroom][i]) : point);
       panel.s.shapeEdit = roomFrame <= 7 ? bedroom : null;
     }
-    panel._undo = [];
-    panel._redo = [];
     panel._render();
 
-    if (target) tourStyle.textContent += `
-${target} { outline: 3px solid #00a6ce; outline-offset: 2px; }`;
+    highlight(target);
     const corner = roomFrame - 3;
-    if (!practising && !example && corner >= 0 && corner < 4) {
+    if (corner >= 0 && corner < 4) {
       const [x, y] = plan.shapes[bedroom][corner];
-      const showTarget = () => {
-        const image = panel.shadowRoot.querySelector('#planimg');
-        if (!image) return;
-        const rect = image.getBoundingClientRect();
-        cursor.style.left = `${rect.left + rect.width * x / 100}px`;
-        cursor.style.top = `${rect.top + rect.height * y / 100}px`;
-        cursor.hidden = false;
-      };
-      // Let the learner find the highlighted handle before pointing to its destination.
-      if (reducedMotion) requestAnimationFrame(showTarget);
-      else timers.push(setTimeout(showTarget, 800));
+      pointAt({x,y});
     }
     if (practising) {
       button('next').disabled = true;
@@ -172,37 +187,22 @@ ${target} { outline: 3px solid #00a6ce; outline-offset: 2px; }`;
     }
   }
 
-  function applyFrame(tool, copy, frame) {
+  function narrate(copy) {
     dialog.querySelector('#editor-tour-narration').textContent = copy;
-    const allRooms = stage >= 2 || frame === 'rooms';
-    const dishwasher = frame === 'dishwasher' || frame === 'selected';
-    Object.assign(panel.work, {
-      refs: clone(stage > 0 || frame === 'vertical' ? plan.refs : frame === 'horizontal' ? plan.refs.slice(0,1) : []),
-      anchors: clone(allRooms ? plan.anchors : {}),
-      shapes: clone(allRooms ? plan.shapes : {}),
-      positions: clone(dishwasher ? {dishwasher:plan.positions.dishwasher} : {}),
-      hidden_rooms: [], bonds: {}, bond_meta: {}, phantoms: {}
-    });
-    Object.assign(panel.s, {
-      tool, guide:false, loading:false, shapeEdit:null, placingRoom:null, queue:false,
-      m1:frame === "measuring" ? {x:plan.refs[0].ax,y:plan.refs[0].ay} : null,
-      mh:frame === "measuring" ? {x:plan.refs[0].bx,y:plan.refs[0].by} : null,
-      sel:frame === 'selected' ? 'dishwasher' : null,
-      layers:{refs:true,rooms:true,devices:true,roomshapes:true}
-    });
-    panel._render();
-    const targets = {
-      measuring: {x:plan.refs[0].ax,y:plan.refs[0].ay},
-      horizontal: {x:plan.refs[0].bx,y:plan.refs[0].by},
-      vertical: {x:plan.refs[1].bx,y:plan.refs[1].by},
-      dishwasher: plan.positions.dishwasher,
-      selected: plan.positions.dishwasher
-    };
-    const point = targets[frame];
-    if (reducedMotion || !point) { cursor.hidden = true; return; }
-    requestAnimationFrame(() => {
+  }
+
+  function highlight(target) {
+    tourStyle.textContent = editorHeight + (target
+      ? `\n${target} { outline: 3px solid #00a6ce; outline-offset: 2px; }` : '');
+  }
+
+  function pointAt(point) {
+    cancelAnimationFrame(pointFrame);
+    cursor.hidden = true;
+    if (!point) return;
+    pointFrame = requestAnimationFrame(() => {
       const image = panel.shadowRoot.querySelector('#planimg');
-      if (!image || !cursor.isConnected) return;
+      if (!image) return;
       const rect = image.getBoundingClientRect();
       cursor.style.left = `${rect.left + rect.width * point.x / 100}px`;
       cursor.style.top = `${rect.top + rect.height * point.y / 100}px`;
@@ -210,83 +210,112 @@ ${target} { outline: 3px solid #00a6ce; outline-offset: 2px; }`;
     });
   }
 
+  function resetEditor(tool, work = {}) {
+    panel.work = clone({
+      refs:[], anchors:{}, shapes:{}, positions:{},
+      hidden_rooms:[], bonds:{}, bond_meta:{}, phantoms:{}, ...work
+    });
+    panel._undo = [];
+    panel._redo = [];
+    panel._setTool(tool);
+    Object.assign(panel.s, {
+      guide:false, loading:false, queue:false, shapeEdit:null, sel:null,
+      placingBox:null, splitOpen:null, nightPrev:false, dialog:null,
+      ask:false, lenInput:'', q:'', status:[], collapsed:{},
+      layers:{refs:true,rooms:true,devices:true,roomshapes:true}
+    });
+    panel._render();
+  }
+
   function showStage() {
-    timers.forEach(clearTimeout);
-    timers = [];
     clearInterval(placementCheck);
     button('next').disabled = false;
-    tourStyle.textContent = editorHeight;
-    button('back').disabled = stage === 0;
+    button('back').disabled = stage === 0 && lessonFrame === 0;
+    highlight();
+    pointAt();
     if (stage === 1) { showRoomFrame(); return; }
-    panel.inert = true;
-    const {tool,title,frames} = stages[stage];
-    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stage + 1} of ${stages.length + practice.length}`;
-    dialog.querySelector('#editor-tour-title').textContent = title;
-    button('next').textContent = 'Next →';
-    if (reducedMotion) {
-      const [,copy,frame] = frames.at(-1);
-      applyFrame(tool,frames.map(([,message])=>message).join(' '),frame);
-      return;
+
+    const lesson = lessons[stage];
+    const step = lesson[lessonFrame];
+    const phase = step.watch ? (lessonFrame === lesson.length - 1 ? 'Check the result' : 'Watch me') : 'Your turn';
+    dialog.querySelector('#editor-tour-progress').textContent =
+      `Step ${stage + 1} of ${lessons.length} · ${phase} · ${lessonFrame + 1} of ${lesson.length}`;
+    dialog.querySelector('#editor-tour-title').textContent = step.title;
+    narrate(step.copy);
+    panel.inert = Boolean(step.watch);
+
+    if (stage === 0 && lessonFrame <= 2) {
+      resetEditor('measure', {refs:step.refs || []});
     }
-    for (const [delay,copy,frame] of frames) {
-      if (delay) timers.push(setTimeout(() => applyFrame(tool,copy,frame),delay));
-      else applyFrame(tool,copy,frame);
+    highlight(step.target);
+    pointAt(step.point);
+    button('next').textContent = stage === lessons.length - 1 && lessonFrame === lesson.length - 1
+      ? 'Finish' : lessonFrame === lesson.length - 1 ? 'Next step →' : 'Next action →';
+    if (step.ready) {
+      let lastCue;
+      const update = () => {
+        const ready = Boolean(panel.work && step.ready(panel));
+        button('next').disabled = !ready;
+        if (!step.reference) return;
+        const cue = ready ? 'done' : panel.s.m2 ? 'length' : panel.s.m1 ? 'end' : 'start';
+        if (cue === lastCue) return;
+        lastCue = cue;
+        const {ax, ay, bx, by, dir} = step.reference;
+        pointAt(cue === 'start' ? {x:ax,y:ay} : cue === 'end' ? {x:bx,y:by} : null);
+        highlight(cue === 'length' ? '#lenin, [data-act="setscale"]' : null);
+        // Both table references share an endpoint. Let the second measurement
+        // start there without grabbing the handle of the already saved line.
+        if (dir === 'v' && !ready) {
+          tourStyle.textContent += '\n.rh[data-rh], .reflbl[data-refl] { pointer-events: none; opacity: .45; }';
+        }
+      };
+      update();
+      placementCheck = setInterval(update, 150);
     }
   }
 
-  function showPractice() {
-    const step = practice[practiceIndex];
-    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stages.length + practiceIndex + 1} of ${stages.length + practice.length}`;
-    dialog.querySelector('#editor-tour-title').textContent = step.title;
-    dialog.querySelector('#editor-tour-narration').textContent = step.copy;
-    button('back').hidden = true;
-    button('replay').hidden = true;
-    button('next').textContent = practiceIndex === practice.length - 1 ? 'Finish' : 'Next →';
-    const update = () => { button('next').disabled = !original.work || !step.ready(original.work); };
-    clearInterval(placementCheck);
-    update();
-    if (button('next').disabled) placementCheck = setInterval(update, 200);
+  function enterStage(index, atEnd = false) {
+    stage = index;
+    lessonFrame = atEnd ? lessons[stage].length - 1 : 0;
+    roomFrame = atEnd ? roomLesson.length + 1 : 0;
+    resetEditor(stage === 0 ? 'measure' : stage === 1 ? 'rooms' : 'place',
+      atEnd ? checkpoints[stage + 1] : checkpoints[stage]);
+    if (atEnd && stage === 2) panel.s.sel = 'dishwasher';
+    showStage();
   }
 
   button('skip').onclick = stop;
   button('back').onclick = () => {
-    if (stage === 1 && roomFrame > 0) roomFrame--;
-    else { stage--; roomFrame = stage === 1 ? roomLesson.length + 1 : 0; }
-    showStage();
+    if (stage === 1 && roomFrame > 0) { roomFrame--; showStage(); }
+    else if (stage !== 1 && lessonFrame > 0) { lessonFrame--; showStage(); }
+    else enterStage(stage - 1, true);
   };
-  button('replay').onclick = () => { roomFrame = 0; showStage(); };
+  button('replay').onclick = () => enterStage(stage);
   button('next').onclick = () => {
-    if (practiceIndex >= 0) {
-      if (!original.work || !practice[practiceIndex].ready(original.work)) return;
-      if (practiceIndex === practice.length - 1) stop();
-      else { practiceIndex++; showPractice(); }
-    } else if (stage === 1 && roomFrame <= roomLesson.length) {
+    if (stage === 1 && roomFrame <= roomLesson.length) {
       if (roomFrame === roomLesson.length &&
           (!practiceFinished || !hasAdjustedLivingShape() || panel.s.shapeEdit)) return;
       roomFrame++;
       showStage();
-    } else if (stage === stages.length - 1) {
-      timers.forEach(clearTimeout);
-      panel.remove();
-      cursor.remove();
-      original.hidden = false;
-      original.classList.add('tour-preview');
-      const style = document.createElement('style');
-      style.id = 'tour-editor-size';
-      style.textContent = '.app { height: 100%; }';
-      original.shadowRoot.append(style);
-      original.shadowRoot.querySelector('[data-act="tool"][data-tool="place"]')?.click();
-      window.dispatchEvent(new Event('resize'));
-      practiceIndex = 0;
-      showPractice();
-    } else { stage++; showStage(); }
+      return;
+    }
+    if (stage !== 1) {
+      const lesson = lessons[stage];
+      if (lesson[lessonFrame].ready && (!panel.work || !lesson[lessonFrame].ready(panel))) return;
+      if (lessonFrame < lesson.length - 1) {
+        lessonFrame++;
+        showStage();
+        return;
+      }
+    }
+    if (stage === lessons.length - 1) { stop(); return; }
+    checkpoints[stage + 1] = clone(panel.work);
+    enterStage(stage + 1);
   };
   function stop() {
     if (!dialog.isConnected) return;
-    timers.forEach(clearTimeout);
+    cancelAnimationFrame(pointFrame);
     clearInterval(placementCheck);
-    original.classList.remove('tour-preview');
-    original.shadowRoot.getElementById('tour-editor-size')?.remove();
     panel.remove();
     cursor.remove();
     dialog.remove();
