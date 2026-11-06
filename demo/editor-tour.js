@@ -121,7 +121,7 @@ export function startEditorTour(hass, editorView) {
     const [title, copy, target] = practising
       ? ['Draw the Living room yourself', roomPractice]
       : example
-        ? ['Completed example · 6 rooms', 'This is how your floorplan will look once all rooms are drawn. The six outlines here are a reference for the demo apartment. On your own plan, place a pin and fit a shape for each room before placing devices.']
+        ? ['Completed example · 6 rooms', 'This is how your floorplan will look once all rooms are drawn. Let adjacent room shapes overlap slightly where rooms connect through an open doorway or share an open-plan space. Leave a small gap where a wall separates them. This lets light and other room effects flow through openings and stop at walls. On your own plan, place a pin and fit a shape for each room before placing devices.']
         : roomLesson[roomFrame];
     dialog.querySelector('#editor-tour-progress').textContent = practising
       ? 'Step 2 of 6 · Your turn'
