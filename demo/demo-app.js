@@ -1,3 +1,5 @@
+import { startEditorTour } from "./editor-tour.js";
+const tourRequested = new URLSearchParams(location.search).get("tour") === "editor";
 const demoPage = new URL('./demo.html', import.meta.url).pathname;
 import './ha-components.js';
 import {DemoHome} from './ha-adapter.js';
@@ -104,3 +106,9 @@ if (new URLSearchParams(location.search).get('demo') === 'live' && !home.cards.l
   await home.callWS({type:'lovelace/config/save', config});
 }
 let theme='light';try{if(localStorage.getItem('df-demo-theme')==='dark')theme='dark'}catch{}applyTheme(theme);mountEditor();await showView(location.hash==='#dashboard'?'dashboard':'editor');
+
+$('replay-editor-tour').onclick = async () => {
+  await showView('editor');
+  startEditorTour();
+};
+if (tourRequested && currentView === 'editor') startEditorTour();
