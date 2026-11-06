@@ -16,10 +16,25 @@ const stages = [
     [0, 'The Editor switches to device placement. The filled room boundaries disappear, and the room names remain.'],
     [2500, 'Place the dishwasher at its actual location in the Kitchen.', 'dishwasher'],
     [5200, 'Select the dishwasher marker to open its details in the right panel.', 'selected']
-  ]},
-  { tool: 'place', title: 'Try the Editor yourself', frames: [
-    [0, 'The sample layout is ready. Try placing the Hallway thermometer or Bathroom light switch in the Editor.', 'finish']
   ]}
+];
+
+const practice = [
+  {
+    title: 'Place the bathroom switch',
+    copy: 'Your turn. In the right-hand device list, find Bathroom light switch under Bathroom. Drag it onto the hallway side of the wall beside the bathroom door, where the physical switch is located. Then click Next.',
+    ready: work => Boolean(work.positions.bath_switch)
+  },
+  {
+    title: 'Place the light separately',
+    copy: 'This switch controls a ceiling light inside the bathroom. Device Floorplan calls this a Split device. Select the switch marker, then choose “Split: it controls something elsewhere” in the right panel. Beside Bathroom ceiling light, choose “Place where it acts”, then click where the fixture is inside the bathroom. Click Next once the light is on the plan.',
+    ready: work => Boolean(work.positions['entity:light.bathroom_light'])
+  },
+  {
+    title: 'Set the light’s shape and colour',
+    copy: 'Select the new ceiling light marker. In the yellow “Light on the plan” section on the right, choose the shape that matches the fixture, such as Bulb for a round light pool. Set its Radius or drag the orange handle on the plan, then choose a Colour. Click Finish when you’re happy with the result.',
+    ready: () => true
+  }
 ];
 
 export function startEditorTour(hass, editorView) {
@@ -68,10 +83,11 @@ export function startEditorTour(hass, editorView) {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let stage = 0;
   let timers = [];
+  let practiceIndex = -1;
+  let placementCheck;
 
   function applyFrame(tool, copy, frame) {
     dialog.querySelector('#editor-tour-narration').textContent = copy;
-    const complete = frame === 'finish';
     const allRooms = stage >= 2 || frame === 'rooms';
     const kitchen = frame === 'pin' || frame === 'shape';
     const dishwasher = frame === 'dishwasher' || frame === 'selected';
@@ -79,9 +95,8 @@ export function startEditorTour(hass, editorView) {
       refs: clone(stage > 0 || frame === 'vertical' ? plan.refs : frame === 'horizontal' ? plan.refs.slice(0,1) : []),
       anchors: clone(allRooms ? plan.anchors : kitchen ? {kitchen:plan.anchors.kitchen} : {}),
       shapes: clone(allRooms ? plan.shapes : frame === 'shape' ? {kitchen:plan.shapes.kitchen} : {}),
-      positions: clone(complete ? plan.positions : dishwasher ? {dishwasher:plan.positions.dishwasher} : {}),
-      hidden_rooms: [], bonds: complete ? clone(plan.bonds) : {},
-      bond_meta: complete ? clone(plan.bond_meta) : {}, phantoms: complete ? clone(plan.phantoms) : {}
+      positions: clone(dishwasher ? {dishwasher:plan.positions.dishwasher} : {}),
+      hidden_rooms: [], bonds: {}, bond_meta: {}, phantoms: {}
     });
     Object.assign(panel.s, {
       tool, guide:false, loading:false, shapeEdit:frame === 'shape' ? 'kitchen' : null,
@@ -116,10 +131,10 @@ export function startEditorTour(hass, editorView) {
     timers.forEach(clearTimeout);
     timers = [];
     const {tool,title,frames} = stages[stage];
-    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stage + 1} of ${stages.length}`;
+    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stage + 1} of ${stages.length + practice.length}`;
     dialog.querySelector('#editor-tour-title').textContent = title;
     button('back').disabled = stage === 0;
-    button('next').textContent = stage === stages.length - 1 ? 'Open Editor' : 'Next →';
+    button('next').textContent = 'Next →';
     if (reducedMotion) {
       const [,copy,frame] = frames.at(-1);
       applyFrame(tool,frames.map(([,message])=>message).join(' '),frame);
@@ -131,16 +146,50 @@ export function startEditorTour(hass, editorView) {
     }
   }
 
+  function showPractice() {
+    const step = practice[practiceIndex];
+    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stages.length + practiceIndex + 1} of ${stages.length + practice.length}`;
+    dialog.querySelector('#editor-tour-title').textContent = step.title;
+    dialog.querySelector('#editor-tour-narration').textContent = step.copy;
+    button('back').hidden = true;
+    button('replay').hidden = true;
+    button('next').textContent = practiceIndex === practice.length - 1 ? 'Finish' : 'Next →';
+    const update = () => { button('next').disabled = !original.work || !step.ready(original.work); };
+    clearInterval(placementCheck);
+    update();
+    if (button('next').disabled) placementCheck = setInterval(update, 200);
+  }
+
   button('skip').onclick = stop;
   button('back').onclick = () => { stage--; showStage(); button('next').focus(); };
   button('replay').onclick = showStage;
   button('next').onclick = () => {
-    if (stage === stages.length - 1) stop();
-    else { stage++; showStage(); }
+    if (practiceIndex >= 0) {
+      if (!original.work || !practice[practiceIndex].ready(original.work)) return;
+      if (practiceIndex === practice.length - 1) stop();
+      else { practiceIndex++; showPractice(); }
+    } else if (stage === stages.length - 1) {
+      timers.forEach(clearTimeout);
+      panel.remove();
+      cursor.remove();
+      original.hidden = false;
+      original.classList.add('tour-preview');
+      const style = document.createElement('style');
+      style.id = 'tour-editor-size';
+      style.textContent = '.app { height: 100%; }';
+      original.shadowRoot.append(style);
+      original.shadowRoot.querySelector('[data-act="tool"][data-tool="place"]')?.click();
+      window.dispatchEvent(new Event('resize'));
+      practiceIndex = 0;
+      showPractice();
+    } else { stage++; showStage(); }
   };
   function stop() {
     if (!dialog.isConnected) return;
     timers.forEach(clearTimeout);
+    clearInterval(placementCheck);
+    original.classList.remove('tour-preview');
+    original.shadowRoot.getElementById('tour-editor-size')?.remove();
     panel.remove();
     cursor.remove();
     dialog.remove();
