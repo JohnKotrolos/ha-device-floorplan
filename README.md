@@ -21,6 +21,7 @@ rooms onto it, press Auto-place and fine-tune by dragging.
 </p>
 
 📖 **Full guide:** https://johnkotrolos.github.io/ha-device-floorplan/
+🎮 **Live demo:** https://johnkotrolos.github.io/ha-device-floorplan/demo/    
 
 ## Beta
 
