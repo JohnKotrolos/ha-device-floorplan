@@ -109,6 +109,6 @@ let theme='light';try{if(localStorage.getItem('df-demo-theme')==='dark')theme='d
 
 $('replay-editor-tour').onclick = async () => {
   await showView('editor');
-  startEditorTour();
+  startEditorTour(home.hass);
 };
-if (tourRequested && currentView === 'editor') startEditorTour();
+if (tourRequested && currentView === 'editor') startEditorTour(home.hass);

@@ -1,68 +1,120 @@
-import { makeInitial, AREA_NAMES } from './demo-data.js';
+import { makeInitial, clone, AREA_NAMES } from './demo-data.js';
 
-const steps = [
-  ['Measure', 'Set the scale', 'Measure an object you know. Here, the kitchen table is 1.48 m long and 0.86 m wide. Two references set the horizontal and vertical scale.'],
-  ['Mark rooms', 'Give each room a place', 'Drag Kitchen from the room list onto the plan. Then trace its outline so Device Floorplan knows where the room begins and ends.'],
-  ['Place devices', 'Put devices where they belong', 'Drag the dishwasher onto its real location, then select its marker to see the device details.'],
-  ['Finish', 'Try it yourself', 'In the Editor, try placing the Hallway thermometer or Bathroom light switch. Your own changes are saved in this browser.']
+const stages = [
+  { tool: 'measure', title: 'Measure the kitchen table', frames: [
+    [0, 'Start with an object of known size. Pick the two ends of the long edge.', 'measuring'],
+    [2200, 'The horizontal edge measures 1.48 m.', 'horizontal'],
+    [4900, 'Measure the short edge too. The 0.86 m reference sets the vertical scale.', 'vertical']
+  ]},
+  { tool: 'rooms', title: 'Mark rooms and draw their boundaries', frames: [
+    [0, 'Kitchen is in the room list on the right. Start by placing its room pin.'],
+    [2400, 'The Kitchen pin is on the plan. Choose Shape to define its boundary.', 'pin'],
+    [5000, 'Trace the Kitchen outline. The shape tells the integration where the room ends.', 'shape'],
+    [8200, 'The other rooms have now been marked and outlined too.', 'rooms']
+  ]},
+  { tool: 'place', title: 'Place a device and inspect it', frames: [
+    [0, 'The Editor switches to device placement. The filled room boundaries disappear, and the room names remain.'],
+    [2500, 'Place the dishwasher at its actual location in the Kitchen.', 'dishwasher'],
+    [5200, 'Select the dishwasher marker to open its details in the right panel.', 'selected']
+  ]},
+  { tool: 'place', title: 'Try the Editor yourself', frames: [
+    [0, 'The sample layout is ready. Try placing the Hallway thermometer or Bathroom light switch in the Editor.', 'finish']
+  ]}
 ];
 
-function drawPlan(plan, stage) {
-  const refs = stage === 0 ? plan.refs.map(({ax,ay,bx,by,length}, i) =>
-    `<g class="tour-reveal" style="--delay:${i * 400}ms"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/><circle cx="${ax}" cy="${ay}" r=".55"/><circle cx="${bx}" cy="${by}" r=".55"/><text x="${(ax+bx)/2+(i?3:0)}" y="${(ay+by)/2+(i?0:-2)}">${length.toFixed(2)} m</text></g>`).join('') : '';
-  const rooms = stage >= 1 ? Object.entries(plan.shapes).map(([id, shape]) =>
-    `<polygon class="tour-reveal" style="--delay:${stage !== 1 ? 0 : id === 'kitchen' ? 600 : 1750}ms" points="${shape.map(p=>p.join(',')).join(' ')}"/>`).join('') : '';
-  const anchors = stage >= 1 ? Object.entries(plan.anchors).map(([id, {x,y}]) =>
-    `<text class="tour-reveal" style="--delay:${stage !== 1 ? 0 : id === 'kitchen' ? 600 : 1750}ms" x="${x}" y="${y}">${AREA_NAMES[id]}</text>`).join('') : '';
-  const devices = stage >= 2 ? Object.entries(plan.positions).filter(([,p]) => Number.isFinite(p.x) && Number.isFinite(p.y)).map(([id,p]) =>
-    `<circle class="tour-device tour-reveal ${id === 'dishwasher' ? 'tour-selected' : ''}" style="--delay:${stage === 3 ? 0 : id === 'dishwasher' ? 600 : 1750}ms" cx="${p.x}" cy="${p.y}" r=".75"/>`).join('') : '';
-  return refs + rooms + anchors + devices;
-}
-
-export function startEditorTour() {
+export function startEditorTour(hass) {
   if (document.querySelector('.editor-tour')) return;
-  const {plans:[plan]} = makeInitial();
+  const sample = makeInitial();
+  const [plan] = sample.plans;
   const dialog = document.createElement('dialog');
   dialog.className = 'editor-tour';
-  dialog.setAttribute('aria-labelledby','editor-tour-title');
-  document.body.append(dialog);
-  dialog.addEventListener('close', () => dialog.remove(), {once:true});
-  let stage = 0;
+  dialog.setAttribute('aria-labelledby', 'editor-tour-title');
+  dialog.innerHTML = `
+    <header><small id="editor-tour-progress"></small><h2 id="editor-tour-title"></h2>
+      <p id="editor-tour-narration" aria-live="polite"></p></header>
+    <div class="tour-preview" inert></div>
+    <footer><button class="ha-button" data-action="skip">Skip tour</button><div>
+      <button class="ha-button" data-action="back">Back</button>
+      <button class="ha-button" data-action="replay">Replay step</button>
+      <button class="ha-button primary" data-action="next"></button>
+    </div></footer>`;
 
-  function render() {
-    const [label, title, copy] = steps[stage];
-    const drag = stage === 1 ? plan.anchors.kitchen : stage === 2 ? plan.positions.dishwasher : null;
-    dialog.innerHTML = `
-      <header><small>Floorplan Editor tour · ${stage + 1} of ${steps.length}</small>
-      <h2 id="editor-tour-title">${title}</h2><p>${copy}</p></header>
-      <div class="tour-steps">${steps.map(([name], i)=>`<span ${i===stage?'aria-current="step"':''}>${i+1}. ${name}</span>`).join('')}</div>
-      <div class="tour-body">
-        <div class="tour-plan">
-          <img src="${plan.image_url}" alt="Demo apartment floorplan">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${drawPlan(plan, stage)}</svg>
-          ${drag ? `<span class="tour-drag" aria-hidden="true" style="--x:${drag.x}%;--y:${drag.y}%">${stage === 1 ? 'Kitchen' : 'Dishwasher'}</span>` : ''}
-        </div>
-        <aside><strong>${label}</strong>
-          ${stage===0?'<p>Horizontal · 1.48 m</p><p>Vertical · 0.86 m</p>':
-            stage===1?'<p>Kitchen</p><p>Living room</p><p>Hallway</p><p>Bedrooms</p>':
-            stage===2?'<div class="tour-reveal" style="--delay:850ms"><p><b>Dishwasher</b></p><p>Kitchen · Wi-Fi</p><p>Power switch<br>Cycle status</p></div>':
-            '<p>Hallway thermometer</p><p>Bathroom light switch</p>'}
-        </aside>
-      </div>
-      <footer><button class="ha-button" data-action="skip">Skip tour</button><div>
-        ${stage ? '<button class="ha-button" data-action="back">Back</button>' : ''}
-        <button class="ha-button primary" data-action="next">${stage===3?'Open Editor':'Next →'}</button>
-      </div></footer>`;
-    dialog.querySelector('[data-action="skip"]').onclick = () => dialog.close();
-    dialog.querySelector('[data-action="next"]').onclick = () => {
-      if (stage === 3) dialog.close();
-      else { stage++; render(); }
-    };
-    const back = dialog.querySelector('[data-action="back"]');
-    if (back) back.onclick = () => { stage--; render(); };
-    if (dialog.open) dialog.querySelector('[data-action="next"]').focus();
+  // Render the actual Editor with a disposable snapshot and no live service calls.
+  const panel = document.createElement('device-floorplan-panel');
+  panel._showIntro = () => {};
+  panel._onKey = () => {};
+  panel._load = async () => {
+    panel._applyState(sample);
+    panel._applyDevices({devices:sample.devices, areas:Object.entries(AREA_NAMES).map(([area_id,name]) => ({area_id,name,floor_id:plan.floor_id})),floors:[{floor_id:plan.floor_id,name:plan.name}]});
+    panel.s.planId = plan.id;
+    panel.work = {};
+    const style = document.createElement("style");
+    style.textContent = ".app { height: 100%; }";
+    panel.shadowRoot.append(style);
+    showStage();
+  };
+  dialog.querySelector('.tour-preview').append(panel);
+  document.body.append(dialog);
+  const button = name => dialog.querySelector(`[data-action="${name}"]`);
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let stage = 0;
+  let timers = [];
+
+  function applyFrame(tool, copy, frame) {
+    dialog.querySelector('#editor-tour-narration').textContent = copy;
+    const complete = frame === 'finish';
+    const allRooms = stage >= 2 || frame === 'rooms';
+    const kitchen = frame === 'pin' || frame === 'shape';
+    const dishwasher = frame === 'dishwasher' || frame === 'selected';
+    Object.assign(panel.work, {
+      refs: clone(stage > 0 || frame === 'vertical' ? plan.refs : frame === 'horizontal' ? plan.refs.slice(0,1) : []),
+      anchors: clone(allRooms ? plan.anchors : kitchen ? {kitchen:plan.anchors.kitchen} : {}),
+      shapes: clone(allRooms ? plan.shapes : frame === 'shape' ? {kitchen:plan.shapes.kitchen} : {}),
+      positions: clone(complete ? plan.positions : dishwasher ? {dishwasher:plan.positions.dishwasher} : {}),
+      hidden_rooms: [], bonds: complete ? clone(plan.bonds) : {},
+      bond_meta: complete ? clone(plan.bond_meta) : {}, phantoms: complete ? clone(plan.phantoms) : {}
+    });
+    Object.assign(panel.s, {
+      tool, guide:false, loading:false, shapeEdit:frame === 'shape' ? 'kitchen' : null,
+      m1:frame === "measuring" ? {x:plan.refs[0].ax,y:plan.refs[0].ay} : null,
+      mh:frame === "measuring" ? {x:plan.refs[0].bx,y:plan.refs[0].by} : null,
+      sel:frame === 'selected' ? 'dishwasher' : null,
+      layers:{refs:true,rooms:true,devices:true,roomshapes:true}
+    });
+    panel._render();
   }
-  render();
+
+  function showStage() {
+    timers.forEach(clearTimeout);
+    timers = [];
+    const {tool,title,frames} = stages[stage];
+    dialog.querySelector('#editor-tour-progress').textContent = `Floorplan Editor tour · ${stage + 1} of ${stages.length}`;
+    dialog.querySelector('#editor-tour-title').textContent = title;
+    button('back').disabled = stage === 0;
+    button('next').textContent = stage === stages.length - 1 ? 'Open Editor' : 'Next →';
+    if (reducedMotion) {
+      const [,copy,frame] = frames.at(-1);
+      applyFrame(tool,frames.map(([,message])=>message).join(' '),frame);
+      return;
+    }
+    for (const [delay,copy,frame] of frames) {
+      if (delay) timers.push(setTimeout(() => applyFrame(tool,copy,frame),delay));
+      else applyFrame(tool,copy,frame);
+    }
+  }
+
+  button('skip').onclick = () => dialog.close();
+  button('back').onclick = () => { stage--; showStage(); button('next').focus(); };
+  button('replay').onclick = showStage;
+  button('next').onclick = () => {
+    if (stage === stages.length - 1) dialog.close();
+    else { stage++; showStage(); }
+  };
+  dialog.addEventListener('close', () => {
+    timers.forEach(clearTimeout);
+    dialog.remove();
+  }, {once:true});
   dialog.showModal();
-  dialog.querySelector('[data-action="next"]').focus();
+  panel.hass = {...hass, callWS: async () => ({})};
+  button('next').focus();
 }
