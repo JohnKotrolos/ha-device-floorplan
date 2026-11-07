@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.2
+
+**A tidier Floorplan Editor, Rooms that meet on one line, and ZHA groups as bonds.**
+
+- **Editor layout**: the top row (with the Device Floorplan icon) runs the full width; the steps, guide and plan sit on the left; the right column starts right under the top row.
+- **Selected device in its own card** at the top of the right column; *Devices to place* below it. It closes with ✕ or when you click an empty spot on the plan.
+- **Groups start collapsed** (Room, Type, Connection), also after changing the grouping. They open while you search, when there is only one group, or when you open one.
+- **✨ Auto-place** sits right next to the *Place devices* step (when there is something to place); **Type**, **Connection** and **Status** are bold.
+- **🧲 Snap to wall**: moves a selected marker onto the nearest edge of its Room (wall switches, thermostats, sockets). A one-time move.
+- **🧩 Glue Rooms together** (step Mark rooms): where Room shapes overlap, their facing edges meet on one line. An edge the overlap covers completely (a corridor against a long wall) moves onto the other Room's edge; when both are covered they meet in the middle. Gaps stay walls. Check the result, then *Looks good* or *Undo*.
+- **Transparent background**: the image dialog recommends a plan with a transparent background, and says so when an uploaded image has a solid one.
+- **ZHA groups** (devices since Home Assistant 2026.11): never on the Network map (no radio of their own); in the Editor a group's card lists its devices and offers **Bond them as one marker**.
+- **Appliance progress**: washers and dryers with a progress sensor in % (Midea, SmartThings) show "45% done" when there is no time-left sensor.
+
 ## 0.8.1
 
 **Floors without losing space, overlays for the whole house, and a comfort colour for every room.**

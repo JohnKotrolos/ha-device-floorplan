@@ -25,7 +25,7 @@ Pick a device, put it where it really is. The list on the right is your to-do li
 
 | Way | How |
 |---|---|
-| **Auto-place** | All devices shown in the list go next to their room pin, marked *approximate*. Respects your filters. |
+| **Auto-place** | The **✨ Auto-place** button next to the *Place devices* step: all devices shown in the list go next to their room pin, marked *approximate*. Respects your filters. |
 | **Click to place** | Click a device in the list, then the plan. With *then next* ticked, the next device is picked. |
 | **Drag** | Drag a row onto the plan, or a marker on the plan. |
 
@@ -97,3 +97,7 @@ Real appliances without a device in Home Assistant (SmartIR air conditioners, IR
 ## One marker per physical device
 
 A device that is "connected via" another device and has no entities of its own (the Bluetooth side of an ESP32) is merged into it (its card says *Includes its twin device*). Devices that belong to another one, like a printer's filament unit or a NAS's drives, are [bonded automatically](/together/bonds): one row, one marker, a green ×N, *Unbond* if the guess is wrong. Hubs and bridges are not affected.
+
+## Snap to wall
+
+Wall switches, thermostats and sockets belong on a wall. Select the marker and press **🧲 Snap to wall** in its card: it moves onto the nearest edge of the Room it is in (just inside it). It's a one-time move; drag it anywhere afterwards.

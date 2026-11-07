@@ -2,6 +2,10 @@
 
 Device Floorplan works with any picture of your floor. It doesn't need to be exact or to scale: it only needs to be recognisable enough that you know where the kitchen is.
 
+::: tip Transparent background
+A plan with a **transparent background** (PNG or WebP, nothing around the house) looks much better on the dashboard: the card's own background shows around the house instead of a white or grey box. When you upload an image with a solid background, the dialog says so.
+:::
+
 ## Three ways to add an image
 
 ![Choosing the image when creating a plan](/screens/image-chooser.webp){.shot}

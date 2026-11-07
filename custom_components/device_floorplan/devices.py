@@ -130,6 +130,11 @@ def _pairs(items) -> list[tuple[str, str]]:
     return out
 
 
+def is_zha_group(device: Any, integrations: list[str] | None) -> bool:
+    """0.8.2: a ZHA group (a device since HA 2026.11): from ZHA, but without a Zigbee address of its own."""
+    return bool(integrations) and "zha" in integrations and device_ieee(device) is None and not isinstance(device, ChildDevice)
+
+
 def device_ieee(device: dr.DeviceEntry) -> str | None:
     """Zigbee IEEE in 0x-prefixed hex form (as used by zigbee2mqtt / most cards)."""
     raw = None
@@ -625,6 +630,7 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
             "group": group,
             "ieee": device_ieee(device),
             "mac": device_mac(device),
+            "zha_group": is_zha_group(device, integrations),
             "main_entity": main,
             "entities": candidates,
             "entity_count": len(entities),
@@ -857,6 +863,8 @@ def build_plan_payload(
             "conns": conns,
             "group": group,
         }
+        if is_zha_group(device, integrations):
+            item["zha_group"] = True  # 0.8.2: no radio of its own, never on the Network map
         if split:
             item["split"] = split
         if part_ids:

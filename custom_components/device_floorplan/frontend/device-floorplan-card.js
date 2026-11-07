@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.8.1).
+ * Device Floorplan – dashboard card (v0.8.2).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.8.1";
+const CARD_VERSION = "0.8.2";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1460,7 +1460,9 @@ class DeviceFloorplanCard extends HTMLElement {
     const power = ents.find((e) => domainOf(e) === "sensor" && dc(e) === "power");
     const door = ents.find((e) => domainOf(e) === "binary_sensor" && ["door", "opening"].includes(dc(e)));
     const plug = ents.find((e) => domainOf(e) === "switch");
-    return { item, type, status, remaining, running, power, door, plug, ents };
+    // 0.8.2: a progress sensor in % (Midea, SmartThings washers and dryers since HA 2026.11).
+    const progress = ents.find((e) => domainOf(e) === "sensor" && /progress/.test(e) && (hass.states[e].attributes || {}).unit_of_measurement === "%");
+    return { item, type, status, remaining, running, power, door, plug, progress, ents };
   }
 
   /** Current state of an appliance: phase, colour, label and the rows for its panel. */
@@ -1521,6 +1523,8 @@ class DeviceFloorplanCard extends HTMLElement {
       } else if (num(v)) min = Math.round(Number(v) * ((rem.attributes || {}).unit_of_measurement === "h" ? 60 : (rem.attributes || {}).unit_of_measurement === "s" ? 1 / 60 : 1));
       if (min != null && min >= 0) time = `${min} min remaining`;
     }
+    const pr = S(ap.progress);
+    if (active && !time && pr && live(pr) && num(pr.state)) time = `${Math.round(Number(pr.state))}% done`;
     if (active && !time) {
       const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
       if (since) time = `${Math.max(0, Math.round((Date.now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
@@ -2317,7 +2321,7 @@ class DeviceFloorplanCard extends HTMLElement {
    *  Marker Editor starts from exactly this list, so adding a reading keeps the others. */
   _autoReads(item, ov) {
     const ap = ov === "live" && this._applOf(item);
-    if (ap) return [ap.remaining, ap.power].filter(Boolean);
+    if (ap) return [ap.remaining || ap.progress, ap.power].filter(Boolean);
     let sp = null;
     try {
       sp = this._specsFor(item, ov, false)[0];
@@ -2657,6 +2661,8 @@ class DeviceFloorplanCard extends HTMLElement {
   _netSpecs(item, name, cx, q) {
     const hass = this._hass;
     const opts = this._ov("network");
+    // 0.8.2: a ZHA group (a device since HA 2026.11) has no radio of its own: not on the Network map.
+    if (item.zha_group) return [];
     const conns = (item.conns || []).filter((c) => CONNS[c] && c !== "radio");
     // No known connection but a signal sensor: still a wireless device.
     if (!conns.length && (item.entities || []).some((e) => kindOf(e, hass.states[e]) === "signal")) conns.push("radio");
@@ -3040,7 +3046,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
-    if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
+    if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.progress, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
     if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
     if (ov === "live" || ov === "lights") for (const item of this._items(a)) for (const e of [item.main_entity, ...(item.entities || [])]) if (e && domainOf(e) === "media_player") watch.add(e);
     if (ov !== "plan") for (const item of this._items(a)) if (!this._hidden(item, ov)) for (const e of this._reads(item, ov)) watch.add(e);
@@ -4384,7 +4390,7 @@ ${reset}
       const chosen = per.lead && hass.states[per.lead] ? per.lead : null;
       state = [chosen ? this._fmt(chosen) : st.word, st.time, st.w].filter(Boolean).join(" · ");
       lead = chosen || ap.status || ap.running || ap.power || ap.plug || item.main_entity;
-      reads = Array.isArray(per.extras) ? per.extras : [ap.remaining, ap.power].filter(Boolean);
+      reads = Array.isArray(per.extras) ? per.extras : [ap.remaining || ap.progress, ap.power].filter(Boolean);
       if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">Unloaded</button>`;
       open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">Open ›</button>` : "";
       anchor = `[data-appl*="${CSS.escape(item.id)}"]`;
