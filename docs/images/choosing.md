@@ -6,6 +6,10 @@ Device Floorplan works with any picture of your floor. It doesn't need to be exa
 A plan with a **transparent background** (PNG or WebP, nothing around the house) looks much better on the dashboard: the card's own background shows around the house instead of a white or grey box. When you upload an image with a solid background, the dialog says so.
 :::
 
+## Frame the plan
+
+Right after adding an image, **Frame the plan** opens (later: the plan's ⋮ menu → *Frame the plan…*). Drag the four dashed lines: **outwards** adds space around the plan, so labels and buttons have room to breathe; **inwards** trims empty margin. Values are a % of the image, so the frame looks the same on every screen. Markers, Rooms and measurements never move. Every dashboard card uses this frame unless it sets its own (card editor → *Frame and preview*).
+
 ## Three ways to add an image
 
 ![Choosing the image when creating a plan](/screens/image-chooser.webp){.shot}

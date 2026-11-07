@@ -100,4 +100,4 @@ A device that is "connected via" another device and has no entities of its own (
 
 ## Snap to wall
 
-Wall switches, thermostats and sockets belong on a wall. Select the marker and press **🧲 Snap to wall** in its card: it moves onto the nearest edge of the Room it is in (just inside it). It's a one-time move; drag it anywhere afterwards.
+Wall switches, thermostats, sockets or a doorbell belong on a wall. Select the marker and press **Snap to wall** in its card: its centre moves onto the nearest edge of the Room it is in, so it sits on the wall line at every zoom. Devices stacked on the same spot move together. It's a one-time move; drag it anywhere afterwards.

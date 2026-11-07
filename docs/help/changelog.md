@@ -2,14 +2,18 @@
 
 ## 0.8.2
 
-**A tidier Floorplan Editor, Rooms that meet on one line, and ZHA groups as bonds.**
+**A tidier Floorplan Editor, Rooms that meet on one line, framing for every screen, and ZHA groups as bonds.**
 
 - **Editor layout**: the top row (with the Device Floorplan icon) runs the full width; the steps, guide and plan sit on the left; the right column starts right under the top row.
 - **Selected device in its own card** at the top of the right column; *Devices to place* below it. It closes with ✕ or when you click an empty spot on the plan.
 - **Groups start collapsed** (Room, Type, Connection), also after changing the grouping. They open while you search, when there is only one group, or when you open one.
 - **✨ Auto-place** sits right next to the *Place devices* step (when there is something to place); **Type**, **Connection** and **Status** are bold.
-- **🧲 Snap to wall**: moves a selected marker onto the nearest edge of its Room (wall switches, thermostats, sockets). A one-time move.
-- **🧩 Glue Rooms together** (step Mark rooms): where Room shapes overlap, their facing edges meet on one line. An edge the overlap covers completely (a corridor against a long wall) moves onto the other Room's edge; when both are covered they meet in the middle. Gaps stay walls. Check the result, then *Looks good* or *Undo*.
+- **Snap to wall**: the marker's centre moves onto the nearest edge of its Room (it stays on the wall line at every zoom); devices stacked on the same spot move together. A one-time move.
+- **Glue Rooms together** ends step 2: draw Room shapes roughly, overlap where Rooms are open to each other, leave a gap for walls. While overlaps are left, the top bar shows **Glue Rooms · N overlaps** and *Place devices* waits. Overlapping Rooms then meet on one line (an edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle); gaps stay walls. Check the result, then *Looks good* or *Undo*; the right column lists what changes. Overlaps too large to glue are named.
+- **Frame the plan** (after adding an image, or the plan's ⋮ menu): drag four lines to add space around the plan or trim its margin; markers and Rooms never move. Cards use it, or set their own (**Frame and preview** in the card editor).
+- **Float over the plan**: the overlay buttons can float over the plan (see-through bar or buttons only) instead of reserving space.
+- **Preview** in the card editor: the whole card at a real screen size (wall panel, tablet, desktop, phone or custom).
+- **Devices to place** explains the search and the Type / Connection / Status filters; the selected device card has one clean frame; line icons on the buttons.
 - **Transparent background**: the image dialog recommends a plan with a transparent background, and says so when an uploaded image has a solid one.
 - **ZHA groups** (devices since Home Assistant 2026.11): never on the Network map (no radio of their own); in the Editor a group's card lists its devices and offers **Bond them as one marker**.
 - **Appliance progress**: washers and dryers with a progress sensor in % (Midea, SmartThings) show "45% done" when there is no time-left sensor.

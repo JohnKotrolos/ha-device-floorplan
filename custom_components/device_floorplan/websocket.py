@@ -151,6 +151,8 @@ def ws_plan_create(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Optional("sort"): vol.Coerce(int),
         vol.Optional("anchors_centered"): cv.boolean,
         vol.Optional("shapes"): {cv.string: [[vol.Coerce(float)]]},
+        # 0.8.2: the plan's default frame, % of the image per side (+ space around, - trim).
+        vol.Optional("frame"): {vol.Optional(k): vol.Coerce(float) for k in ("t", "r", "b", "l")},
     }
 )
 @callback

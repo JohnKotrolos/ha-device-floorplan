@@ -137,6 +137,8 @@ The state is matched to a room pin by the area's name, its id or one of its alia
 
 Open the dashboard's edit mode and edit the card. It has two parts:
 
+- **Frame and preview** (card settings): *Space around the plan*: the plan's default from the Floorplan Editor, or **custom for this card** (same on all sides, or per side; + adds space, − trims). **Preview** shows the whole card at a real screen size (wall panel 1280 × 800, tablet, desktop, phone or custom), so you see whether the buttons fit and how much room the plan has.
+- **Space for the buttons** (Overlay buttons): **Reserve space** (the plan fits beside them) or **Float over the plan** (a see-through bar, or the buttons alone); the plan then uses the whole card.
 - **Per floor**, in a frame with the floor tabs: for the floor you picked, **Markers** (the **Edit markers** button) and **Rooms on this floor** (custom Room names, Rooms hidden on the card). Nothing else depends on the floor.
 - **Card settings (the whole house, all floors)**: the floor the card opens with and swiping · title and card ID · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** (how names look, where they show) · **People** · **Day & night** · **Look and tap behaviour**. Overlays are the same on every floor.
 

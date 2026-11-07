@@ -169,6 +169,7 @@ class FloorplanData:
             "floor_id": plan["floor_id"],
             "level": self.plan_level(plan),
             "image_type": plan["image_type"],
+            "frame": plan.get("frame") or {},
             "image_url": self.image_url(plan),
             "image_fallback_url": self.fallback_url(plan),
             "image_source": "ha" if plan.get("image_external") else ("upload" if plan.get("image") else None),
@@ -348,6 +349,9 @@ class FloorplanData:
                     for p in pts[:40]
                 ]
             plan["shapes"] = shapes
+        if "frame" in changes:
+            # 0.8.2: space around the plan (+) or trimmed margin (-), % of the image, per side.
+            plan["frame"] = {k: round(min(60.0, max(-45.0, float(v))), 2) for k, v in (changes["frame"] or {}).items() if k in ("t", "r", "b", "l")}
         if "anchors_centered" in changes:
             plan["anchors_centered"] = bool(changes["anchors_centered"])
         if "sort" in changes:

@@ -161,6 +161,13 @@ function entName(hass, e) {
   }
   return e;
 }
+/** 0.8.2: screen sizes for the card editor's preview (CSS pixels). */
+const PREVIEW_SIZES = [
+  { id: "wall", label: "Wall panel", w: 1280, h: 800 },
+  { id: "tablet", label: "Tablet", w: 1024, h: 768 },
+  { id: "desktop", label: "Desktop", w: 1440, h: 900 },
+  { id: "phone", label: "Phone", w: 390, h: 844 },
+];
 const lsGet = (k) => {
   try {
     return JSON.parse(localStorage.getItem(k) || "null");
@@ -639,7 +646,9 @@ ha-card.dock-right { flex-direction: row; }
 .main { position:relative; flex:1; display:flex; flex-direction:column; min-width:0; }
 .hdr { position:absolute; left:14px; top:12px; z-index:4; font-size:15px; font-weight:500; padding:4px 10px; border-radius:10px; background: color-mix(in srgb, var(--card-background-color, #fff) 75%, transparent); backdrop-filter: blur(6px); }
 .wrap { position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding: 8px 8px 0; min-height:120px; }
-.box { position:relative; width: min(100%, calc((100vh - var(--dfc-chrome, 170px)) * var(--ratio))); aspect-ratio: var(--ratio); }
+.fr { position:relative; width: min(100%, calc((100vh - var(--dfc-chrome, 170px)) * var(--fratio))); aspect-ratio: var(--fratio); }
+.fr.crop { overflow:hidden; border-radius: 4px; }
+.box { position:relative; width: 100%; aspect-ratio: var(--ratio); }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
 .obar { position:absolute; height:7px; padding:0; margin:0; border:0; border-radius:4px; transform-origin:0 50%; cursor:pointer; z-index:2; box-sizing:border-box; overflow:hidden; background:transparent; }
 .obar.door { background:#4fc3f7; box-shadow:0 0 8px rgba(79,195,247,.85); }
@@ -749,6 +758,16 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .m:hover, .chip:hover { z-index:3; }
 .m:focus-visible .ic, .chip:focus-visible { outline: 3px solid var(--dfc-accent); outline-offset: 2px; }
 .dockrow { display:flex; justify-content:center; padding: 10px 10px 12px; }
+/* 0.8.2: buttons floating over the plan (the plan uses the whole card) */
+.float .dockrow { position:absolute; z-index:4; pointer-events:none; }
+.float .dockrow > * { pointer-events:auto; }
+.float.dock-bottom .dockrow { left:0; right:0; bottom:0; }
+.float.dock-top .dockrow { left:0; right:0; top:0; }
+.float.dock-left .dockrow { top:0; bottom:0; left:0; }
+.float.dock-right .dockrow { top:0; bottom:0; right:0; }
+.float .dock { background: color-mix(in srgb, var(--secondary-background-color, #eee) 62%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+.float.float-icons .dock { background: transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; gap:6px; }
+.float.float-icons .dock button { background: var(--dfc-chipbg, rgba(255,255,255,.85)); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .dock-top .dockrow { padding: 12px 10px 2px; }
 .dock-left .dockrow, .dock-right .dockrow { flex-direction:column; justify-content:center; padding: 10px 8px; }
 .dock { display:flex; gap:2px; padding:4px; border-radius: 22px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 80%, transparent); max-width:70%; overflow-x:auto; scrollbar-width:none; flex: 0 1 auto; min-width:0; }
@@ -2133,6 +2152,7 @@ class DeviceFloorplanCard extends HTMLElement {
     return {
       position: b.position || (dock === "hidden" ? "hidden" : "bottom"),
       style: b.style || (dock === "icons" ? "icons" : "labels"),
+      space: b.space || "reserve",
     };
   }
 
@@ -2314,6 +2334,23 @@ class DeviceFloorplanCard extends HTMLElement {
       spec.ents = [...(spec.ents || []), ...list];
     }
     return spec;
+  }
+
+  /** 0.8.2: space around the plan (+) or trimmed margin (-), % of the image per side: the card's own frame
+   *  ("custom"), else the plan's default from the Floorplan Editor. Positions stay relative to the image. */
+  _frame(a, ratio) {
+    const cf = this._config.frame || {};
+    const f = cf.mode === "custom" ? cf : (a && a.frame) || {};
+    const v = (k) => Math.max(-45, Math.min(60, Number(f[k]) || 0));
+    const [t, r, b, l] = ["t", "r", "b", "l"].map(v);
+    const W = 100 + l + r;
+    const H = 100 + t + b;
+    if (!t && !r && !b && !l) return { ratio, style: "", crop: false };
+    return {
+      ratio: +(ratio * (W / H)).toFixed(4),
+      crop: t < 0 || r < 0 || b < 0 || l < 0,
+      style: `position:absolute;width:${(10000 / W).toFixed(3)}%;height:${(10000 / H).toFixed(3)}%;left:${((l * 100) / W).toFixed(3)}%;top:${((t * 100) / H).toFixed(3)}%;aspect-ratio:auto`,
+    };
   }
 
   /** 0.8.1: the readings a marker shows when nothing is picked under "Also show": its lines on the plan, else
@@ -3101,16 +3138,18 @@ class DeviceFloorplanCard extends HTMLElement {
     const pos = btn.position === "hidden" ? "bottom" : btn.position;
     const scale = this._scale || 1;
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
+    const fr = this._frame(a, ratio);
     const boxCls = `${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
-    setShadow(this, `${style}<ha-card class="dock-${pos} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
+    setShadow(this, `${style}<ha-card class="dock-${pos} ${floatCls} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
-        <div class="wrap ${names}"><div class="box ${boxCls}" style="--ratio:${ratio}">
+        <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
           ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           <svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
-        ${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
+        </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
         ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
@@ -5017,9 +5056,22 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "default_overlay", selector: { select: { options: ovOpts, mode: "dropdown" } } },
         { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
         { name: "buttons_style", selector: { select: { options: [{ value: "labels", label: "Icons and labels" }, { value: "icons", label: "Icons only" }], mode: "dropdown" } } },
+        { name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside them)" }, { value: "float", label: "Float over the plan, see-through bar" }, { value: "float_icons", label: "Float over the plan, buttons only" }], mode: "dropdown" } } },
         { name: "layers_button", selector: { select: { options: [{ value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
         { type: "expandable", name: "overlay_names", title: "Overlay names", icon: "mdi:rename", schema: ovOpts.filter((o) => OVERLAYS[o.value]).map((o) => ({ name: o.value, selector: { text: {} } })) },
       ],
+      // 0.8.2: space around the plan for this card: the plan's default, or its own (linked or per side).
+      frame: (() => {
+        const f = this._config.frame || {};
+        const custom = f.mode === "custom";
+        const num = { number: { min: -45, max: 60, step: 1, mode: "box", unit_of_measurement: "%" } };
+        return [
+          { name: "frame_mode", selector: { select: { options: [{ value: "plan", label: "The plan's default (set in the Floorplan Editor)" }, { value: "custom", label: "Custom for this card" }], mode: "dropdown" } } },
+          ...(custom ? [{ name: "frame_linked", selector: { boolean: {} } }, ...(f.linked === false ? ["t", "r", "b", "l"].map((k) => ({ name: `frame_${k}`, selector: num })) : [{ name: "frame_all", selector: num }])] : []),
+          { name: "preview_size", selector: { select: { options: [...PREVIEW_SIZES.map((p) => ({ value: p.id, label: `${p.label} (${p.w} × ${p.h})` })), { value: "custom", label: "Custom" }], mode: "dropdown" } } },
+          ...(this._pv === "custom" ? [{ name: "preview_w", selector: { number: { min: 300, max: 3840, step: 10, mode: "box", unit_of_measurement: "px" } } }, { name: "preview_h", selector: { number: { min: 300, max: 2160, step: 10, mode: "box", unit_of_measurement: "px" } } }] : []),
+        ];
+      })(),
       overlaysA: [
         {
           type: "expandable", name: "live", title: "Live: what it shows", icon: OVERLAYS.live.icon,
@@ -5080,7 +5132,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the buttons are", buttons_style: "Button style", layers_button: "Layers button (viewers switch room names and other layers)",
+      buttons_position: "Where the buttons are", buttons_style: "Button style", buttons_space: "Space for the buttons", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
@@ -5108,6 +5160,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       ...(c.default_overlay === "plan" ? { default_overlay: "live" } : {}),
       buttons_position: b.position || (look.dock === "hidden" ? "hidden" : "bottom"),
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
+      buttons_space: b.space || "reserve",
+      frame_mode: (c.frame || {}).mode === "custom" ? "custom" : "plan",
+      frame_linked: (c.frame || {}).linked !== false,
+      frame_all: Number((c.frame || {}).t) || 0,
+      ...Object.fromEntries(["t", "r", "b", "l"].map((k) => [`frame_${k}`, Number((c.frame || {})[k]) || 0])),
+      preview_size: this._pv || "wall",
+      preview_w: (this._pvc || {}).w || 1280,
+      preview_h: (this._pvc || {}).h || 800,
       layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "top-right"),
       live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
@@ -5187,6 +5247,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         ${sec("mdi:account-group-outline", "People", "Each person at the room pin of the room they are in. Room sensor: any entity whose state is a room (Bermuda, ESPresense, a template sensor…); sensor 2 is used when 1 is unknown or not a room on this plan.", `<div id="people"></div>`)}
         ${sec("mdi:weather-night", "Day & night", "", `<p id="nightnote"></p><div id="night"></div>`)}
         ${sec("mdi:tune-variant", "Look and tap behaviour", "", `<div data-form="look"></div>`)}
+        ${sec("mdi:border-outside", "Frame and preview", "Space around the plan (+) or trimmed margin (−), % of the image: markers and Rooms never move. Then see the card at a real screen size.", `<div data-form="frame"></div><button class="bigbtn" id="pvbtn"><ha-icon icon="mdi:monitor-screenshot"></ha-icon><span>Preview</span></button>`)}
       </div>`;
       this._forms = {};
       for (const box of this.querySelectorAll("[data-form]")) {
@@ -5201,6 +5262,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._forms[key] = f;
       }
       this.querySelector("#bigbtn").addEventListener("click", () => this._openBig());
+      this.querySelector("#pvbtn").addEventListener("click", () => this._openPreview());
     }
     this._engine(true);
     this._renderFloors();
@@ -5222,10 +5284,28 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const schema = this._schemas()[key] || [];
     const c = { ...this._config };
     for (const k of this._keysOf(schema)) if (k in v) c[k] = v[k];
+    if (key === "frame") {
+      for (const k of this._keysOf(schema)) delete c[k];
+      this._pv = v.preview_size || "wall";
+      this._pvc = { w: Number(v.preview_w) || 1280, h: Number(v.preview_h) || 800 };
+      if (v.frame_mode !== "custom") delete c.frame;
+      else {
+        const linked = v.frame_linked !== false;
+        const old = this._config.frame || {};
+        const all = Number(v.frame_all) || 0;
+        // Unlinking starts from the linked value; linking takes the top value.
+        const side = (k) => (linked ? all : old.linked === false ? Number(v[`frame_${k}`]) || 0 : Number(old.t) || 0);
+        c.frame = { mode: "custom", ...(linked ? {} : { linked: false }), t: side("t"), r: side("r"), b: side("b"), l: side("l") };
+      }
+      this._set(c, { sections: false });
+      this._refreshForms(key);
+      return;
+    }
     if (key === "buttons") {
-      c.buttons = { position: v.buttons_position, style: v.buttons_style };
+      c.buttons = { position: v.buttons_position, style: v.buttons_style, ...(v.buttons_space && v.buttons_space !== "reserve" ? { space: v.buttons_space } : {}) };
       delete c.buttons_position;
       delete c.buttons_style;
+      delete c.buttons_space;
     }
     // Only what depends on the changed form is redrawn; the form you type in is left alone.
     this._set(c, { sections: false });
@@ -5249,6 +5329,34 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (key !== skip) f.data = data;
       else f.data = { ...data }; // same values: ha-form keeps the field and its focus
     }
+  }
+
+  /** 0.8.2: the card as it will look on a real screen (wall panel, tablet…), scaled to fit this window. */
+  _openPreview() {
+    const size = this._pv === "custom" ? { label: "Custom", ...(this._pvc || { w: 1280, h: 800 }) } : PREVIEW_SIZES.find((p) => p.id === (this._pv || "wall")) || PREVIEW_SIZES[0];
+    const wrap = document.createElement("div");
+    wrap.className = "dfc-preview";
+    const k = Math.min(1, (window.innerWidth * 0.92) / size.w, (window.innerHeight * 0.82) / size.h);
+    wrap.innerHTML = `<style>
+      .dfc-preview { position:fixed; inset:0; z-index:10000; background: rgba(0,0,0,.6); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; font-family: var(--paper-font-body1_-_font-family, sans-serif); }
+      .dfc-preview .bar { color:#fff; display:flex; gap:12px; align-items:center; font-size:14px; }
+      .dfc-preview .bar button { border:0; border-radius:16px; padding:6px 14px; cursor:pointer; font: inherit; }
+      .dfc-preview .scr { width:${size.w * k}px; height:${size.h * k}px; overflow:hidden; border-radius:10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: var(--primary-background-color, #fafafa); }
+      .dfc-preview .in { width:${size.w}px; height:${size.h}px; transform: scale(${k}); transform-origin: 0 0; padding: 8px; box-sizing:border-box; }
+    </style><div class="bar"><b>${size.label}</b><span>${size.w} × ${size.h} px${k < 1 ? ` · shown at ${Math.round(k * 100)} %` : ""}</span><button>Close</button></div><div class="scr"><div class="in"></div></div>`;
+    const card = document.createElement("device-floorplan-card");
+    card.setConfig(this._config);
+    card.style.height = "100%";
+    // The plan's height is measured against the window (100vh): make that match the previewed screen.
+    card.style.setProperty("--dfc-chrome", `${Math.round(window.innerHeight - (size.h - 110))}px`);
+    wrap.querySelector(".in").appendChild(card);
+    card.hass = this._hass;
+    const close = () => wrap.remove();
+    wrap.querySelector(".bar button").addEventListener("click", close);
+    wrap.addEventListener("click", (e) => {
+      if (e.target === wrap) close();
+    });
+    document.body.appendChild(wrap);
   }
 
   _renderSections() {
