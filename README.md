@@ -2,18 +2,17 @@
 
 # Device Floorplan
 
-[![Beta](https://img.shields.io/badge/status-beta-orange)](#beta)
+[![Release](https://img.shields.io/github/v/release/JohnKotrolos/ha-device-floorplan)](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
 [![Marketplace custom](https://img.shields.io/badge/Marketplace-custom-41BDF5)](#install)
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
 
-Put your Home Assistant devices on **your own floorplan image** and watch your
-home live: lights glowing in their real colour and staying in their room, the
-plan darkening at night, AC air flow, people in their rooms, an interactive Zigbee map (ZHA) and
-much more. Things that usually take custom cards, templates and lots of YAML,
-done with clicks: upload your picture (or start from a sample plan), drag your
-rooms onto it, press Auto-place and fine-tune by dragging.
-
+Put your Home Assistant devices on **your own floorplan** and see your home alive:
+lights glowing in their real colour and staying inside their room, the AC blowing,
+the TV glowing, the washer telling you it's done, people in their rooms, the
+Zigbee mesh drawn over your walls. No custom cards to combine, no templates, no YAML:
+upload your picture (or start from a sample plan), drag your rooms onto it, press
+**Auto-place** and fine-tune by dragging.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/demo/assets/device-floorplan-hero-refined.webp" width="100%" alt="Live View of your house in action">
@@ -21,96 +20,107 @@ rooms onto it, press Auto-place and fine-tune by dragging.
 
 📖 **Full guide:** https://johnkotrolos.github.io/ha-device-floorplan/
 
-🎮 **Live demo:** https://johnkotrolos.github.io/ha-device-floorplan/demo/    
+🎮 **Live demo:** https://johnkotrolos.github.io/ha-device-floorplan/demo/
 
-## Beta
+## What makes it different
 
-Device Floorplan is in **beta**. It runs every day in a real home with ~90
-devices, but your setup is different from mine, and that's exactly where
-your feedback helps. Please
-[open an issue](https://github.com/JohnKotrolos/ha-device-floorplan/issues/new/choose)
-for anything that breaks, confuses you or is missing. Screenshots help a lot.
+### Your home, alive on the plan
 
-Known limits today:
+- **Light that behaves like light**: every lamp glows in its real colour and brightness,
+  shaped like the fixture (bulb, spot, strip, panel, wall lamp) and **stopped by walls**:
+  it fills its room and spills only where rooms are open to each other.
+- **Devices that show they are working**: the AC blows an animated air flow in its real
+  direction (cooling, heating, drying), TVs glow while they play, washers, dryers and
+  dishwashers show their progress and say **"Done · tap to unload"**.
+- **Day & night**: at night the plan darkens and only what's on glows; by day daylight
+  comes in through windows and shutters, and a room gets darker the more its shutters close.
+- **Doors, windows and shutters as bars** on the walls: open, closed, how far a shutter is down.
+- **Motion** makes a room pulse, **people** appear in the room they are in.
 
-- The interactive Zigbee map (roles, links, link quality) needs **ZHA**.
-- Room shapes are optional: without one, a room is a name pin and its light glow
-  isn't stopped by walls.
-- Best on PC (Editor) and tablets / wall panels (card); phones work but aren't
-  optimised yet.
-- People need a room sensor per person (Bermuda, ESPresense, a template…).
+### Overlays: one plan, many views
+
+- **Live** (what's happening now), **Lights**, **Comfort** (a temperature and humidity
+  **heatmap** that flows between open rooms), **Security**, **Network** and **Health**
+  (batteries, offline devices), plus **your own overlays** with the device types you choose.
+- **Network map**: the Zigbee mesh (ZHA) with roles, links and link quality, Wi-Fi and LAN
+  from your router, and the devices on other floors as faint markers.
+- **One marker per device per overlay**, and you decide what it shows: the leading value,
+  extra readings, a badge, the icon, what a tap does.
+
+### Made for dashboards and wall panels
+
+- **The Overlay Bar**: next to the plan (above, below, left, right) or as a **Side Rail**
+  over the full height of the card. Pill, tile or circle buttons, contrast that follows
+  light and dark mode, and a status on each button (a dot, a count, a value, an icon that
+  turns green while the printer prints).
+- **Shortcuts** in the same bar: open a dashboard page, a popup on this browser only,
+  run any action, reload the page. Overlay buttons can do something else on hold.
+  The bar can be the **menu of your whole wall panel**.
+- **Several floors** in one card, with a floor switcher; one frame for the whole house so
+  floors line up and switching doesn't jump.
+- The plan **fits the card exactly**: top-aligned in fixed-height cards, never stretched,
+  with a live preview at your panel's real size in the card editor.
+- A **chip card** for your top bar, and an action to switch overlays from other cards.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="docs/public/readme/bar-bottom.webp"><img src="docs/public/readme/bar-bottom.webp" alt="Overlay Bar below the plan, circle buttons, Comfort heatmap"></a>
+      <br><sub><b>Below the plan</b> · circles (Comfort heatmap)</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="docs/public/readme/bar-top.webp"><img src="docs/public/readme/bar-top.webp" alt="Overlay Bar above the plan, pill buttons, Live"></a>
+      <br><sub><b>Above the plan</b> · pill (Live)</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="docs/public/readme/side-rail.webp"><img src="docs/public/readme/side-rail.webp" alt="Side Rail on the left, full card height"></a>
+      <br><sub><b>Side Rail</b> · the wall panel's menu</sub>
+    </td>
+  </tr>
+</table>
+
+### Real homes are messy, so it handles them
+
+- **Bond**: three bulbs in one lamp are one device (one marker, switched together).
+- **Phantom**: one value from devices anywhere (room temperature from two thermometers,
+  "any window open"), shown like a device.
+- **Split device**: a wall panel sits where it hangs, each relay where it acts.
+- **ZHA groups** become bonds, **child devices** and main entities are understood.
+- **Nothing is created or changed in Home Assistant**: no helpers, groups or template
+  sensors; your devices stay exactly as they are.
+
+## The Floorplan Editor
+
+A sidebar panel that takes you from a picture to a live plan in three steps:
+
+1. **Measure** (optional): one horizontal and one vertical line give the plan a real
+   scale; it warns you when the picture looks stretched.
+2. **Mark rooms**: drag your HA areas onto the plan and draw their shapes: drag corners
+   or whole walls, let open rooms overlap, leave a gap for a wall. **Glue Rooms** then
+   makes neighbouring rooms meet on one line.
+3. **Place devices**: **Auto-place**, click-to-place or drag; **snap to wall** for
+   switches and sensors.
+
+Plus: a floorplan from a file, from `config/www` or from seven **sample plans**; a frame
+around the plan; search across names, rooms, models and entities; undo/redo and
+auto-save; export as CSV, JSON backup or PNG. **New devices** are placed next to their
+room automatically and announced (event + blueprint included).
 
 No floorplan yet? See
 [Turn your sketch into a floorplan in 10 minutes](https://johnkotrolos.github.io/ha-device-floorplan/images/sketch).
 
-## Features
+## Good to know
 
-- **Welcome intro** on the first visit (reopen it from ⋮ → Show intro).
-- **Create a plan first**, then choose which kinds of devices belong on it
-  (the rest is *skipped*: nothing changes in HA).
-- **Floorplan image**: drop a file, pick an image that is already in Home
-  Assistant (`config/www`, stays linked, a backup copy is kept), or start from
-  one of seven bundled **sample plans**.
-- Three guided steps:
-  1. **Measure** (optional): one horizontal and one vertical measurement give
-     the plan a real scale. Drag the ends to adjust, click a label to change
-     the length or delete it.
-  2. **Mark rooms**: drag your HA areas onto the plan. Rooms that are not on
-     this plan can be hidden: their devices leave the list. Optionally give a
-     room a **shape** (four corners, + for more): light then stays inside it.
-     Overlapping shapes are one open space, a gap between them is a wall.
-  3. **Place devices**: Auto-place, click-to-place (with "then next" queue) or
-     drag. Auto-placed devices are *approximate* (dashed) until you drag or
-     confirm them.
-- **Layers**: the current step is shown in full, the others faded (and not
-  clickable). The Layers button on the plan switches them off completely.
-- The plan always fits the screen: zoom, scale and layers sit on the plan,
-  the legend below always stays visible.
-- **Floors**: each plan is an HA floor (or a level, or a free "view"). The ⋮ on
-  a floor tab has settings, rename, replace image, export, move and delete.
-- **“I'm ready”** appears as soon as the first device is placed: see what was
-  created in HA, preview the live view and add it to a dashboard in one click.
-- **Dashboard card** `custom:device-floorplan-card` with live overlays, several floors,
-  a night look with glowing lights, people in their rooms, and a companion
-  **chip card** for your top bar.
-- **Export** a plan as CSV, JSON backup (re-importable, also on another HA) or
-  PNG picture.
-- **Search finds everything**: names, rooms, models, entity names and ids, also
-  skipped devices and helpers without a device (which can be placed on their own).
-- **One marker per device per overlay**, and you choose what it shows: the leading
-  value, extra readings (with their own icons), a badge, the icon and the tap. Press
-  the ✎ **Edit markers** pen on the card while editing the dashboard and click a marker.
-- **Live** shows what is happening at home right now: things that are off stay
-  hidden, lights that are on glow in their real colour.
-- **Custom overlays**: pick the kinds of devices, in your order.
-- **Bond · Phantom · Split device** ([guide](https://johnkotrolos.github.io/ha-device-floorplan/together/)):
-  - **Bond**: several physical devices on one spot are one device (three bulbs in one
-    lamp): one marker, switched together, values combined. Device Floorplan asks
-    before it bonds; printers + AMS or NAS + drives are bonded automatically.
-  - **Phantom**: one combined value from devices anywhere (room temperature from two
-    thermometers, any window open), shown like a device; its devices stay where they are.
-  - **Split device**: the device sits where its hardware is, each light or switch it
-    controls can sit where it acts (a wall panel with two relays = three places).
-  - **No helpers, groups or template sensors to create**: all three are set up with
-    clicks in the Editor and shown by the card. Nothing is created or changed in Home
-    Assistant; your devices and entities stay exactly as they are.
-- **Light shapes** (bulb, spot, strip, panel, wall lamp) and **light colours** (the
-  bulb's real colour, or warm ↔ cool / any colour for plain lamps), with a *see it at
-  night* preview.
-- **AC air flow**: an animated flow in the direction the unit blows, coloured for
-  cooling, heating or drying.
-- **Doors, windows and shutters as bars**: draw where an opening is; the card shows a
-  light blue bar while a door or window is open, a white bar for an open shutter (filled
-  as far as an electric one is closed), and closed shutters darken their room by day.
-- **Day & night**: at night the plan darkens and lights glow; by day a room gets
-  darker the more of its shutters are closed.
-- HA's own icons and more-info dialog, integration
-  logos in the device list, undo/redo, auto-save, keyboard shortcuts.
-- **New devices**: placed next to their room automatically (optional), a
-  notification tells you, and the `device_floorplan_new_device` event lets you
-  build your own alerts (a blueprint for phone notifications is included).
-  Devices removed from HA show as a `?` marker: remove them, or give the spot
-  to another device.
+- The interactive Zigbee map (roles, links, link quality) needs **ZHA**; Wi-Fi and LAN
+  come from your router (FRITZ!Box and others).
+- Room shapes are optional: without one, a room is a name pin and its light glow
+  isn't stopped by walls.
+- Made for PC (Editor) and tablets / wall panels (card); phones work too.
+- People need a room sensor per person (Bermuda, ESPresense, a template…).
+
+It runs every day in a real home with ~90 devices. Something not working, confusing or
+missing in yours? Please [open an issue](https://github.com/JohnKotrolos/ha-device-floorplan/issues/new/choose);
+screenshots help a lot.
 
 ## Install
 
@@ -132,78 +142,57 @@ An install made with HACS moves to the Marketplace by itself.
 [latest release](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
 into your `config/custom_components/` folder and restart Home Assistant.
 
-**Then:**
+## Quick start
 
-1. [![Open your Home Assistant instance and start setting up Device Floorplan.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=device_floorplan)
+From a picture to a live plan on your dashboard, in about 15 minutes:
+
+1. **Add the integration**:
+   [![Open your Home Assistant instance and start setting up Device Floorplan.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=device_floorplan)
    or Settings → Devices & services → Add integration → **Device Floorplan**.
-2. Open **Floorplan Editor** in the sidebar.
+2. **Create a plan**: open **Floorplan Editor** in the sidebar, create a plan for a floor
+   and add its picture (a file, an image in `config/www`, or a sample plan). Frame it if
+   it needs space around it.
+3. **Measure** (optional): draw one horizontal and one vertical line of a known length.
+4. **Mark rooms**: drag your areas onto the plan, press **Shape** and pull the corners or
+   walls onto each room. Overlap where rooms are open to each other, leave a gap for a wall,
+   then **Glue Rooms**.
+5. **Place devices**: press **Auto-place**, then drag what needs to move. Dashed markers
+   are guesses until you touch them.
+6. **Add it to a dashboard**: **I'm ready → Add to dashboard**. Then open the card editor
+   to choose the overlays, the Overlay Bar or Side Rail, shortcuts and floors.
 
-Options (Settings → Devices & services → Device Floorplan → Configure):
-new-device notification and automatic placement, both on by default.
-
-## What you get in Home Assistant
-
-Each plan is a **device** (“Ground floor plan”) under Settings → Devices with:
-
-- `image.device_floorplan_<plan>`: the plan picture, usable in any card.
-- `sensor.device_floorplan_<plan>`: state = number of devices on the plan;
-  attributes (kept out of the history database): `plan_id`, `image_url`,
-  `image_fallback_url`, `image_width`, `image_height`, `kind`, `floor_id`,
-  `level`, `image_type`, `metres_per_px_x/y`, `real_width_m`, `real_height_m`,
-  `approx_count`, `devices`
-  (`{device_id: {name, x, y, px, py, approx, z?, ieee?, mac?, via?, main_entity, entities, roles, conns, group, box?, light?, parts?}}`,
-  x/y in % of the image; all entities of a device share its position),
-  `entities` (helpers / entities without a device placed on their own), `bonds`, `phantoms`,
-  `zigbee_devices` (the format of the Zigbee Floorplan Card) and `areas` (room pins).
-
-`sensor.device_floorplan_new_devices`: devices added since setup that are not
-placed or skipped yet.
-
-Action:
-
-```yaml
-action: device_floorplan.get_positions
-data:
-  plan: ground_floor
-response_variable: plan
-```
-
-### Privacy
-
-A floorplan with device positions is a map of your home, so plan images are
-**only served to logged-in users** (`/api/device_floorplan/image/…`, the
-frontend uses signed URLs). They are stored in `config/device_floorplan/`.
-Images you link from `config/www` stay public at `/local/…`, as everything in
-that folder. Planner data lives in `.storage/device_floorplan`.
+More floors? Repeat steps 2–5 per floor; the card shows them all. Step by step with
+pictures: [Your first plan](https://johnkotrolos.github.io/ha-device-floorplan/guide/first-plan).
 
 ## Dashboard card
-
-The easiest way: press **I'm ready → Add to dashboard** in the Floorplan Editor. The card shows
-your plan and its overlay buttons: **Plan · Live · Lights · Comfort · Security · Network · Health**,
-**People**, plus your own. Tap a light to switch it, a cover for its controls, a reading for its
-last 24 hours; hold for the details. Several floors get a floor rail next to the plan. At night
-the plan darkens and the lights that are on glow (follows the sun by default).
-Everything else (floors, which overlays, where the buttons are, what each overlay shows, light
-scenes, rooms, people, day & night, tap behaviour, look, per-device settings) is set in the card
-editor. Other cards can switch the overlay with the action `device_floorplan.show_overlay`, or use
-the **chip card** that glows for the active overlay. See [the card reference](https://johnkotrolos.github.io/ha-device-floorplan/reference/card).
 
 ```yaml
 type: custom:device-floorplan-card
 plans: [ground_floor, first_floor]
 ```
 
-## Keyboard
+Everything else (floors, overlays, the Overlay Bar and its shortcuts, what each overlay
+shows, light scenes, rooms, people, day & night, look, frame and per-device settings) is
+set in the card editor. See [the card reference](https://johnkotrolos.github.io/ha-device-floorplan/reference/card).
 
-| Key | Action |
-|---|---|
-| Esc | Stop placing / measuring, cancel a drag, close menus and panels |
-| Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (or Ctrl+Y) | Undo, redo |
-| Delete / Backspace | Remove the selected device (or the selected measurement) |
-| Arrow keys (Shift = bigger steps) | Nudge the selected device |
-| Shift while measuring | Don't snap the line straight |
+## What you get in Home Assistant
 
-Shortcuts don't fire while you type in a field.
+Each plan is a **device** (“Ground floor plan”) with:
+
+- `image.device_floorplan_<plan>`: the plan picture, usable in any card.
+- `sensor.device_floorplan_<plan>`: the number of devices on the plan; its attributes
+  carry every position (in % of the image), rooms, bonds, phantoms and the scale, and
+  `zigbee_devices` in the format of the Zigbee Floorplan Card.
+- `sensor.device_floorplan_new_devices`: devices added since setup that are not placed yet.
+- The action `device_floorplan.get_positions` returns a plan's positions for your own
+  automations.
+
+### Privacy
+
+A floorplan with device positions is a map of your home, so plan images are
+**only served to logged-in users** (signed URLs). They are stored in
+`config/device_floorplan/`. Images you link from `config/www` stay public at
+`/local/…`, as everything in that folder. Planner data lives in `.storage/device_floorplan`.
 
 ## Related projects
 
@@ -214,17 +203,8 @@ Shortcuts don't fire while you type in a field.
 - [ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan): SVG-based
   interactive floorplans.
 
-## Roadmap
+## Roadmap and changes
 
-Next: polishing from your feedback, people on several floors, light pools in more overlays. Later: motion zones that fade, doors and covers drawn, a coverage map,
-Zigbee2MQTT topology. Ideas welcome as issues with the label *idea*. Full list:
-[roadmap](https://johnkotrolos.github.io/ha-device-floorplan/help/roadmap).
-
-## Changelog
-
-- 0.8.0 – Comfort heatmap; room thermometer beats an AC's built-in sensor; appliances (washer, dryer, dishwasher) with "Done · tap to unload"; info card on tap for bonds, phantoms and appliances; one tooltip with hold-and-slide on touch screens; AC air flow from the real unit; TV glow; layers per viewer; Edit markers live preview; trackpad and keyboard zoom in the Editor.
-- 0.7.3 – Room pulse for motion; move whole room shapes and bars; shutter + contact combined into one bar with an alert; Wi-Fi / LAN map from your router (FRITZ!Box and others); Network layers show only what applies; option to hide the "N new" button; edge-aware marker labels.
-- 0.7.2 – Daylight spreads through the home from windows and shutters; twin bars for window + shutter on one opening.
-- 0.7.1 – Softer shutter shading, fading smoothly into open-plan rooms.
-- 0.7.0 – Doors, windows and shutters as bars on the plan; night look only inside the home; fixes (AC main entity, chip phantom value, Browser Mod devices, card-mod).
-- 0.6.0 – First public release (beta). See the [changelog](https://johnkotrolos.github.io/ha-device-floorplan/help/changelog).
+Ideas welcome as issues with the label *idea*. See the
+[roadmap](https://johnkotrolos.github.io/ha-device-floorplan/help/roadmap) and the
+[changelog](https://johnkotrolos.github.io/ha-device-floorplan/help/changelog).
