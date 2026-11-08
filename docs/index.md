@@ -6,8 +6,8 @@ hero:
   text: See every device where it really is.
   tagline: Put your Home Assistant devices on your own floorplan in minutes, then watch your home live on your dashboard. All with clicks, no coding.
   image:
-    src: /hero-live.webp
-    alt: "A floorplan at night: lights glowing in their rooms, two ACs with their air flow, a person in the living room"
+    src: /hero.webp
+    alt: "One floorplan, three overlays: Live with glowing lights, the Comfort heatmap and the Zigbee network map"
   actions:
     - theme: brand
       text: Try the live demo
