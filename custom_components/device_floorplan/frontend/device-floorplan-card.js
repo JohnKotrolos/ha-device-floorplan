@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.9.0).
+ * Device Floorplan – dashboard card (v0.9.1).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.9.0";
+const CARD_VERSION = "0.9.1";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -838,6 +838,9 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .ovbar.vert { flex-direction:column; }
 .ovbar.sh-tiles { border-radius:14px; }
 .ovbar.dark { background:#1f2329; --bfg: rgba(255,255,255,.62); --bon-bg: rgba(255,255,255,.13); --bon-fg:#fff; --btile: rgba(255,255,255,.06); --bline: rgba(255,255,255,.16); --bring:#1f2329; }
+.ovbar.light { background:#eef0f3; --bfg: rgba(30,34,40,.62); --bon-bg: #fff; --bon-fg: #1f2329; --btile: rgba(0,0,0,.05); --bline: rgba(0,0,0,.14); --bring:#eef0f3; }
+.ovbar.light .dock button.on ha-icon { color: var(--dfc-accent); }
+.ovbar.light .chev { background:#fff; color:#1f2329; }
 .ovbar.clear { background:transparent; --btile: color-mix(in srgb, var(--card-background-color, #fff) 88%, transparent); }
 .float .ovbar.theme { background: color-mix(in srgb, var(--secondary-background-color, #eee) 62%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 2px 10px rgba(0,0,0,.15); }
 .dock { display:flex; flex: 1 1 auto; min-width:0; min-height:0; gap: var(--bgap, 2px); padding:4px; overflow:auto; scrollbar-width:none; overscroll-behavior:contain; }
@@ -895,6 +898,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 /* the Side Rail: full height, flush with the card's edge */
 ha-card.srail .dockrow { padding:0; margin:0; height: var(--dfc-rail-len, 0px); max-height:none; align-self:flex-start; gap:0; }
 ha-card.srail .dockrow.rail-dark { background:#1f2329; }
+ha-card.srail .dockrow.rail-light { background:#eef0f3; }
 ha-card.srail .dockrow.rail-theme { background: color-mix(in srgb, var(--secondary-background-color, #eee) 85%, transparent); }
 ha-card.srail .ovbar { border-radius:0; background:transparent; }
 ha-card.srail .dockrow .lslot { padding: 8px 0; }
@@ -2283,7 +2287,8 @@ class DeviceFloorplanCard extends HTMLElement {
       space: rail ? "reserve" : b.space || "reserve",
       // 0.8.2: the bar (background) and the buttons are separate; old "sidebar" / "plain" shapes map onto them.
       shape: rail ? "rail" : BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
-      bar: rail ? (b.bar === "theme" ? "theme" : "dark") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear"].includes(b.bar) ? b.bar : "theme",
+      // 0.9.1: "contrast" = the opposite of the theme (dark on a light theme, light on a dark one); the rail's default.
+      bar: rail ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear", "contrast"].includes(b.bar) ? b.bar : "theme",
       auto: b.auto_status === true,
       size: ["s", "l"].includes(b.size) ? b.size : "m",
       actions: b.actions || {},
@@ -3368,8 +3373,9 @@ class DeviceFloorplanCard extends HTMLElement {
     ];
     const barHtml = barItems.map((x, i) => (i && x.g !== barItems[i - 1].g ? '<i class="bsep" aria-hidden="true"></i>' : "") + x.html).join("");
     const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? "Scroll back" : "More buttons"}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
+    const barBg = btn.bar === "contrast" ? (this._hass.themes && this._hass.themes.darkMode ? "light" : "dark") : btn.bar;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${touch ? "share" : ""} ${btn.rail ? `rail-${btn.bar}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${btn.bar} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = look.title !== false && c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -5395,7 +5401,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "overlays", selector: { select: { options: ovOpts, multiple: true, reorder: true, mode: "list" } } },
         { name: "default_overlay", selector: { select: { options: ovOpts, mode: "dropdown" } } },
         { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "rail_left", label: "Side Rail, left (full height, at the card's edge)" }, { value: "rail_right", label: "Side Rail, right (full height, at the card's edge)" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
-        { name: "buttons_bar", selector: { select: { options: [{ value: "theme", label: "Theme colour" }, { value: "dark", label: "Dark" }, ...(rail ? [] : [{ value: "clear", label: "Transparent (the buttons alone)" }])], mode: "dropdown" } } },
+        { name: "buttons_bar", selector: { select: { options: [{ value: "contrast", label: "Contrast (dark on a light theme, light on a dark theme)" }, { value: "theme", label: "Theme colour" }, { value: "dark", label: "Dark" }, ...(rail ? [] : [{ value: "clear", label: "Transparent (the buttons alone)" }])], mode: "dropdown" } } },
         ...(rail ? [] : [{ name: "buttons_shape", selector: { select: { options: [{ value: "pill", label: "Pill" }, { value: "tiles", label: "Tiles" }, { value: "circles", label: "Circles" }], mode: "dropdown" } } }]),
         { name: "buttons_size", selector: { select: { options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }], mode: "dropdown" } } },
         { name: "buttons_auto", selector: { boolean: {} } },
@@ -5507,7 +5513,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
       buttons_space: b.space === "float_icons" ? "float" : b.space || "reserve",
       buttons_shape: BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
-      buttons_bar: String(b.position || "").startsWith("rail_") ? (b.bar === "theme" ? "theme" : "dark") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : b.bar || "theme",
+      buttons_bar: String(b.position || "").startsWith("rail_") ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : b.bar || "theme",
       buttons_size: b.size || "m",
       buttons_auto: b.auto_status === true,
       plan_position: c.plan_position === "centre" ? "centre" : "top",
@@ -5659,11 +5665,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const rail = String(v.buttons_position || "").startsWith("rail_");
       const wasRail = String((this._config.buttons || {}).position || "").startsWith("rail_");
       // Switching to / from the Side Rail: each keeps its own default background (rail dark, bar theme).
-      let bar = v.buttons_space === "float_icons" ? "clear" : rail !== wasRail ? (rail ? "dark" : _b && _b !== "dark" ? _b : "theme") : v.buttons_bar;
-      if (rail && bar === "clear") bar = "dark";
+      let bar = v.buttons_space === "float_icons" ? "clear" : rail !== wasRail ? (rail ? "contrast" : _b && _b !== "contrast" && _b !== "dark" ? _b : "theme") : v.buttons_bar;
+      if (rail && bar === "clear") bar = "contrast";
       const keepShape = rail ? _h : v.buttons_shape;
       const keepSpace = rail ? _s : space;
-      c.buttons = { ...keep, position: v.buttons_position, style: v.buttons_style, ...(keepSpace && keepSpace !== "reserve" ? { space: keepSpace } : {}), ...(BAR_SHAPES.includes(keepShape) && keepShape !== "pill" ? { shape: keepShape } : {}), ...(rail ? (bar === "theme" ? { bar } : {}) : bar && bar !== "theme" ? { bar } : {}), ...(v.buttons_size && v.buttons_size !== "m" ? { size: v.buttons_size } : {}), ...(v.buttons_auto ? { auto_status: true } : {}) };
+      c.buttons = { ...keep, position: v.buttons_position, style: v.buttons_style, ...(keepSpace && keepSpace !== "reserve" ? { space: keepSpace } : {}), ...(BAR_SHAPES.includes(keepShape) && keepShape !== "pill" ? { shape: keepShape } : {}), ...(rail ? (bar === "theme" || bar === "dark" ? { bar } : {}) : bar && bar !== "theme" ? { bar } : {}), ...(v.buttons_size && v.buttons_size !== "m" ? { size: v.buttons_size } : {}), ...(v.buttons_auto ? { auto_status: true } : {}) };
       for (const k of ["buttons_position", "buttons_style", "buttons_space", "buttons_shape", "buttons_bar", "buttons_size", "buttons_auto"]) delete c[k];
     }
     // Only what depends on the changed form is redrawn; the form you type in is left alone.

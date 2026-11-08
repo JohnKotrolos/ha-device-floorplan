@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1
+
+- **Contrast background for the Overlay Bar and Side Rail**: dark on a light theme, light on a dark theme, switching with Home Assistant's light / dark mode. The Side Rail's default; *Dark* stays available.
+
 ## 0.9.0
 
 **A tidier Floorplan Editor, Rooms that meet on one line, one frame for the whole house, the Overlay Bar with shortcuts and the Side Rail, and ZHA groups as bonds.**
