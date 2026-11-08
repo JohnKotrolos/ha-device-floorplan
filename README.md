@@ -81,8 +81,8 @@ upload your picture (or start from a sample plan), drag your rooms onto it, pres
 
 ### Real homes are messy, so it handles them
 
-- **Bond**: three bulbs in one lamp are one device (one marker, switched together).
-- **Phantom**: one value from devices anywhere (room temperature from two thermometers,
+- <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/legend/bond-badge-dark.webp"><img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/legend/bond-badge.webp" height="22" alt="Bond" align="top"></picture> **Bond**: three bulbs in one lamp are one device (one marker, switched together).
+- <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/legend/phantom-dark.webp"><img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/legend/phantom.webp" height="22" alt="Phantom" align="top"></picture> **Phantom**: one value from devices anywhere (room temperature from two thermometers,
   "any window open"), shown like a device.
 - **Split device**: a wall panel sits where it hangs, each relay where it acts.
 - **ZHA groups** become bonds, **child devices** and main entities are understood.
