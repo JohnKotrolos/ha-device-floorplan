@@ -822,7 +822,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .dockrow { display:flex; align-items:center; gap:8px; padding: 10px 0 12px; box-sizing:border-box; align-self:flex-start; flex:none; }
 .dock-top .dockrow { padding: 12px 0 2px; }
 .dock-top .dockrow, .dock-bottom .dockrow { margin-left: var(--dfc-bar-off, 0px); width: var(--dfc-bar-len, 100%); }
-.dock-left .dockrow, .dock-right .dockrow { flex-direction:column; padding: 0 8px; margin-top: var(--dfc-bar-off, 0px); height: var(--dfc-bar-len, 100%); max-height:100%; }
+.dock-left .dockrow, .dock-right .dockrow { flex-direction:column; padding: 0 8px; margin-top: var(--dfc-bar-off, 0px); height: var(--dfc-bar-len, 0px); max-height:100%; }
 /* buttons floating over the plan (the plan uses the whole card) */
 .float .dockrow { position:absolute; z-index:4; pointer-events:none; margin:0; }
 .float .dockrow > * { pointer-events:auto; }
@@ -893,7 +893,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .ovbar.vert.cs.ce .dock { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); }
 /* fixed-height cards: the plan sits at the top (or centred), the bar right next to it */
 /* the Side Rail: full height, flush with the card's edge */
-ha-card.srail .dockrow { padding:0; margin:0; height:auto; max-height:none; align-self:stretch; gap:0; }
+ha-card.srail .dockrow { padding:0; margin:0; height: var(--dfc-rail-len, 0px); max-height:none; align-self:flex-start; gap:0; }
 ha-card.srail .dockrow.rail-dark { background:#1f2329; }
 ha-card.srail .dockrow.rail-theme { background: color-mix(in srgb, var(--secondary-background-color, #eee) 85%, transparent); }
 ha-card.srail .ovbar { border-radius:0; background:transparent; }
@@ -4032,7 +4032,11 @@ ${reset}
     const cr = card.getBoundingClientRect();
     const r = fr.getBoundingClientRect();
     const vert = card.classList.contains("dock-left") || card.classList.contains("dock-right");
-    if (r.width && r.height) {
+    if (card.classList.contains("srail")) {
+      // The Side Rail: the card's full height (a card that sizes itself: as tall as the plan's column).
+      const h = Math.round(this.hasAttribute("fit") ? card.clientHeight : this._natH || card.clientHeight);
+      if (Math.abs((parseFloat(this.style.getPropertyValue("--dfc-rail-len")) || -99) - h) > 1) this.style.setProperty("--dfc-rail-len", `${h}px`);
+    } else if (r.width && r.height) {
       const off = Math.max(0, Math.round(vert ? r.top - cr.top : r.left - cr.left));
       const len = Math.round(vert ? Math.min(r.height, cr.height - off) : r.width);
       const set = (k, v) => {
@@ -4070,13 +4074,11 @@ ${reset}
     const card = sr && sr.querySelector("ha-card");
     const wrap = sr && sr.querySelector(".wrap");
     if (!card || !wrap) return;
-    const fixed = !!(this.isPanel || this.layout === "panel" || this.layout === "grid" || this._fitHost);
     const fr = sr.querySelector(".fr");
-    // 0.8.2: in a fixed-height card the plan sits at the top (option: centred), the bar right next to it.
-    this.toggleAttribute("fit", fixed && !!fr);
+    let fixed = !!(this.isPanel || this.layout === "panel" || this.layout === "grid" || this._fitHost || this._fitAuto);
     this.toggleAttribute("pc", this._config.plan_position === "centre");
-    if (!fixed || !fr) {
-      this.style.removeProperty("--dfc-fit-h");
+    if (!fr) {
+      this.toggleAttribute("fit", false);
       return;
     }
     const main = wrap.parentElement;
@@ -4088,12 +4090,23 @@ ${reset}
     const dock = sr.querySelector(".dockrow");
     if (dock && (card.classList.contains("dock-top") || card.classList.contains("dock-bottom")) && getComputedStyle(dock).position !== "absolute") others += dock.offsetHeight;
     const natural = others + padV + fr.offsetHeight;
-    // Only when the card has room to spare (or too little): an auto-height card is left as it was.
+    // 0.8.2: a card whose container sets its height (a stack or a layout with a fixed height) is a
+    // fixed-height card too, wherever it sits: a card that sizes itself is always exactly its content.
+    // (A vertical bar never sets the height: it is as long as the plan, or as tall as the card.)
+    this._natH = Math.max(natural, others + 120);
+    if (!fixed && Math.abs(card.clientHeight - this._natH) > 2) fixed = this._fitAuto = true;
+    // In a fixed-height card the plan sits at the top (option: centred), the bar right next to it.
+    this.toggleAttribute("fit", fixed);
+    if (!fixed) {
+      this.style.removeProperty("--dfc-fit-h");
+      return;
+    }
     if (Math.abs(card.clientHeight - natural) <= 2) return;
     const h = Math.max(120, card.clientHeight - others - padV - 2);
     const cur = parseFloat(this.style.getPropertyValue("--dfc-fit-h")) || 0;
     if (Math.abs(cur - h) > 1) this.style.setProperty("--dfc-fit-h", `${Math.round(h)}px`);
   }
+
 
 
   _layout() {

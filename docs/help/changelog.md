@@ -24,7 +24,7 @@
 - **People overlay removed**: people show in **Live** (and in any overlay picked under *Also show people in*). Cards that opened on People open on Live.
 - **Overlay Bar Reloaded**: the buttons sit in **one bar exactly as long as the plan with its frame**, right next to it; what doesn't fit scrolls, with a small chevron at the end. **Bar background** (theme, dark, transparent) and **buttons** (Pill, Tiles, Circles; S / M / L) are separate settings. A faint line separates card overlays, your own overlays and shortcuts. **Hold actions** on overlay buttons (any Home Assistant action, *Reload this page*, *Back to where you were*); **shortcuts** with tap and hold (pages, links, actions, a **browser_mod popup on this browser only**). A **status** on the icon that never changes the button's size: icon colour or dot with up to three rules (printing → green, error → red), or a badge (a count or a short value). **Automatic status** for Lights, Security, Health and Network is one switch, off by default.
 - **Side Rail**: the Overlay Bar as a full-height strip at the card's left or right edge, plain icon buttons, dark by default. The editor calls it all the **Overlay Bar** now (where it is, its space, its background).
-- **Plan at the top**: in a fixed-height card the plan sits at the top and the bar right next to it; the space left goes below (option: centred).
+- **Plan at the top**: in a fixed-height card (also inside a stack or layout that sets the card's height) the plan sits at the top and the bar right next to it; the space left goes below (option: centred).
 
 ## 0.8.1
 
