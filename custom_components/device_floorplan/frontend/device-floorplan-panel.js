@@ -1562,7 +1562,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _headerHtml(bare) {
     const menu = this._narrow ? `<button class="menu-btn" data-act="menu" aria-label="Menu"><ha-icon icon="mdi:menu"></ha-icon></button>` : `<span style="width:8px"></span>`;
     const more = `<button class="iconbtn" data-act="appmenu" aria-label="Device Floorplan options" title="Device Floorplan options">${SVG.dots}</button>`;
-    const title = `<h1><img class="logo" src="/device_floorplan_static/logo.png" alt="" onerror="this.remove()">Device Floorplan <small class="ver" title="Device Floorplan version">v${VERSION}</small></h1>`;
+    const title = `<h1><img class="logo" src="${STATIC}/logo.png" alt="" onerror="this.remove()">Device Floorplan <small class="ver" title="Device Floorplan version">v${VERSION}</small></h1>`;
     if (bare) return `<header>${menu}${title}<div class="hdr-right">${more}</div></header>`;
     const tabs = this.plans
       .map((p) => {

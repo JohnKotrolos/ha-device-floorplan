@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.8.1";
+const VERSION = "0.9.1";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -147,6 +147,8 @@ const SVG = {
   chev: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
   pin: '<svg viewBox="0 0 24 24" class="fill"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/></svg>',
+  glue: '<svg viewBox="0 0 24 24"><path d="M3 5h8v14H3zM13 5h8v14h-8M11 9h2M11 15h2"/></svg>',
+  magnet: '<svg viewBox="0 0 24 24"><path d="M6 3v9a6 6 0 0 0 12 0V3M6 3h4v9a2 2 0 0 0 4 0V3h4M6 7h4M14 7h4"/></svg>',
   spark: '<svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
   skip: '<svg viewBox="0 0 24 24"><path d="M17.9 17.9A10 10 0 0 1 12 20c-7 0-10-8-10-8a18 18 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c7 0 10 8 10 8a18 18 0 0 1-2.2 3.2M1 1l22 22"/></svg>',
   ext: '<svg viewBox="0 0 24 24"><path d="M7 17L17 7M8 7h9v9"/></svg>',
@@ -220,6 +222,8 @@ header h1 .ver { font-size: 12px; color: var(--df-sec); font-weight: 400; margin
 .save.busy { color: var(--df-sec); }
 .save.err { color: var(--error-color, #b3261e); }
 .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding: 8px 16px; background: var(--df-card); border-bottom: 1px solid var(--df-div); }
+.toolbar .guidelink { margin-left:auto; }
+.toolbar .btn svg, .acts .btn svg { width:18px; height:18px; fill:none; stroke: currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .steps { display:flex; gap:4px; background: var(--primary-background-color); border-radius:10px; padding:4px; flex-wrap:wrap; }
 .step { display:flex; align-items:center; gap:8px; border:0; background:transparent; border-radius:7px; padding:7px 12px; font-size:14px; cursor:pointer; }
 .step.on { background: var(--df-card); color: var(--df-primary); font-weight:500; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
@@ -248,7 +252,40 @@ header h1 .ver { font-size: 12px; color: var(--df-sec); font-weight: 400; margin
 .btn.danger { color: var(--error-color, #b3261e); }
 .btn.outline { border-color: var(--df-primary); color: var(--df-primary); font-weight:500; }
 .link { border:0; background:transparent; color: var(--df-primary); font-size:13px; cursor:pointer; padding:4px; text-decoration: underline; }
-main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow:hidden; }
+.body { flex:1; min-height:0; display:flex; gap:12px; padding-right:16px; }
+.lcol { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; overflow:hidden; }
+.sidecol { flex: 0 0 360px; min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px; margin: 12px 0; overflow-y:auto; overscroll-behavior:contain; }
+.sidecol > .side { flex: none; overflow: visible; }
+.imgtip { font-size:12px; line-height:1.4; color: var(--df-sec); padding:8px 10px; border-radius:8px; background: var(--primary-background-color); }
+.imgtip.warn { background: color-mix(in srgb, var(--df-warn) 12%, var(--df-card)); color: var(--primary-text-color); }
+.frstage { position:relative; width:100%; max-height:60vh; background: repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius:10px; overflow:hidden; user-select:none; touch-action:none; }
+.frstage img { position:absolute; object-fit:fill; pointer-events:none; }
+.frstage .frbox { position:absolute; outline: 2px solid var(--df-primary); box-shadow: 0 0 0 9999px rgba(0,0,0,.18); pointer-events:none; }
+.frstage .frl { position:absolute; z-index:2; }
+.frstage .frl.v { top:0; bottom:0; width:16px; margin-left:-8px; cursor:ew-resize; background: linear-gradient(90deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
+.frstage .frl.h { left:0; right:0; height:16px; margin-top:-8px; cursor:ns-resize; background: linear-gradient(0deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
+.alstage img { position:absolute; object-fit:fill; }
+.alstage .alref { opacity:.45; filter: grayscale(.6); pointer-events:none; }
+.alstage .alimg { opacity:.72; cursor:move; outline: 2px solid var(--df-primary); pointer-events:auto; }
+.frvals { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
+.gluebox { margin: 12px 14px 0; padding:10px 12px; border-radius:10px; background: var(--df-tint); font-size:12px; color: var(--df-sec); display:flex; flex-direction:column; gap:4px; }
+.gluebox.ok { color: var(--df-ok, #43a047); }
+.gluebox.warn { background: color-mix(in srgb, var(--df-warn) 12%, var(--df-card)); }
+.glstrip { fill: #f59e0b; fill-opacity:.45; stroke:#d97706; stroke-width:2; stroke-dasharray: 5 3; }
+.glstrip.focus { fill-opacity:.75; stroke-width:3; }
+.glline { stroke:#16a34a; stroke-width:4; stroke-linecap:round; animation: glfade 4s ease-out forwards; }
+@keyframes glfade { 0%, 60% { opacity:1; } 100% { opacity:.25; } }
+.app:has([data-act="glue"]:hover) .glstrip { animation: glpulse .9s ease-in-out infinite alternate; }
+@keyframes glpulse { from { fill-opacity:.25; } to { fill-opacity:.85; } }
+.gluepair { text-align:left; font-size:12px; padding:2px 0; }
+.gluebar { display:flex; align-items:center; gap:8px; font-size:13px; padding: 4px 6px 4px 12px; border-radius: 18px; background: var(--df-tint); }
+.gluebox b { color: var(--primary-text-color); }
+.gluebox .acts { display:flex; gap:8px; justify-content:flex-end; }
+.selcard { flex:none; background: var(--df-card); border:1.5px solid var(--df-primary); border-radius:12px; overflow:hidden; }
+.selcard > .details { margin:0; padding: 12px 14px; border:0; border-radius:0; background: transparent; }
+header h1 { display:flex; align-items:center; gap:8px; }
+header h1 .logo { width:28px; height:28px; }
 .plancard { flex: 1 1 auto; min-width:0; min-height:0; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; }
 .canvas { position:relative; flex:1 1 0; min-height:220px; background: var(--primary-background-color); border-radius:8px; overflow:hidden; }
 .viewport { position:absolute; left:50%; top:50%; transform: translate(-50%, -50%); overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; }
@@ -403,7 +440,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .controls { padding: 8px 12px 6px; display:flex; flex-direction:column; gap:8px; position:relative; }
 .search { width:100%; border:1px solid var(--df-div); border-radius:8px; padding:9px 10px; font: inherit; font-size:14px; background: var(--df-card); color: inherit; }
 .frow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.fbtn { display:flex; align-items:center; gap:6px; border:1px solid var(--df-div); background: var(--df-card); border-radius:16px; padding:6px 10px; font-size:13px; cursor:pointer; }
+.fbtn { display:flex; align-items:center; gap:6px; border:1px solid var(--df-div); background: var(--df-card); border-radius:16px; padding:6px 10px; font-size:13px; font-weight:600; cursor:pointer; }
 .fbtn.act { border-color: var(--df-primary); }
 .fbtn.open { background: var(--df-tint); }
 .fbtn .cnt { background: var(--df-primary); color:#fff; border-radius:9px; font-size:11px; line-height:16px; padding:0 6px; }
@@ -456,6 +493,8 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 16px; overflow
 .details .nm { font-size:15px; font-weight:500; }
 .details .sub { font-size:12px; color: var(--df-sec); margin-top:2px; }
 .details .acts { display:flex; flex-wrap:wrap; gap:6px; }
+.stage svg.ov line.she { pointer-events: stroke; cursor: move; touch-action:none; }
+.stage svg.ov line.she:hover { stroke: rgba(179,38,30,.25); }
 .shc { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#fff; border:2.5px solid #b3261e; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .shp { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background: rgba(179,38,30,.85); color:#fff; font-size:13px; line-height:16px; text-align:center; cursor:copy; pointer-events:auto; touch-action:none; z-index:5; opacity:.75; }
 .shp:hover { opacity:1; }
@@ -609,11 +648,110 @@ details.box summary { font-weight:500; }
   .ready small { display:none; }
 }
 @media (max-width: 900px) {
-  main { flex-direction:column; padding:8px; gap:8px; }
-  .plancard { flex: 1 1 58%; padding:8px; }
-  .side { flex: 1 1 42%; width:auto; }
+  .body { flex-direction:column; padding: 0 8px 8px; gap:8px; }
+  main { flex-direction:column; padding:8px 0 0; gap:8px; }
+  .lcol { flex: 1 1 58%; }
+  .sidecol { flex: 1 1 42%; margin:0; }
 }
 `;
+
+/** 0.8.2: Glue Rooms. Where two Room shapes overlap (open to each other), the facing edges are moved so the shapes
+ *  meet on one line. Rules: only parallel edges facing each other and overlapping by at most 4 % of the plan width;
+ *  an edge that the overlap covers (almost) completely moves onto the other Room's edge (a corridor meets the big
+ *  Room's wall line, which itself stays where it is); when both edges are covered they meet in the middle.
+ *  Gaps (walls) are never touched. Works in a square space (y scaled by the plan's height). Returns the new shapes
+ *  and the number of edges moved. */
+function glueShapes(shapes, ratio, tol = 4) {
+  const ids = Object.keys(shapes).filter((k) => Array.isArray(shapes[k]) && shapes[k].length >= 3);
+  const S = {};
+  for (const k of ids) S[k] = shapes[k].map((p) => [p[0], p[1] / ratio, ...p.slice(2)]); // keeps an open-edge flag
+  const area = (P) => P.reduce((a, p, i) => a + p[0] * P[(i + 1) % P.length][1] - P[(i + 1) % P.length][0] * p[1], 0) / 2;
+  const edge = (P, i) => {
+    const A = P[i];
+    const B = P[(i + 1) % P.length];
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    if (L < 0.2) return null;
+    const u = [(B[0] - A[0]) / L, (B[1] - A[1]) / L];
+    const sgn = area(P) > 0 ? 1 : -1; // outward normal for this winding (y down)
+    return { i, A, B, L, u, n: [u[1] * sgn, -u[0] * sgn] };
+  };
+  let moved = 0;
+  const pairs = new Map(); // "a|b" → what happened
+  const strips = []; // overlapping strips before gluing
+  const lines = []; // where Rooms meet after gluing
+  for (let p = 0; p < ids.length; p++) {
+    for (let q = p + 1; q < ids.length; q++) {
+      const PA = S[ids[p]];
+      const PB = S[ids[q]];
+      for (let i = 0; i < PA.length; i++) {
+        for (let j = 0; j < PB.length; j++) {
+          const a = edge(PA, i);
+          const b = edge(PB, j);
+          if (!a || !b) continue;
+          if (Math.abs(a.u[0] * b.u[1] - a.u[1] * b.u[0]) > 0.03) continue; // not parallel
+          if (a.n[0] * b.n[0] + a.n[1] * b.n[1] > -0.9) continue; // not facing each other
+          const g = (a.A[0] - b.A[0]) * a.n[0] + (a.A[1] - b.A[1]) * a.n[1]; // > 0: overlap, < 0: gap
+          if (g <= 0.01 || g > 25) continue;
+          const t = (P) => P[0] * a.u[0] + P[1] * a.u[1];
+          const [a0, a1] = [t(a.A), t(a.B)].sort((x, y) => x - y);
+          const [b0, b1] = [t(b.A), t(b.B)].sort((x, y) => x - y);
+          const ov = Math.min(a1, b1) - Math.max(a0, b0);
+          if (ov <= 0.2) continue;
+          const key = `${ids[p]}|${ids[q]}`;
+          // A real overlap: the middle of the shared stretch of each edge lies inside the other Room.
+          // (Edges far apart on opposite sides of two Rooms also face each other, but nothing overlaps there.)
+          const mid = (Math.max(a0, b0) + Math.min(a1, b1)) / 2;
+          const onA = [a.A[0] + a.u[0] * (mid - t(a.A)), a.A[1] + a.u[1] * (mid - t(a.A))];
+          const onB = [b.A[0] + a.u[0] * (mid - t(b.A)), b.A[1] + a.u[1] * (mid - t(b.A))];
+          const inside = (P, x, y) => {
+            let c = false;
+            for (let m = 0, n = P.length - 1; m < P.length; n = m++) {
+              if (P[m][1] > y !== P[n][1] > y && x < ((P[n][0] - P[m][0]) * (y - P[m][1])) / (P[n][1] - P[m][1]) + P[m][0]) c = !c;
+            }
+            return c;
+          };
+          const eps = 0.05; // test just inside the edge
+          if (!inside(PB, onA[0] - a.n[0] * eps, onA[1] - a.n[1] * eps) || !inside(PA, onB[0] - b.n[0] * eps, onB[1] - b.n[1] * eps)) continue;
+          if (g > tol) continue; // a large overlap is left as it is
+          // The overlapping strip (before gluing), for the highlight on the plan.
+          const at = (E, sv) => [E.A[0] + a.u[0] * (sv - t(E.A)), E.A[1] + a.u[1] * (sv - t(E.A))];
+          const s0 = Math.max(a0, b0);
+          const s1 = Math.min(a1, b1);
+          strips.push({ key, pts: [at(a, s0), at(a, s1), at(b, s1), at(b, s0)] });
+          const ca = ov / a.L;
+          const cb = ov / b.L;
+          const shift = (P, e, d) => {
+            for (const k of [e.i, (e.i + 1) % P.length]) P[k] = [P[k][0] - e.n[0] * d, P[k][1] - e.n[1] * d, ...P[k].slice(2)];
+          };
+          if (ca > 0.8 && cb > 0.8) {
+            shift(PA, a, g / 2);
+            shift(PB, b, g / 2);
+            pairs.set(key, { a: ids[p], b: ids[q], how: "meet" });
+          } else if (ca >= cb) {
+            shift(PA, a, g);
+            pairs.set(key, { a: ids[p], b: ids[q], how: "a" });
+          } else {
+            shift(PB, b, g);
+            pairs.set(key, { a: ids[p], b: ids[q], how: "b" });
+          }
+          moved++;
+          // Where the two Rooms meet now (after gluing): the shared stretch of the moved edges.
+          const ea = edge(PA, i);
+          if (ea) {
+            const at2 = (sv) => [ea.A[0] + a.u[0] * (sv - t(ea.A)), ea.A[1] + a.u[1] * (sv - t(ea.A))];
+            const pb = edge(PB, j);
+            const g2 = pb ? (ea.A[0] - pb.A[0]) * a.n[0] + (ea.A[1] - pb.A[1]) * a.n[1] : 1;
+            if (Math.abs(g2) < 0.05) lines.push([at2(s0), at2(s1)]);
+          }
+        }
+      }
+    }
+  }
+  const out = {};
+  for (const k of ids) out[k] = S[k].map((p) => [+p[0].toFixed(3), +(p[1] * ratio).toFixed(3), ...p.slice(2)]);
+  const back = (P) => P.map(([x, y]) => [+x.toFixed(3), +(y * ratio).toFixed(3)]);
+  return { shapes: out, moved, pairs: [...pairs.values()], strips: strips.map((x) => ({ key: x.key, pts: back(x.pts) })), lines: lines.map(back) };
+}
 
 /** Is a point inside a polygon ([[x, y], …], % of the plan)? */
 function ptInPoly(x, y, poly) {
@@ -1150,7 +1288,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const body = { plan_id: plan.id, positions: this.work.positions, anchors: this.work.anchors, refs: this.work.refs, hidden_rooms: this.work.hidden_rooms, bonds, bond_meta: bondMeta, phantoms, shapes: this.work.shapes || {} };
     try {
       const res = await this._ws("plan/update", body);
-      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {}, bond_meta: res.bond_meta || {}, phantoms: res.phantoms || {}, shapes: res.shapes || {} });
+      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {}, bond_meta: res.bond_meta || {}, phantoms: res.phantoms || {}, shapes: res.shapes || {}, frame_eff: res.frame_eff || {} });
       if (this._saveT === null && this.s.save === "busy") this.s.save = "ok";
     } catch (err) {
       this._saveError(err);
@@ -1224,8 +1362,29 @@ class DeviceFloorplanPanel extends HTMLElement {
     return "place";
   }
 
+  /** 0.8.2: what gluing would do now (overlaps to glue, overlaps too big); cached per shapes object. */
+  _glueState() {
+    const sh = (this.work && this.work.shapes) || {};
+    const key = JSON.stringify(sh);
+    if (!this._glueC || this._glueC.key !== key) this._glueC = { key, res: glueShapes(sh, this._ratio()) };
+    return this._glueC.res;
+  }
+
+  /** Step 3 waits until overlapping Room shapes are glued (2+ shapes). */
+  _gluePending() {
+    return !!(this.work && this._glueState().moved);
+  }
+
+  _areaName(id) {
+    return (this.areaById.get(id) || {}).name || id;
+  }
+
   _setTool(tool) {
     if (tool === "measure" && this._imageType() === "angled") return;
+    if (tool === "place" && this._gluePending()) {
+      this._toast("Glue the Rooms first (step 2)", false);
+      return;
+    }
     Object.assign(this.s, { tool, m1: null, m2: null, mh: null, ask: false, placing: null, placingRoom: null, pop: null, refSel: null, fan: null, z: 1, tx: 0, ty: 0 });
     this._render();
   }
@@ -1240,7 +1399,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!this._app) return;
     this._syncSplit();
     requestAnimationFrame(() => this._fitPop());
-    const sideEl = this.shadowRoot.querySelector(".side");
+    const sideEl = this.shadowRoot.querySelector(".sidecol");
     // Keep the right column's scroll; a newly selected device starts at the top.
     const scroll = sideEl && this._lastSel === this.s.sel ? sideEl.scrollTop : 0;
     this._lastSel = this.s.sel;
@@ -1265,7 +1424,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     this._bindBrandIcons();
     this._hydrateCardPreview();
-    const side2 = this.shadowRoot.querySelector(".side");
+    const side2 = this.shadowRoot.querySelector(".sidecol");
     if (side2) side2.scrollTop = scroll;
     if (focusId) {
       const el = this.shadowRoot.getElementById(focusId);
@@ -1395,14 +1554,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!this.setupDone) return `${this._headerHtml(true)}${this._setupHtml()}`;
     const p = this._plan();
     const noImage = p && !p.image_url;
-    return `${this._headerHtml(false)}${noImage ? "" : this._toolbarHtml()}${this._guideHtml()}
-      <main>${this._planHtml()}${noImage ? "" : this._sideHtml()}</main>${this._toastHtml()}${this._modalHtml()}${this._menuHtml()}`;
+    // 0.8.2: the header runs the full width; steps, guide and plan on the left; the right column starts under the header.
+    return `${this._headerHtml(false)}<div class="body"><div class="lcol">${noImage ? "" : this._toolbarHtml()}${this._guideHtml()}
+      <main>${this._planHtml()}</main></div>${noImage ? "" : this._sideHtml()}</div>${this._toastHtml()}${this._modalHtml()}${this._menuHtml()}`;
   }
 
   _headerHtml(bare) {
     const menu = this._narrow ? `<button class="menu-btn" data-act="menu" aria-label="Menu"><ha-icon icon="mdi:menu"></ha-icon></button>` : `<span style="width:8px"></span>`;
     const more = `<button class="iconbtn" data-act="appmenu" aria-label="Device Floorplan options" title="Device Floorplan options">${SVG.dots}</button>`;
-    const title = `<h1>Device Floorplan <small class="ver" title="Device Floorplan version">v${VERSION}</small></h1>`;
+    const title = `<h1><img class="logo" src="${STATIC}/logo.png" alt="" onerror="this.remove()">Device Floorplan <small class="ver" title="Device Floorplan version">v${VERSION}</small></h1>`;
     if (bare) return `<header>${menu}${title}<div class="hdr-right">${more}</div></header>`;
     const tabs = this.plans
       .map((p) => {
@@ -1452,6 +1612,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     return `<div class="menu" style="${style}" role="menu" aria-label="Floor options">
       <button data-act="settings" role="menuitem">${SVG.gear}${isView ? "Plan" : "Floor"} settings</button>
       <button data-act="rename" role="menuitem">${SVG.edit}Rename</button>
+      ${p.image_url ? (this._laterFloor(p) ? `<button data-act="alignplan" role="menuitem">${SVG.glue}Align with ${esc(this._laterFloor(p).name)}…</button>` : `<button data-act="frameplan" role="menuitem">${SVG.glue}${p.kind === "floor" ? "Frame the house…" : "Frame the plan…"}</button>`) : ""}
       <button data-act="replaceimg" role="menuitem">${SVG.image}Replace image</button>
       <button data-act="export" role="menuitem">${SVG.download}Export…</button>
       <button data-act="moveplan" data-dir="-1" role="menuitem" ${canL ? "" : "disabled"}${floorTip}>← Move left</button>
@@ -1471,16 +1632,26 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!plan) return "";
     const [d1, d2, d3] = this._stepsDone();
     const angled = plan.image_type === "angled";
+    const gluePend = this._gluePending();
     const step = (id, n, label, done, off) =>
-      `<button class="step ${this.s.tool === id ? "on" : ""}" data-act="tool" data-tool="${id}" ${off ? 'disabled title="Not available for angled images"' : ""}><span class="num ${done ? "done" : ""}">${done ? "✓" : n}</span>${label}</button>`;
+      `<button class="step ${this.s.tool === id ? "on" : ""}" data-act="tool" data-tool="${id}" ${off ? `disabled title="${off === "glue" ? "Glue the Rooms first (step 2)" : "Not available for angled images"}"` : ""}><span class="num ${done && !(id === "rooms" && gluePend) ? "done" : ""}">${done && !(id === "rooms" && gluePend) ? "✓" : n}</span>${label}</button>`;
     let calib = "";
     if (this.s.tool === "measure" && !angled) {
       const sc = this._scale();
       const stretched = sc.h && sc.v && Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2) > 0.05;
       if (!sc.x) calib = `<span class="chip-status">○ Not calibrated</span>`;
-      else if (stretched) calib = `<span class="chip-status warn">! Scale set · horizontal and vertical disagree</span>`;
+      else if (stretched) calib = `<span class="chip-status warn" title="Measure again with longer lines, or keep it as it is">! Horizontal and vertical differ by ${Math.round((Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2)) * 100)} %: the picture may be stretched</span>`;
       else if (this.work.refs.length === 1) calib = `<span class="chip-status ok">✓ Scale set · add a ${sc.h ? "vertical" : "horizontal"} measurement for best accuracy</span>`;
       else calib = `<span class="chip-status ok">✓ Scale set · horizontal + vertical</span>`;
+      const ref = this._laterFloor(plan);
+      if (sc.x && ref) calib += `<button class="btn ${plan.align && "x" in plan.align ? "" : "primary"}" data-act="alignplan">${SVG.glue}Align with ${esc(ref.name)}</button>`;
+    }
+    // 0.8.2: gluing ends step 2: its status and actions sit next to the steps, like Measure's.
+    if (this.s.tool === "rooms") {
+      const gs = this._glueState();
+      if (this.s.glued) calib = `<span class="gluebar"><b>${this.s.glued} edge${this.s.glued > 1 ? "s" : ""} glued</b> · check the plan<button class="btn" data-act="glueundo">Undo</button><button class="btn primary" data-act="glueok">Looks good</button></span>`;
+      else if (gs.moved) calib = `<button class="btn primary" data-act="glue" title="Overlapping Rooms meet on one line; gaps stay walls">${SVG.glue}Glue Rooms · ${gs.pairs.length} overlap${gs.pairs.length > 1 ? "s" : ""}</button>`;
+      else if (Object.values(this.work.shapes || {}).filter((sh) => Array.isArray(sh) && sh.length >= 3).length > 1) calib = `<span class="chip-status ok">✓ Rooms glued</span>`;
     }
     let placing = "";
     const pd = this.s.placing && this.byId.get(this.s.placing);
@@ -1490,10 +1661,16 @@ class DeviceFloorplanPanel extends HTMLElement {
         <label><input type="checkbox" data-act="queue" ${this.s.queue ? "checked" : ""}>then next</label>
         ${pd && this.s.sel !== pd.id ? `<button data-act="placingdetails">Details</button>` : ""}<button data-act="stopplace">Stop (Esc)</button></span>`;
     }
-    const guideLink = `<button class="link" data-act="guide">${this.s.guide ? "Hide guide" : "Show guide"}</button>`;
+    const guideLink = `<button class="link guidelink" data-act="guide">${this.s.guide ? "Hide guide" : "Show guide"}</button>`;
+    // 0.8.2: Auto-place belongs to step 3, right next to it (only when there is something to place).
+    let auto = "";
+    if (this.s.tool === "place") {
+      const n = this._autoTargets().length;
+      if (n) auto = `<button class="btn primary autobtn" data-act="autoplace" title="Put the devices shown in the list next to their room pins (approximate)">${SVG.spark}Auto-place ${n}${this._filtering() ? " shown" : ""}</button>`;
+    }
     return `<div class="toolbar"><div class="steps" role="group" aria-label="Steps">
-      ${step("measure", 1, "Measure", d1, angled)}${step("rooms", 2, "Mark rooms", d2)}${step("place", 3, "Place devices", d3)}</div>
-      ${calib}${placing}${guideLink}</div>`;
+      ${step("measure", 1, "Measure", d1, angled)}${step("rooms", 2, "Mark rooms", d2)}${step("place", 3, "Place devices", d3, gluePend ? "glue" : false)}</div>
+      ${auto}${calib}${placing}${guideLink}</div>`;
   }
 
   _guideHtml() {
@@ -1520,8 +1697,10 @@ class DeviceFloorplanPanel extends HTMLElement {
           ? `All ${rooms.length} rooms are on the plan. You can still drag a pin to adjust it.`
           : `${pinned} of ${rooms.length} rooms on the plan. "Done" appears when all of them are placed.`;
       const areaLinks = !rooms.length ? `<a class="btn" href="/config/areas/dashboard" target="_self">${anyAreas ? "Open areas" : "Create areas"}</a><a class="btn" href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work${SVG.ext}</a>` : "";
-      const acts = areaLinks + (d2 || !rooms.length ? `<button class="btn ok" data-act="tool" data-tool="place">Done, place devices →</button>` : "");
-      return this._guideBox(d2 ? "✓" : "2", d2, "Step 2 of 3 · Mark rooms", "Your rooms from HA are listed on the right. Drag each one onto the plan and drop it in the middle of that room, or click a room and then click on the plan. Auto-place uses them to put each device in the right room. Rooms that are not on this plan: hide them with the eye button, their devices leave the list. Optional: Shape draws a room's outline, so its lights stay inside (edges snap straight, hold Alt for a free angle).", tip, acts);
+      const gp = this._gluePending();
+      const acts = areaLinks + (d2 || !rooms.length ? `<button class="btn ok" data-act="tool" data-tool="place" ${gp ? 'disabled title="Glue the Rooms first"' : ""}>Done, place devices →</button>` : "");
+      const tip2 = gp ? `${tip} ${this._glueState().pairs.length} overlap${this._glueState().pairs.length > 1 ? "s" : ""} to glue before placing devices.` : tip;
+      return this._guideBox(d2 && !gp ? "✓" : "2", d2 && !gp, "Step 2 of 3 · Mark rooms", "Your rooms from HA are listed on the right. Drag each one onto the plan and drop it in the middle of that room, or click a room and then click on the plan. Auto-place uses them to put each device in the right room. Rooms that are not on this plan: hide them with the eye button, their devices leave the list. Shape draws a Room's outline, roughly is enough: where two Rooms are open to each other (open plan, a corridor, a doorway) let them overlap a little, where there is a wall leave a small gap. Glue then makes overlapping Rooms meet on one line, so they are properly connected; gaps stay walls.", tip2, acts);
     }
     let left = 0;
     let approx = 0;
@@ -1634,6 +1813,14 @@ class DeviceFloorplanPanel extends HTMLElement {
         parts.push(`<polygon points="${sp0.map((p) => `${p[0] * 10},${p[1] * 10}`).join(" ")}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
       }
     }
+    // 0.8.2: overlaps that gluing will join (orange strips), and where Rooms meet right after gluing (green).
+    if (this.work && this.s.tool === "rooms" && !this.s.shapeEdit) {
+      if (this.s.glued && this.s.glueLines) {
+        for (const [A, B] of this.s.glueLines) parts.push(`<line class="glline" x1="${A[0] * 10}" y1="${A[1] * 10}" x2="${B[0] * 10}" y2="${B[1] * 10}" vector-effect="non-scaling-stroke"/>`);
+      } else {
+        for (const st of this._glueState().strips || []) parts.push(`<polygon class="glstrip ${this.s.glueFocus === st.key ? "focus" : ""}" points="${st.pts.map((q) => `${q[0] * 10},${q[1] * 10}`).join(" ")}" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
     if (this.work && this.s.shapeEdit && (this.work.shapes || {})[this.s.shapeEdit]) {
       const sp = this.work.shapes[this.s.shapeEdit];
       const pts = sp.map((p) => `${p[0] * 10},${p[1] * 10}`).join(" ");
@@ -1641,6 +1828,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       sp.forEach((p, i) => {
         const q = sp[(i + 1) % sp.length];
         parts.push(`<line x1="${p[0] * 10}" y1="${p[1] * 10}" x2="${q[0] * 10}" y2="${q[1] * 10}" stroke="#b3261e" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        // 0.9: grab the edge itself and drag it: it moves straight out / in, its neighbours stretch.
+        parts.push(`<line class="she" data-she="${i}" x1="${p[0] * 10}" y1="${p[1] * 10}" x2="${q[0] * 10}" y2="${q[1] * 10}" stroke="transparent" stroke-width="14" vector-effect="non-scaling-stroke"><title>Drag to move this wall</title></line>`);
       });
     }
     // Device with a separate box / radio spot: dashed line when either is selected.
@@ -1863,7 +2052,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       ip.style.top = `${b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - h - 6) : b.bottom + 6}px`;
     }
     const pop = this.shadowRoot && this.shadowRoot.querySelector(".side .pop");
-    const side = pop && pop.closest(".side");
+    const side = pop && pop.closest(".sidecol");
     if (!pop || !side) return;
     const room = side.getBoundingClientRect().bottom - pop.getBoundingClientRect().top - 10;
     pop.style.maxHeight = `${Math.max(160, room)}px`;
@@ -1994,7 +2183,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const a = this.areaById.get(aid);
     const pos = this.s.shapeBox || { x: 12, y: 12 };
     return `<div class="shbox" id="shbox" style="left:${pos.x}px;top:${pos.y}px"><div class="shgrip" data-shgrip="1" title="Move">⋮⋮ <b>${esc(a ? a.name : aid)}</b> · shape</div>
-      <div class="shtip">Drag the corners · "+" adds a corner · double-click removes one. Edges snap straight · hold Alt for a free angle. Let shapes overlap where rooms are open to each other (open-plan kitchen, a door); leave a small gap where there is a wall: light stops at gaps.</div>
+      <div class="shtip">Drag the corners, or a wall to move it · "+" adds a corner · double-click removes one. Edges snap straight · hold Alt for a free angle. Let shapes overlap where rooms are open to each other (open-plan kitchen, a door); leave a small gap where there is a wall: light stops at gaps.</div>
       <div class="shacts"><button data-act="shapereset">Reset to rectangle</button><button data-act="shapedel">🗑 Remove</button><button class="pri" data-act="shapedone">Done</button></div></div>`;
   }
 
@@ -2093,6 +2282,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
   }
 
+  /** 0.8.2: zoom in on a spot of the plan (x / y in % of the plan) and put it in the middle. */
+  _centerOn(x, y, nz = 2.5) {
+    const s = this.s;
+    nz = clamp(nz, 1, 6);
+    const lim = (v) => clamp(v, 100 * (1 - nz), 0);
+    Object.assign(s, { z: nz, tx: lim(50 - x * nz), ty: lim(50 - y * nz) });
+    this._layout();
+  }
+
   _zoomTo(nz, vx = 50, vy = 50) {
     const s = this.s;
     nz = clamp(Math.round(nz * 1000) / 1000, 0.25, 6);
@@ -2118,10 +2316,17 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   // ---------------------------------------------------------------- side
+  /** 0.8.2: the right column: the selected device in its own card on top, the step's card below. */
   _sideHtml() {
-    if (this.s.tool === "rooms") return this._roomsSideHtml();
-    if (this.s.tool === "measure" && this._imageType() !== "angled") return this._measureSideHtml();
-    return this._devicesSideHtml();
+    let inner;
+    let det = "";
+    if (this.s.tool === "rooms") inner = this._roomsSideHtml();
+    else if (this.s.tool === "measure" && this._imageType() !== "angled") inner = this._measureSideHtml();
+    else {
+      inner = this._devicesSideHtml();
+      det = this._detailsHtml();
+    }
+    return `<div class="sidecol">${det ? `<section class="selcard" aria-label="Selected device">${det}</section>` : ""}${inner}</div>`;
   }
 
   _measureSideHtml() {
@@ -2172,7 +2377,16 @@ class DeviceFloorplanPanel extends HTMLElement {
       .map(roomRow)
       .join("") + (empty.length ? `<div class="lgh" style="padding:10px 12px 4px;font-size:12px;font-weight:500;color:var(--df-sec)">Empty rooms · no devices yet</div>` + empty.slice().sort((a, b) => a.name.localeCompare(b.name)).map(roomRow).join("") : "");
     const scope = this._plan().floor_id && this._plan().kind === "floor" ? "on this floor" : "with devices";
-    return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan"><div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
+    // 0.8.2: the glue card only informs; its actions sit in the top bar.
+    const gs = this._glueState();
+    const nShapes = Object.values(this.work.shapes || {}).filter((sh) => Array.isArray(sh) && sh.length >= 3).length;
+    const pairTxt = (x) => `${esc(this._areaName(x.a))} / ${esc(this._areaName(x.b))}`;
+    const howTxt = (x) => (x.how === "meet" ? `${pairTxt(x)}: meet in the middle` : `${esc(this._areaName(x.how === "a" ? x.a : x.b))} moves onto ${esc(this._areaName(x.how === "a" ? x.b : x.a))}'s edge`);
+    let glue = "";
+    if (this.s.glued && this.s.glueLog) glue = `<div class="gluebox"><b>Glued</b>${this.s.glueLog.map((x) => `<span>· ${howTxt(x)}</span>`).join("")}<span>Gaps (walls) stayed as they were. Check the plan, then Looks good or Undo (top).</span></div>`;
+    else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle. The orange strips on the plan show where; click one below to go there.</span>${gs.pairs.map((x) => `<button class="link gluepair" data-act="gluefocus" data-k="${esc(`${x.a}|${x.b}`)}">· ${howTxt(x)}</button>`).join("")}</div>`;
+    else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
+    return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
       <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p></div>
       <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
   }
@@ -2215,10 +2429,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       pop = `<div class="pop"><div class="popall">Select: <button class="link" data-act="popall" ${allOn ? 'style="font-weight:700;text-decoration:none"' : ""}>All</button>·<button class="link" data-act="popnone" ${noneOn ? 'style="font-weight:700;text-decoration:none"' : ""}>None</button></div><div class="chips">${chips}</div><button class="btn primary" style="align-self:flex-end" data-act="closepop">Done</button></div>`;
     }
     const plan = this._plan();
-    const autoTargets = shown.filter((d) => (!d.loose || d.physical) && statuses.get(d.id) === "unplaced" && d.area_id && this.work.anchors[d.area_id] && this._inScope(d));
     const unplacedShown = shown.filter((d) => (!d.loose || d.physical) && statuses.get(d.id) === "unplaced");
     const opts = [];
-    opts.push(`<button class="btn outline" data-act="autoplace" ${autoTargets.length ? "" : "disabled"} title="${autoTargets.length ? "Put the devices shown below next to their room pins (approximate)" : "Nothing to auto-place: mark rooms first, or all shown devices are placed"}">${SVG.spark}Auto-place ${autoTargets.length}${this._filtering() ? " shown" : ""}</button>`);
     if (this._filtering() && unplacedShown.length && !(s.status.length === 1 && s.status[0] === "skipped")) {
       opts.push(`<button class="btn" data-act="skipall">${SVG.skip}Skip the ${unplacedShown.length} not on the plan</button>`);
     }
@@ -2244,15 +2456,15 @@ class DeviceFloorplanPanel extends HTMLElement {
       ? `<div class="controls"><input class="search" id="q" type="search" placeholder="Search name, room, model or entity…" value="${esc(s.q)}" aria-label="Search devices and entities">
         <div class="frow">${fbtn("type", "Type")}${fbtn("conn", "Connection")}${fbtn("status", "Status")}${s.conn.length || s.type.length || s.status.length ? `<button class="link" data-act="clearf">Clear filters</button>` : ""}</div>
         ${pop}
-        ${searching ? `<div style="font-size:12px;color:var(--df-sec)">Searching everything: all floors, skipped devices, hidden rooms and entities without a device.</div>` : `<div class="frow">${opts.join("")}</div>
+        ${searching ? `<div style="font-size:12px;color:var(--df-sec)">Searching everything: all floors, skipped devices, hidden rooms and entities without a device.</div>` : `${opts.length ? `<div class="frow">${opts.join("")}</div>` : ""}
         <div class="opts">${optsRow2.join("")}</div>`}</div>`
       : `<button class="toolsum" data-act="tools" title="Show search and filters">${SVG.down}<span>${esc(summary)}</span></button>`;
 
     return `<aside class="side" aria-label="Devices to place" data-droptext="Drop to remove from plan">
       <div class="sidehead"><h2>Devices to place <span class="pill ${left ? "" : active ? "ok" : "grey"}">${left ? `${left} left` : active ? "all placed" : "none here"}</span>
         <button class="tgl ${s.toolsOpen ? "up" : ""}" data-act="tools" title="${s.toolsOpen ? "Hide search and filters" : "Show search and filters"}" aria-label="${s.toolsOpen ? "Hide search and filters" : "Show search and filters"}" aria-expanded="${s.toolsOpen}">${SVG.down}</button></h2>
-      ${s.toolsOpen ? `<p>Click a device, then click on the plan, or drag it there. Placed devices are greyed out.</p>` : ""}</div>
-      ${this._detailsHtml()}${newBar}
+      ${s.toolsOpen ? `<p><b>Search</b> for a device you know, or <b>narrow the list</b> with <b>Type</b>, <b>Connection</b> and <b>Status</b>. Then click a device and click its spot on the plan, or drag it there. Placed devices are greyed out.</p>` : ""}</div>
+      ${newBar}
       ${controls}
       <div class="list">${this._listHtml(shown, statuses)}${this._hiddenGroupHtml(hiddenDevs, statuses)}</div></aside>`;
   }
@@ -2301,11 +2513,11 @@ class DeviceFloorplanPanel extends HTMLElement {
       return { k, name: nameOf(k), items, todo };
     });
     arr.sort((a, b) => (a.k === "__loose") - (b.k === "__loose") || (a.k === "__none") - (b.k === "__none") || b.todo - a.todo || a.name.localeCompare(b.name));
-    const many = shown.length > 40;
     return arr
       .map((g, i) => {
         const key = `${s.groupBy}:${g.k}`;
-        const open = s.q.trim() ? true : s.collapsed[key] === undefined ? !many || i === 0 || g.items.some((d) => d.id === s.sel) : !s.collapsed[key];
+        // 0.8.2: groups start collapsed; open while searching, when there is only one group, or when opened by you.
+        const open = s.q.trim() || arr.length === 1 ? true : s.collapsed[key] === false;
         const pill = g.todo ? `<span class="pill">${g.todo} to place</span>` : `<span class="pill ok">all placed</span>`;
         const note = g.k === "__none" && s.groupBy === "room" ? ` <small style="font-weight:400;color:var(--df-sec)">· not auto-placed</small>` : g.k === "__loose" ? ` <small style="font-weight:400;color:var(--df-sec)">· helpers, templates</small>` : "";
         let rows = "";
@@ -2399,6 +2611,10 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (st === "skipped") acts.push(`<button class="btn outline" data-act="unskip">Add to plan</button>`);
     acts.push(`<button class="btn" data-act="info" data-id="${esc(d.id)}">${SVG.info}More info</button>`);
     acts.push(`<button class="btn" data-act="devpage">Device page${SVG.ext}</button>`);
+    if (onPlan && this._wallSpot(s.sel)) {
+      const n = this._stackOf(s.sel).length;
+      acts.push(`<button class="btn" data-act="snapwall" title="${n > 1 ? `Move all ${n} devices at this spot onto the nearest edge of their Room` : "Move it onto the nearest edge of its Room"}">${SVG.magnet}Snap to wall</button>`);
+    }
     if (onPlan) acts.push(`<button class="btn danger" data-act="remove">Remove from plan</button>`);
     const skipBtn = st !== "skipped" ? `<button class="link" style="align-self:flex-start;padding:0" data-act="skipone">Skip this device</button>` : "";
     let stack = "";
@@ -2513,7 +2729,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -2795,6 +3011,224 @@ class DeviceFloorplanPanel extends HTMLElement {
     return { ...s, x: pos.x, y: pos.y, auto: !pos.light, lead };
   }
 
+  /** 0.8.2: where "Snap to wall" puts a marker: on the nearest edge of the Room it is in (else the nearest Room),
+   *  moved just inside so the marker stays in that Room. Null when there are no Room shapes. */
+  /** Devices sharing this marker's exact spot (a stack), the marker first. */
+  _stackOf(id) {
+    const p = this.work.positions[id];
+    if (!p) return [id];
+    return [id, ...Object.entries(this.work.positions).filter(([k, q]) => k !== id && q && Math.abs(q.x - p.x) < 0.01 && Math.abs(q.y - p.y) < 0.01).map(([k]) => k)];
+  }
+
+  _wallSpot(id) {
+    const pos = id && this.work && this.work.positions[id];
+    const shapes = Object.values((this.work && this.work.shapes) || {}).filter((sh) => Array.isArray(sh) && sh.length >= 3);
+    if (!pos || pos.x == null || !shapes.length) return null;
+    const r = this._ratio(); // work in a square space: x in %, y scaled by the plan's height
+    const P = [pos.x, pos.y / r];
+    let best = null;
+    const inside = shapes.filter((sh) => ptInPoly(pos.x, pos.y, sh));
+    for (const sh of inside.length ? inside : shapes) {
+      for (let i = 0; i < sh.length; i++) {
+        const A = [sh[i][0], sh[i][1] / r];
+        const B = [sh[(i + 1) % sh.length][0], sh[(i + 1) % sh.length][1] / r];
+        const dx = B[0] - A[0];
+        const dy = B[1] - A[1];
+        const L2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2));
+        const Q = [A[0] + t * dx, A[1] + t * dy];
+        const d = Math.hypot(P[0] - Q[0], P[1] - Q[1]);
+        if (!best || d < best.d) best = { d, Q, sh, n: [-dy, dx] };
+      }
+    }
+    if (!best) return null;
+    // Inward normal: towards the Room's inside, about half a marker (1 % of the plan width).
+    let [nx, ny] = best.n;
+    const L = Math.hypot(nx, ny) || 1;
+    nx /= L;
+    ny /= L;
+    const inset = 0.2; // the centre sits on the edge (a hair inside), so it stays on the wall at every zoom
+    if (!ptInPoly(best.Q[0] + nx * inset, (best.Q[1] + ny * inset) * r, best.sh)) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const x = +(best.Q[0] + nx * inset).toFixed(3);
+    const y = +((best.Q[1] + ny * inset) * r).toFixed(3);
+    if (Math.abs(x - pos.x) < 0.05 && Math.abs(y - pos.y) < 0.05) return null; // already on the wall
+    return { x, y };
+  }
+
+  /** 0.8.2: ZHA groups (devices since HA 2026.11) and their member devices, from ZHA itself (once per visit). */
+  _zhaGroupsOf(d) {
+    if (!d || !d.zha_group) return null;
+    if (this._zg === undefined) {
+      this._zg = null;
+      this._hass.callWS({ type: "zha/groups" }).then((gs) => {
+        this._zg = (gs || []).map((g) => ({ name: String(g.name || ""), members: (g.members || []).map((m) => (m.device || {}).device_reg_id).filter(Boolean) }));
+        this._render();
+      }).catch(() => (this._zg = []));
+    }
+    const g = (this._zg || []).find((x) => x.name.trim().toLowerCase() === String(d.name || "").trim().toLowerCase());
+    return g ? g.members.filter((id) => this.byId.has(id) && id !== d.id) : null;
+  }
+
+  _zhaGroupNote(d) {
+    const mem = this._zhaGroupsOf(d);
+    if (!mem) return "";
+    const b = this._bondOf(d.id);
+    const all = mem.every((id) => b && b[1].includes(id));
+    return `<div class="note">ZHA group of <b>${mem.length}</b> device${mem.length === 1 ? "" : "s"}: ${esc(mem.map((id) => this.byId.get(id).name).join(", "))}.
+      ${all ? "They are bonded as one marker." : `<button class="btn outline" style="margin-top:6px" data-act="zhabond">Bond them as one marker</button>`}</div>`;
+  }
+
+  /** 0.8.2: the floor whose frame is the house frame (from the integration), when there are 2+ floors. */
+  _houseRef(plan) {
+    const id = plan && plan.frame_eff && plan.frame_eff.ref;
+    return id ? this.plans.find((p) => p.id === id) || null : null;
+  }
+
+  /** A later floor: part of a house whose frame comes from another floor. */
+  _laterFloor(plan) {
+    const ref = this._houseRef(plan);
+    if (ref) return ref.id !== plan.id ? ref : null;
+    // Not saved yet: any other floor with a picture makes this one a later floor.
+    if (!plan || plan.kind !== "floor") return null;
+    return this.plans.find((p) => p.kind === "floor" && p.id !== plan.id && p.width) || null;
+  }
+
+  _measuredPlan(p) {
+    if (!p || !p.width || !p.height) return false;
+    return (p.refs || []).length > 0;
+  }
+
+  /** "Align with …": the reference floor faintly underneath, this floor's picture on top, drag it into place. */
+  _alignDialog(plan) {
+    const fe = plan.frame_eff || {};
+    const b = fe.box;
+    if (!b) return null;
+    const x1 = b.x - (fe.l * b.w) / 100;
+    const x2 = b.x + b.w + (fe.r * b.w) / 100;
+    const y1 = b.y - (fe.t * b.h) / 100;
+    const y2 = b.y + b.h + (fe.b * b.h) / 100;
+    // The stage leaves room to move the picture around.
+    const padX = (x2 - x1) * 0.15;
+    const padY = (y2 - y1) * 0.15;
+    return { type: "align", plan: plan.id, ref: fe.ref, x: b.x, y: b.y, w: b.w, h: b.h, o: { x1: x1 - padX, x2: x2 + padX, y1: y1 - padY, y2: y2 + padY }, aspect: fe.aspect * ((x2 - x1 + 2 * padX) / (x2 - x1)) / ((y2 - y1 + 2 * padY) / (y2 - y1)) };
+  }
+
+  _alignHtml(d, wrap) {
+    const p = this.plans.find((x) => x.id === d.plan);
+    const ref = this.plans.find((x) => x.id === d.ref);
+    if (!p || !ref) return "";
+    const W = d.o.x2 - d.o.x1;
+    const H = d.o.y2 - d.o.y1;
+    const rect = (x, y, w, h) => `left:${((x - d.o.x1) / W) * 100}%;top:${((y - d.o.y1) / H) * 100}%;width:${(w / W) * 100}%;height:${(h / H) * 100}%`;
+    return wrap(`<h2>Align ${esc(p.name)} with ${esc(ref.name)}</h2>
+      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">${esc(ref.name)} is shown faintly underneath. Drag ${esc(p.name)} until the stairs or the outer walls sit on top of each other. ${this._measuredPlan(p) && this._measuredPlan(ref) ? "Both floors are measured, so one metre is equally long on both." : "Measure both floors to match their scale exactly."}</p>
+      <div class="frstage alstage" id="alstage" style="aspect-ratio:${d.aspect}">
+        <img class="alref" src="${esc(this._imgSrc(ref) || "")}" alt="" style="${rect(0, 0, 100, 100)}" draggable="false">
+        <img class="alimg" data-alimg="1" src="${esc(this._imgSrc(p) || "")}" alt="" style="${rect(d.x, d.y, d.w, d.h)}" draggable="false">
+      </div>
+      <div class="frvals"><span>Drag the picture · arrow keys move it a little</span><button class="link" data-act="alcentre">Centre</button></div>
+      <div class="acts"><button class="btn" data-act="closedlg">Not now</button><button class="btn primary" data-act="alsave">Save</button></div>`, 820);
+  }
+
+  /** 0.8.2: "Frame the plan" (after a new image, or from the plan's ⋮ menu). Values are % of the image per side:
+   *  + space around the plan, − trimmed margin. The image sits in the middle 60 % of the stage. */
+  _frameDialog(plan) {
+    const f = plan.frame || {};
+    const v = (k) => Number(f[k]) || 0;
+    return { type: "frame", t: v("t"), r: v("r"), b: v("b"), l: v("l"), linked: v("t") === v("r") && v("r") === v("b") && v("b") === v("l") };
+  }
+
+  _frameGeom(d) {
+    const k = 0.6;
+    return { x1: 20 - d.l * k, x2: 80 + d.r * k, y1: 20 - d.t * k, y2: 80 + d.b * k };
+  }
+
+  _frameHtml(d, wrap) {
+    const p = this._plan();
+    const ratio = p && p.width && p.height ? p.width / p.height : 1.6;
+    const g = this._frameGeom(d);
+    const val = (k) => `${d[k] > 0 ? "+" : ""}${Math.round(d[k])} %`;
+    return wrap(`<h2>Frame the plan</h2>
+      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">Drag the dashed lines: <b>outwards</b> adds space around the plan (room for labels and buttons), <b>inwards</b> trims empty margin. Markers and Rooms never move. Every dashboard card uses this frame unless it sets its own.</p>
+      <div class="frstage" id="frstage" style="aspect-ratio:${ratio}">
+        <img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:20%;top:20%;width:60%;height:60%" draggable="false">
+        <div class="frbox" style="left:${g.x1}%;top:${g.y1}%;width:${g.x2 - g.x1}%;height:${g.y2 - g.y1}%"></div>
+        <div class="frl v" data-frl="l" style="left:${g.x1}%" title="Left"></div><div class="frl v" data-frl="r" style="left:${g.x2}%" title="Right"></div>
+        <div class="frl h" data-frl="t" style="top:${g.y1}%" title="Top"></div><div class="frl h" data-frl="b" style="top:${g.y2}%" title="Bottom"></div>
+      </div>
+      <div class="frvals"><label><input type="checkbox" data-act="frlink" ${d.linked ? "checked" : ""}> Same on all four sides</label>
+        <span id="frv">Top ${val("t")} · Right ${val("r")} · Bottom ${val("b")} · Left ${val("l")}</span><button class="link" data-act="frreset">Reset</button></div>
+      <div class="acts"><button class="btn" data-act="closedlg">Not now</button><button class="btn primary" data-act="frsave">Save</button></div>`, 760);
+  }
+
+  _frDown(e) {
+    const al = e.target.closest && e.target.closest("[data-alimg]");
+    if (al && this.s.dialog && this.s.dialog.type === "align") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const d = this.s.dialog;
+      const stage = this.shadowRoot.getElementById("alstage");
+      const r = stage.getBoundingClientRect();
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const x0 = d.x;
+      const y0 = d.y;
+      const W = d.o.x2 - d.o.x1;
+      const H = d.o.y2 - d.o.y1;
+      const move = (ev) => {
+        d.x = x0 + ((ev.clientX - sx) / r.width) * W;
+        d.y = y0 + ((ev.clientY - sy) / r.height) * H;
+        al.style.left = `${((d.x - d.o.x1) / W) * 100}%`;
+        al.style.top = `${((d.y - d.o.y1) / H) * 100}%`;
+      };
+      const up = () => {
+        this._frUp = Date.now();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
+    const line = e.target.closest && e.target.closest("[data-frl]");
+    const stage = line && this.shadowRoot.getElementById("frstage");
+    const d = this.s.dialog;
+    if (!line || !stage || !d || d.type !== "frame") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const side = line.dataset.frl;
+    const move = (ev) => {
+      const r = stage.getBoundingClientRect();
+      const xs = ((ev.clientX - r.left) / r.width) * 100;
+      const ys = ((ev.clientY - r.top) / r.height) * 100;
+      const raw = side === "l" ? (20 - xs) / 0.6 : side === "r" ? (xs - 80) / 0.6 : side === "t" ? (20 - ys) / 0.6 : (ys - 80) / 0.6;
+      const v = Math.round(Math.max(-45, Math.min(33, raw)));
+      if (d.linked) d.t = d.r = d.b = d.l = v;
+      else d[side] = v;
+      // Only the lines move while dragging; no full redraw.
+      const g = this._frameGeom(d);
+      const q = (sel) => stage.querySelector(sel);
+      q('[data-frl="l"]').style.left = `${g.x1}%`;
+      q('[data-frl="r"]').style.left = `${g.x2}%`;
+      q('[data-frl="t"]').style.top = `${g.y1}%`;
+      q('[data-frl="b"]').style.top = `${g.y2}%`;
+      Object.assign(q(".frbox").style, { left: `${g.x1}%`, top: `${g.y1}%`, width: `${g.x2 - g.x1}%`, height: `${g.y2 - g.y1}%` });
+      const fv = this.shadowRoot.getElementById("frv");
+      const val = (k) => `${d[k] > 0 ? "+" : ""}${d[k]} %`;
+      if (fv) fv.textContent = `Top ${val("t")} · Right ${val("r")} · Bottom ${val("b")} · Left ${val("l")}`;
+    };
+    const up = () => {
+      this._frUp = Date.now();
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
   _ratio() {
     const p = this._plan();
     return p && p.width && p.height ? p.width / p.height : 1.6;
@@ -3042,7 +3476,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div class="mems">${ids.map((m, i) => this._memberRow(m, "bout", short[i])).join("")}</div>
       <div style="font-size:12px;color:var(--df-sec)">Add more: drag a device onto this marker.</div>
       ${this._lightSectionHtml(this.byId.get(ids[0]) || { id: ids[0] })}
-      <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button><button class="btn danger" data-act="remove">Remove from plan</button></div>${moreBox}</div>`;
+      <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button>${this._wallSpot(this.s.sel) ? `<button class="btn" data-act="snapwall" title="Move it onto the nearest edge of its Room">${SVG.magnet}Snap to wall</button>` : ""}<button class="btn danger" data-act="remove">Remove from plan</button></div>${moreBox}</div>`;
   }
 
   /** #103: which entities of a member count (default: all its readings). */
@@ -3106,6 +3540,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       return wrap(`<h2>Delete “${esc(p.name)}”?</h2><p>The ${what}, its image${n ? ` and the positions of <b>${n} placed device${n > 1 ? "s" : ""}</b>` : ""} are removed, together with its device and entities in Home Assistant. Your devices themselves are not touched.</p>
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" style="background:var(--error-color,#b3261e)" data-act="dodelete">Delete ${what}</button></div>`);
     }
+    if (dlg.type === "frame") return this._frameHtml(dlg, wrap);
+    if (dlg.type === "align") return this._alignHtml(dlg, wrap);
     if (dlg.type === "rename") {
       return wrap(`<h2>Rename</h2><label class="f">Name<input type="text" id="rname" value="${esc(dlg.name ?? p.name)}" maxlength="60"></label><div class="err" id="formerr"></div>
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="dorename">Save</button></div>`, 420);
@@ -3245,7 +3681,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       <label class="f">Name<input type="text" id="fname" value="${esc(name)}" maxlength="60"></label>
       <label class="f">This plan is<select id="fwhere">${floorOpts}<option value="level" ${where === "level" ? "selected" : ""}>A floor, by level number</option><option value="view" ${where === "view" ? "selected" : ""}>Not a floor (a view: garden, one room, network overview…)</option></select></label>
       ${where === "level" ? `<label class="f">Level (0 = ground floor, 1 = first floor, −1 = basement)<input type="number" id="flevel" value="${esc(level)}" step="1"></label>` : ""}
-      <div style="display:flex;flex-direction:column;gap:8px"><span class="secttl">Floorplan image</span>${imageBlock}</div>
+      <div style="display:flex;flex-direction:column;gap:8px"><span class="secttl">Floorplan image</span>${imageBlock}
+      <div class="imgtip ${f.opaque ? "warn" : ""}">${f.opaque ? "<b>This image has a solid background.</b> " : "<b>Tip:</b> "}A plan with a <b>transparent background</b> (PNG or WebP, nothing around the house) looks much better on the dashboard: the card's background shows around the house instead of a box.</div></div>
       ${typeBlock}${extra}${importLink}<div class="err" id="formerr">${esc(f.err || "")}</div>
       <div class="acts">${inline ? "" : `<button class="btn" data-act="closedlg">Cancel</button>`}<button class="btn primary" data-act="saveform" ${f.busy ? "disabled" : ""}>${f.busy ? "Saving…" : p ? "Save" : "Create plan"}</button></div></div>`;
   }
@@ -3344,6 +3781,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._change(() => pts.splice(Number(c.dataset.shc), 1));
     });
     root.addEventListener("input", (e) => this._onInput(e));
+    root.addEventListener("pointerdown", (e) => this._frDown(e)); // 0.8.2: frame lines (before the plan's own handler)
     root.addEventListener("pointerdown", (e) => this._onDown(e));
     root.addEventListener("pointermove", (e) => this._onMove(e));
     root.addEventListener("pointerup", (e) => this._onUp(e));
@@ -3620,6 +4058,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     } else if (act === "groupby") {
       this.s.groupBy = t.value;
       lsSet("groupBy", t.value);
+      this.s.collapsed = {}; // 0.8.2: a new grouping starts with every group collapsed
       this._render();
     } else if (act === "allfloors") {
       this.s.allFloors = t.checked;
@@ -3674,7 +4113,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (this.s.menu && e.target.closest(".menu")) this.s.menu = null;
     if (["colorby", "names", "groupby", "allfloors", "queue", "guidebox", "mainent", "onlymain", "setupchk", "setupauto", "formimg", "dashkey", "dashwhere", "dashview", "replacedev", "bondtap", "bondshow", "phvalue", "phone"].includes(act)) return;
     if (act === "modalbg") {
-      if (e.target === el && !(this.s.dialog && this.s.dialog.type === "bondask")) this._closeDialog();
+      // A frame line dragged out of the dialog ends with a click on the background: keep the dialog.
+      if (e.target === el && !(this.s.dialog && this.s.dialog.type === "bondask") && !(this._frUp && Date.now() - this._frUp < 400)) this._closeDialog();
       return;
     }
     const s = this.s;
@@ -3732,6 +4172,64 @@ class DeviceFloorplanPanel extends HTMLElement {
           }
         }, 50);
         break;
+      case "alignplan":
+        s.menu = null;
+        if (this._plan()) {
+          await this._flushSave();
+          s.dialog = this._alignDialog(this._plan());
+          if (!s.dialog) this._toast("Measure this floor first, then align it", false);
+          else this._signImage(this.plans.find((x) => x.id === s.dialog.ref)); // the house floor's picture underneath
+        }
+        this._render();
+        break;
+      case "alcentre":
+      case "alsave": {
+        const d = s.dialog;
+        const p = d && this.plans.find((x) => x.id === d.plan);
+        if (!p) break;
+        const align = act === "alcentre" ? {} : { x: +d.x.toFixed(3), y: +d.y.toFixed(3) };
+        try {
+          const res = await this._ws("plan/update", { plan_id: p.id, align });
+          Object.assign(p, { align: res.align, frame_eff: res.frame_eff });
+        } catch (err) {
+          this._saveError(err);
+        }
+        s.dialog = act === "alcentre" ? this._alignDialog(p) : null;
+        if (act === "alsave") this._toast("Aligned: the card shows both floors in the same place", false);
+        this._render();
+        break;
+      }
+      case "frameplan":
+        s.menu = null;
+        if (this._plan()) s.dialog = this._frameDialog(this._plan());
+        this._render();
+        break;
+      case "frlink":
+        if (s.dialog && s.dialog.type === "frame") {
+          s.dialog.linked = !s.dialog.linked;
+          if (s.dialog.linked) s.dialog.r = s.dialog.b = s.dialog.l = s.dialog.t;
+          this._render();
+        }
+        break;
+      case "frreset":
+        if (s.dialog && s.dialog.type === "frame") {
+          Object.assign(s.dialog, { t: 0, r: 0, b: 0, l: 0 });
+          this._render();
+        }
+        break;
+      case "frsave": {
+        const dlg = s.dialog;
+        const p = this._plan();
+        if (!dlg || !p) break;
+        const frame = { t: dlg.t, r: dlg.r, b: dlg.b, l: dlg.l };
+        // A floor's frame is the house frame: every other floor follows it.
+        this._ws("plan/update", { plan_id: p.id, frame, ...(p.kind === "floor" ? { frame_ref: true } : {}) }).then((res) => Object.assign(p, res)).catch((err) => this._saveError(err));
+        p.frame = frame;
+        s.dialog = null;
+        this._toast("Frame saved: dashboards use it unless a card sets its own", false);
+        this._render();
+        break;
+      }
       case "dorename":
         await this._renamePlan();
         break;
@@ -4365,6 +4863,69 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "movehere":
         await this._moveHere(s.sel);
         break;
+      case "glue": {
+        const res = glueShapes(this.work.shapes || {}, this._ratio());
+        if (!res.moved) {
+          this._toast("Nothing to glue: no Room shapes overlap", false);
+          break;
+        }
+        this._change(() => (this.work.shapes = { ...this.work.shapes, ...res.shapes }));
+        s.glued = res.moved;
+        s.glueLog = res.pairs;
+        s.glueLines = res.lines;
+        this._render();
+        break;
+      }
+      case "gluefocus": {
+        const k = el.dataset.k;
+        s.glueFocus = k;
+        const st = (this._glueState().strips || []).find((x) => x.key === k);
+        if (st) {
+          const cx = st.pts.reduce((t, q) => t + q[0], 0) / st.pts.length;
+          const cy = st.pts.reduce((t, q) => t + q[1], 0) / st.pts.length;
+          this._centerOn(cx, cy, 2.5);
+        }
+        this._render();
+        break;
+      }
+      case "glueundo":
+        this._undoAct();
+        s.glued = 0;
+        this._render();
+        break;
+      case "glueok":
+        s.glued = 0;
+        this._render();
+        break;
+      case "zhabond": {
+        const d = this.byId.get(s.sel);
+        const mem = this._zhaGroupsOf(d) || [];
+        const ids = [d.id, ...mem];
+        const target = ids.find((id) => this.work.positions[id]);
+        if (!target) {
+          this._toast("Place the group or one of its devices first", false);
+          break;
+        }
+        this._change(() => {
+          for (const id of ids) {
+            const tb = this._bondOf(target);
+            if (id !== target && !(tb && tb[1].includes(id))) this._bond(id, target);
+          }
+        });
+        this._toast(`Bonded: ${ids.length} as one marker`);
+        this._render();
+        break;
+      }
+      case "snapwall": {
+        const sp = this._wallSpot(s.sel);
+        if (sp) {
+          const ids = this._stackOf(s.sel);
+          this._change(() => ids.forEach((id) => this._moveTo(id, sp.x, sp.y)));
+          this._toast(ids.length > 1 ? `Snapped to the wall: ${ids.length} devices` : "Snapped to the wall");
+        }
+        this._render();
+        break;
+      }
       case "remove": {
         const d = this.byId.get(s.sel);
         const sel = s.sel;
@@ -4681,9 +5242,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     return { x: clamp(anchor.x + Math.cos(a) * step * ring, 1, 99), y: clamp(anchor.y + Math.sin(a) * step * ring * ratio, 1, 99) };
   }
 
+  /** What Auto-place would place now: unplaced devices shown in the list whose room has a pin. */
+  _autoTargets() {
+    if (!this.work) return [];
+    return this.devices.filter((d) => this._inScope(d) && (!d.loose || d.physical) && this._status(d) === "unplaced" && this._matches(d, "unplaced") && d.area_id && this.work.anchors[d.area_id]);
+  }
+
   _autoPlace() {
-    const all = this.devices.filter((d) => this._inScope(d));
-    const targets = all.filter((d) => (!d.loose || d.physical) && this._status(d) === "unplaced" && this._matches(d, "unplaced") && d.area_id && this.work.anchors[d.area_id]);
+    const targets = this._autoTargets();
     if (!targets.length) return;
     this._change(() => {
       const counts = {};
@@ -4754,6 +5320,20 @@ class DeviceFloorplanPanel extends HTMLElement {
     Object.assign(s, { ask: false, skipAuto: false, m1: null, m2: null, mh: null, lenInput: "", refSel: null });
     this._render();
     if (replaced) this._toast(`${dir === "h" ? "Horizontal" : "Vertical"} reference replaced`);
+    // 0.8.2: a later floor just got its scale: offer to align it with the house floor (once per visit).
+    const p = this._plan();
+    const ref = this._laterFloor(p);
+    if (p && ref && this._measuredPlan(ref) && !(p.align && "x" in p.align) && !(s.alignAsked || {})[p.id]) {
+      s.alignAsked = { ...(s.alignAsked || {}), [p.id]: true };
+      this._flushSave().then(() => {
+        const d = this._alignDialog(p);
+        if (d && !this.s.dialog) {
+          this.s.dialog = d;
+          this._signImage(this.plans.find((x) => x.id === d.ref));
+          this._render();
+        }
+      });
+    }
   }
 
   // ------------------------------------------------------------- pointer
@@ -4799,6 +5379,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     // Room shape (#111): corners, edge "+", toolbox grip.
     const shc = e.target.closest("[data-shc]");
     const shp = e.target.closest("[data-shp]");
+    const she = e.target.closest("[data-she]");
+    if (she && !shc && !shp && s.shapeEdit && (this.work.shapes || {})[s.shapeEdit]) {
+      e.preventDefault();
+      const i = Number(she.dataset.she);
+      this._gesture = { kind: "she", i, start, p0: this._pt(e), orig: clone(this.work.shapes[s.shapeEdit]), moved: false, snap: this._snap() };
+      return;
+    }
     if ((shc || shp) && s.shapeEdit) {
       e.preventDefault();
       const pts = this.work.shapes[s.shapeEdit];
@@ -5047,6 +5634,28 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       return;
     }
+    if (g.kind === "she") {
+      // The edge moves along its normal (as on screen); both its corners follow, so the neighbouring edges stretch.
+      const pts = this.work.shapes[s.shapeEdit];
+      if (!pts) return;
+      const n = g.orig.length;
+      const a = g.orig[g.i];
+      const b = g.orig[(g.i + 1) % n];
+      const p = this._pt(e);
+      const k = this._ratio() || 1; // % across → % down, so the normal is true on screen
+      let nx = -(b[1] - a[1]);
+      let ny = (b[0] - a[0]) * k;
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len;
+      ny /= len;
+      const d = (p.x - g.p0.x) * k * nx + (p.y - g.p0.y) * ny; // distance along the normal (in "down" units)
+      const mx = (d * nx) / k;
+      const my = d * ny;
+      const r3 = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
+      for (const j of [g.i, (g.i + 1) % n]) pts[j] = [r3(g.orig[j][0] + mx), r3(g.orig[j][1] + my), ...(g.orig[j][2] ? [1] : [])];
+      this._render();
+      return;
+    }
     if (g.kind === "shc") {
       const pts = this.work.shapes[s.shapeEdit];
       if (!pts) return;
@@ -5242,7 +5851,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (g.kind === "shbox") return;
-    if (g.kind === "shc") {
+    if (g.kind === "shc" || g.kind === "she") {
       if (g.moved) {
         this._pushUndo(g.snap);
         this._scheduleSave();
@@ -5639,7 +6248,10 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       if (f.image) await this._applyImage(plan, f.image);
       this.plans.sort((a, b) => this._planOrder(a) - this._planOrder(b));
-      this.s.dialog = null;
+      // 0.8.2: a new image: frame it right away (space around the plan, or trim its margin).
+      // Later floors follow the house frame: no frame dialog (measure them, then align).
+      this.s.dialog = f.image && !this._laterFloor(plan) ? this._frameDialog(plan) : null;
+      if (f.image && this._laterFloor(plan)) this._toast(`This floor follows the house frame of ${this._laterFloor(plan).name}. Measure it to match the scale, then align it.`, false);
       this.s.form = null;
       if (mode !== "settings") this.s.tool = this._firstOpenStep();
       this._signImage(plan);
@@ -5662,7 +6274,27 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     f.err = null;
     f.image = { kind: "file", file, preview: URL.createObjectURL(file) };
+    f.opaque = false;
     this._render();
+    // 0.8.2: a solid background (all four corners opaque)? Then the tip under the image says so.
+    const im = new Image();
+    im.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = im.naturalWidth;
+        c.height = im.naturalHeight;
+        const g = c.getContext("2d");
+        g.drawImage(im, 0, 0);
+        const W = c.width - 1;
+        const H = c.height - 1;
+        const opaque = [[0, 0], [W, 0], [0, H], [W, H]].every(([x, y]) => g.getImageData(x, y, 1, 1).data[3] > 250);
+        if (opaque && this.s.form === f && f.image && f.image.file === file) {
+          f.opaque = true;
+          this._render();
+        }
+      } catch (_e) { /* */ }
+    };
+    im.src = f.image.preview;
   }
 
   /** Put the chosen image (upload, sample or HA file) on a plan. */

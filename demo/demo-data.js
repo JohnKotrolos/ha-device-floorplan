@@ -3,11 +3,21 @@ export const clone=x=>JSON.parse(JSON.stringify(x));
 export const AREA_NAMES={kitchen:'Kitchen',living_room:'Living room',hallway:'Hallway',bathroom:'Bathroom',bedroom:'Bedroom',bedroom_2:'Bedroom 2'};
 // Media remains visible as the TV screen glow; Live's round media marker is disabled.
 export const LIVE_MARKER_KINDS=['lights','switches','covers','climate','motion','openings','locks','appliances','safety'];
-export const DEMO_ROOM_SHAPES={
+// Rooms as drawn by hand (they overlap where rooms are open to each other): the Editor tour glues these.
+export const DEMO_ROOM_SHAPES_ROUGH={
  kitchen:[[12.6,8.5],[42.1,8.5],[42.1,38],[45.8,38],[45.8,51.1],[12.6,51.1]],
  living_room:[[12.6,50.8],[45.8,50.8],[45.8,88.5],[12.6,88.5]],
  bathroom:[[44,8.5],[59.2,8.5],[59.2,39.2],[48,39.2],[48,35.4],[44,35.4]],
  hallway:[[47.6,38.6],[53.7,38.6],[53.7,41.6],[59.2,41.6],[59.2,44.7],[61.8,44.7],[61.8,53.4],[59.2,53.4],[59.2,60.7],[61.4,60.7],[61.4,70.8],[59.2,70.8],[59.2,88.7],[55.4,88.7],[55.4,95.9],[50,95.9],[50,88.7],[47.6,88.7],[47.6,56.6],[45,56.6],[45,45],[47.6,45]],
+ bedroom:[[61.1,8.5],[94.9,8.5],[94.9,53.2],[61.1,53.2]],
+ bedroom_2:[[61.1,55.8],[94.9,55.8],[94.9,88.7],[61.1,88.7]]
+};
+// The same rooms after Glue Rooms: neighbours meet on one line.
+export const DEMO_ROOM_SHAPES={
+ kitchen:[[12.6,8.5],[42.1,8.5],[42.1,38],[45.8,38],[45.8,50.95],[12.6,50.95]],
+ living_room:[[12.6,50.95],[45.8,50.95],[45.8,88.5],[12.6,88.5]],
+ bathroom:[[44,8.5],[59.2,8.5],[59.2,39.2],[48,39.2],[48,35.4],[44,35.4]],
+ hallway:[[47.6,39.2],[53.7,39.2],[53.7,41.6],[59.2,41.6],[59.2,44.7],[61.1,44.7],[61.1,53.4],[59.2,53.4],[59.2,60.7],[61.1,60.7],[61.1,70.8],[59.2,70.8],[59.2,88.7],[55.4,88.7],[55.4,95.9],[50,95.9],[50,88.7],[47.6,88.7],[47.6,56.6],[45.8,56.6],[45.8,45],[47.6,45]],
  bedroom:[[61.1,8.5],[94.9,8.5],[94.9,53.2],[61.1,53.2]],
  bedroom_2:[[61.1,55.8],[94.9,55.8],[94.9,88.7],[61.1,88.7]]
 };
@@ -61,7 +71,7 @@ export function makeInitial(){
  add('bath_switch','Bathroom light switch','bathroom','network','plugs_switches',{'light.bathroom_light':{name:'Bathroom ceiling light',state:'off',attrs:{icon:'mdi:light-switch',brightness:0,supported_color_modes:['onoff'],supported_features:0}}},null,{manufacturer:'Shelly',model:'Wi-Fi relay · light channel'});
  state('sun.sun','Sun','above_horizon',{elevation:35});
  const plan={id:'demo_apartment',name:'Demo apartment',kind:'floor',floor_id:'demo_floor',level:0,image_type:'top',image_url:STATIC+'/templates/apartment-two-bedroom.webp',image_fallback_url:null,image_source:'upload',width:1367,height:806,positions,anchors:{kitchen:{x:30.5,y:22},living_room:{x:28,y:79},hallway:{x:53,y:72},bathroom:{x:52.2,y:31},bedroom:{x:79.4,y:48},bedroom_2:{x:79.3,y:77}},refs:clone(TABLE_REFERENCES),hidden_rooms:[],sort:0,bonds:{living_lights:['living_bulb_1','living_bulb_2','living_bulb_3']},bond_meta:{living_lights:{name:'Living room lights'}},phantoms:{open_plan_temperature:{name:'Kitchen & Living room',x:41.1,y:47.2,members:['kitchen_therm','living_therm'],value:'average',uses:{kitchen_therm:['sensor.kitchen_therm_temperature','sensor.kitchen_therm_humidity'],living_therm:['sensor.living_therm_temperature','sensor.living_therm_humidity']}}},anchors_centered:true,shapes:clone(DEMO_ROOM_SHAPES),device_id:'demo_plan_device',image_entity:'image.device_floorplan_demo_apartment',sensor_entity:'sensor.device_floorplan_demo_apartment'};
- return {revision:5,presentation_revision:7,states,devices,plans:[plan],skipped:[],seen:devices.map(d=>d.id),main_entity:{},device_opts:{},setup_done:true,dashboards:{'':{title:'Dashboard',views:[{title:'Home',path:'home',cards:[]}]}},dashboardList:[],events:[]};
+ return {revision:5,presentation_revision:8,states,devices,plans:[plan],skipped:[],seen:devices.map(d=>d.id),main_entity:{},device_opts:{},setup_done:true,dashboards:{'':{title:'Dashboard',views:[{title:'Home',path:'home',cards:[]}]}},dashboardList:[],events:[]};
 }
 export function buildPayload(plan,db){
  const px=p=>({x:p.x,y:p.y,px:p.x*plan.width/100,py:p.y*plan.height/100});const devices={},entities={},bonds={},phantoms={},areas={},zigbee_devices={};const byId=Object.fromEntries(db.devices.map(d=>[d.id,d]));
@@ -80,10 +90,13 @@ export function buildPayload(plan,db){
 
 // Upgrade existing browser demos without resetting placements, device states or dashboards.
 export function migratePresentation(db){
- if(db.presentation_revision>=7)return false;
+ if(db.presentation_revision>=8)return false;
  const previousRevision=db.presentation_revision;
- db.presentation_revision=7;
+ db.presentation_revision=8;
  const p=db.plans.find(p=>p.id==='demo_apartment');
+ // 0.9: the demo rooms come glued (else the Editor waits for Glue Rooms before Place devices).
+ if(p)for(const id of Object.keys(DEMO_ROOM_SHAPES))if(p.shapes?.[id])p.shapes[id]=clone(DEMO_ROOM_SHAPES[id]);
+ if(previousRevision>=7)return true;
  if(p?.refs?.length===WALL_REFERENCES.length&&WALL_REFERENCES.every((ref,i)=>
   Object.entries(ref).every(([key,value])=>p.refs[i]?.[key]===value))){
   p.refs=clone(TABLE_REFERENCES);

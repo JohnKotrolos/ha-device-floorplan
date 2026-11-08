@@ -1,4 +1,4 @@
-import { makeInitial, clone, AREA_NAMES } from './demo-data.js';
+import { makeInitial, clone, AREA_NAMES, DEMO_ROOM_SHAPES_ROUGH } from './demo-data.js';
 
 const lightEntity = 'light.bathroom_light';
 const lightId = `entity:${lightEntity}`;
@@ -140,28 +140,32 @@ export function startEditorTour(hass, editorView) {
 
   function showRoomFrame() {
     const practising = roomFrame === roomLesson.length;
+    const gluing = roomFrame > roomLesson.length + 1;
     const example = roomFrame > roomLesson.length;
     const [title, copy, target] = practising
       ? ['Draw the Living room yourself', roomPractice]
+      : gluing
+        ? ['Glue the rooms together', 'Hand-drawn rooms overlap a little where they are open to each other. Click Glue Rooms in the top bar: overlapping rooms then meet on one line and the orange overlaps disappear, gaps stay walls. Check the result, then click Looks good (or Undo). Placing devices waits until the rooms are glued.', '[data-act="glue"], [data-act="glueok"]']
       : example
         ? ['Completed example · 6 rooms', 'This is how your floorplan will look once all rooms are drawn. Let adjacent room shapes overlap slightly where rooms connect through an open doorway or share an open-plan space. Leave a small gap where a wall separates them. This lets light and other room effects flow through openings and stop at walls. On your own plan, place a pin and fit a shape for each room before placing devices.']
         : roomLesson[roomFrame];
-    dialog.querySelector('#editor-tour-progress').textContent = practising
+    dialog.querySelector('#editor-tour-progress').textContent = practising || gluing
       ? 'Step 2 of 6 · Your turn'
       : example ? 'Step 2 of 6 · Finished result'
       : `Step 2 of 6 · Watch me · ${roomFrame + 1} of ${roomLesson.length}`;
     dialog.querySelector('#editor-tour-title').textContent = title;
-    button('next').textContent = practising ? 'View completed example' : example
-      ? 'Continue to device placement →' : roomFrame === roomLesson.length - 1
+    button('next').textContent = practising ? 'View completed example' : gluing
+      ? 'Continue to device placement →' : example
+      ? 'Glue the rooms →' : roomFrame === roomLesson.length - 1
         ? 'Try it yourself →' : 'Next action →';
-    panel.inert = !practising;
+    panel.inert = !practising && !gluing;
     practiceFinished = false;
 
     narrate(copy);
     resetEditor('rooms', {
       refs: checkpoints[1].refs,
       anchors: example ? plan.anchors : {},
-      shapes: example ? plan.shapes : {}
+      shapes: example ? clone(DEMO_ROOM_SHAPES_ROUGH) : {}
     });
     if (!example && roomFrame >= 2) panel.work.anchors[bedroom] = clone(plan.anchors[bedroom]);
     if (!example && roomFrame >= 3) {
@@ -178,6 +182,12 @@ export function startEditorTour(hass, editorView) {
     if (corner >= 0 && corner < 4) {
       const [x, y] = plan.shapes[bedroom][corner];
       pointAt({x,y});
+    }
+    if (gluing) {
+      button('next').disabled = true;
+      placementCheck = setInterval(() => {
+        button('next').disabled = Boolean(!panel.work || panel._gluePending());
+      }, 150);
     }
     if (practising) {
       button('next').disabled = true;
@@ -277,7 +287,7 @@ export function startEditorTour(hass, editorView) {
   function enterStage(index, atEnd = false) {
     stage = index;
     lessonFrame = atEnd ? lessons[stage].length - 1 : 0;
-    roomFrame = atEnd ? roomLesson.length + 1 : 0;
+    roomFrame = atEnd ? roomLesson.length + 2 : 0;
     resetEditor(stage === 0 ? 'measure' : stage === 1 ? 'rooms' : 'place',
       atEnd ? checkpoints[stage + 1] : checkpoints[stage]);
     if (atEnd && stage === 2) panel.s.sel = 'dishwasher';
@@ -292,7 +302,8 @@ export function startEditorTour(hass, editorView) {
   };
   button('replay').onclick = () => enterStage(stage);
   button('next').onclick = () => {
-    if (stage === 1 && roomFrame <= roomLesson.length) {
+    if (stage === 1 && roomFrame === roomLesson.length + 2 && (!panel.work || panel._gluePending())) return;
+    if (stage === 1 && roomFrame <= roomLesson.length + 1) {
       if (roomFrame === roomLesson.length &&
           (!practiceFinished || !hasAdjustedLivingShape() || panel.s.shapeEdit)) return;
       roomFrame++;
