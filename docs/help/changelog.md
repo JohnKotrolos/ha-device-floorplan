@@ -3,6 +3,7 @@
 ## 0.9.1
 
 - **Contrast background for the Overlay Bar and Side Rail**: dark on a light theme, light on a dark theme, switching with Home Assistant's light / dark mode. The Side Rail's default; *Dark* stays available.
+- **No hairline between glued rooms**: where two Rooms meet on one line, the night look and the shutter shading no longer leave a faint line between them.
 
 ## 0.9.0
 

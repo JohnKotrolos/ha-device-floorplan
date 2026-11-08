@@ -404,9 +404,10 @@ function poolSvg(pools, mode) {
   return `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}')`;
 }
 
-/** #119: white room shapes on transparent, as a CSS mask (single quotes: goes into style="…"). */
+/** #119: white room shapes on transparent, as a CSS mask (single quotes: goes into style="…").
+ *  0.9.1: a thin white stroke too, so rooms that meet on one line leave no hairline between them. */
 function shapesSvg(shapes) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">${shapes.map((sh) => `<polygon fill="#fff" points="${sh.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>`).join("")}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">${shapes.map((sh) => `<polygon fill="#fff" stroke="#fff" stroke-width=".3" stroke-linejoin="round" points="${sh.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>`).join("")}</svg>`;
   return `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}')`;
 }
 
@@ -2146,7 +2147,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const alpha = Math.max(0, Math.min(1, res.d[k])) * MAX * day;
       if (alpha >= 0.03) any = true;
       const L = Math.round(255 * alpha);
-      paint += `<polygon points="${pts(areas[k].shape)}" fill="rgb(${L},${L},${L})"/>`;
+      // 0.9.1: a thin stroke in the same colour closes the hairline where two glued rooms meet.
+      paint += `<polygon points="${pts(areas[k].shape)}" fill="rgb(${L},${L},${L})" stroke="rgb(${L},${L},${L})" stroke-width=".3" stroke-linejoin="round"/>`;
     }
     if (!any) return "";
     const clip = res.ids.map((k) => `<polygon points="${pts(areas[k].shape)}"/>`).join("");
