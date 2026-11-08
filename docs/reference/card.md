@@ -137,11 +137,11 @@ People show in **Live** (the People overlay is gone since 0.8.2). **Also show pe
 Open the dashboard's edit mode and edit the card. It has two parts:
 
 - **Frame and preview** (card settings): *Space around the plan*: the plan's default from the Floorplan Editor, or **custom for this card** (same on all sides, or per side; + adds space, − trims). **Preview** shows the whole card at a real screen size (wall panel 1280 × 800, tablet, desktop, phone or custom), so you see whether the buttons fit and how much room the plan has.
-- **Space for the buttons** (Overlay buttons): **Reserve space** (the plan fits beside them) or **Float over the plan** (a see-through bar, or the buttons alone); the plan then uses the whole card.
+- **Space for the buttons** (Overlay buttons): **Reserve space** (the plan fits beside them) or **Float over the plan**; the plan then uses the whole card.
 - **Per floor**, in a frame with the floor tabs: for the floor you picked, **Markers** (the **Edit markers** button) and **Rooms on this floor** (custom Room names, Rooms hidden on the card). Nothing else depends on the floor.
 - **Card settings (the whole house, all floors)**: the floor the card opens with and swiping · title and card ID · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** (how names look, where they show) · **People** · **Day & night** · **Look and tap behaviour**. Overlays are the same on every floor.
 
-- **Overlay buttons on the card**: which ones and in which order (drag), the one shown when the card opens, **where the buttons are** (below, above, left or right of the plan, or hidden), the **bar style** (Pill, Tiles, Circles, Plain, or **Sidebar**: a dark strip over the full height on the left or right), the **size** (S / M / L) and **labels** (icons and labels, or icons only). **Overlay names** renames them. See [Button bar](#button-bar).
+- **Overlay buttons on the card**: which ones and in which order (drag), the one shown when the card opens, **where the buttons are** (below, above, left or right of the plan, or hidden), the **bar background** (theme, dark, transparent), the **buttons** (Pill, Tiles, Circles), the **size** (S / M / L) and **labels** (icons and labels, or icons only). **Overlay names** renames them. See [Button bar](#button-bar).
 - **Live**: which kinds of devices it shows, **things that are off** hidden (default) or faint, values next to icons, **lights show as** glow only (default: no light markers, lights that are on just glow, tap the glow to switch off; switch lights on in the Lights overlay) or markers.
 - **Lights**: switches and plugs that run lights, brightness of lamps that are on, lamps that are off (faint, normal or hidden), All off / All on buttons.
 - **Comfort**: humidity, humidity-only devices, ACs and thermostats as climate chips, how bonds and phantoms combine sensors.
@@ -338,31 +338,43 @@ cards:
 
 ## Button bar
 
+The overlay buttons sit in **one bar, exactly as long as the plan with its frame** (as wide as the plan above or below it, as tall as the plan on its left or right) and right next to it. What doesn't fit scrolls inside the bar: a small chevron at the end shows there is more (and one at the start once you scrolled); tap it to scroll. A faint line separates the card's overlays, your own overlays and shortcuts.
+
+- **Bar background**: theme colour, dark, or transparent (the buttons alone).
+- **Buttons**: Pill, Tiles or Circles; **size** S / M / L; labels or icons only.
+
 Under **Overlay buttons on the card → Buttons: hold, status and shortcuts**, each button has its own row:
 
-- **Overlay buttons**: tap switches the overlay as always. **Hold** can run any Home Assistant action, *Reload this page* or *Back to where you were*. A **status** shows on the button: *Automatic* for the built-ins (Lights: how many lights are on · Security: a dot when a door or window is open, the alarm armed or a lock unlocked · Health: an amber dot when a battery is low or a device offline · Network: a dot when a device is offline; all for the floor shown), *None*, or **from entities you pick**.
-- **Shortcuts** (**Add shortcut**): your own buttons with a name and icon. **Tap** and **hold**: the details of the status entity, any Home Assistant action (open a dashboard page, a link, run an action…), a **popup on this browser only** (needs [browser_mod](https://github.com/thomasloven/hass-browser_mod); pick any card for the popup), *Reload this page* or *Back to where you were*. Less used ones go into the **···** menu, pinned at the end of the bar.
-- **Status from entities**: one or more entities, shown as a **dot** while any is active, **how many** are active, a **short value** (e.g. a printer's *45%*), the **icon colour** or **another icon** while active. *Counts as active* is optional: states like `on, open, printing`, or a number test like `>50`; by default on / open / armed / unlocked.
+- **Overlay buttons**: tap switches the overlay as always. **Hold** can run any Home Assistant action, *Reload this page* or *Back to where you were*.
+- **Shortcuts** (**Add shortcut**): your own buttons with a name and icon. **Tap** and **hold**: the details of the status entity, any Home Assistant action (open a dashboard page, a link, run an action…), a **popup on this browser only** (needs [browser_mod](https://github.com/thomasloven/hass-browser_mod); pick any card for the popup), *Reload this page* or *Back to where you were*.
+- **Status** (from entities you pick) never changes a button's size; it sits on the icon:
+  - **Icon colour** or **Dot**, with up to three rules, the first that matches wins, e.g. a printer: `running, prepare` → green, `failed, pause` → red.
+  - **Badge**: how many entities are active, or a short value (at most 4 characters, e.g. *62%*).
+  - *When* takes states (`on, open, printing`) or a number test (`>50`); empty means on / open / armed / unlocked.
+- **Automatic status** (off by default, one switch for the card): Lights shows how many of the lights the Lights overlay shows are on; Security a dot when a door or window is open, the alarm armed or a lock unlocked (not shutters); Health an amber dot when a battery is low or a device offline; Network a dot when a device is offline. Each button can turn it off or use its own status instead.
 
-When the buttons need more room than there is, the bar scrolls and fades at the end that has more.
+In a card with a fixed height (wall panel, sections grid) the plan sits at the **top**, the space left goes below; *Frame and preview → Plan position* can centre it instead.
 
 ```yaml
+plan_position: top        # top | centre
 buttons:
   position: left
-  shape: sidebar          # pill | tiles | circles | plain | sidebar
+  bar: dark               # theme | dark | clear
+  shape: pill             # pill | tiles | circles
   size: m                 # s | m | l
+  auto_status: false
   actions:
     live: { hold_action: { action: reload } }
-    network: { hold_action: { action: navigate, navigation_path: /config/zha/dashboard } }
-    health: { status: { mode: off } }
+    health:
+      hold_action: { action: navigate, navigation_path: /home-health }
+      status: { mode: custom, entity: [sensor.home_health], show: dot, rules: [{ when: critical, color: "#E5534B" }, { when: warning, color: "#f0b45c" }] }
   shortcuts:
     - name: 3D Printer
-      icon: mdi:printer-3d
-      status: { mode: custom, entity: sensor.printer_progress, show: value, when: ">0" }
+      icon: mdi:printer-3d-nozzle
+      status: { mode: custom, entity: [sensor.printer_status], show: color, rules: [{ when: "running, prepare", color: "#2e9e5b" }, { when: "failed, pause", color: "#E5534B" }] }
       tap_action:
         action: fire-dom-event
         browser_mod: { service: browser_mod.popup, data: { title: 3D Printer, content: { type: entities, entities: [sensor.printer_progress] } } }
-    - { name: Home Health, icon: mdi:heart-pulse, more: true, tap_action: { action: navigate, navigation_path: /home-health } }
 ```
 
 ## YAML
@@ -376,7 +388,7 @@ title: Home
 overlays: [live, lights, comfort, security, custom1]
 default_overlay: live
 overlay_names: { live: Home }
-buttons: { position: left, style: icons, shape: tiles, size: s }   # see Button bar
+buttons: { position: left, style: icons, bar: dark, shape: tiles, size: s }   # see Button bar
 live: { show: [lights, motion, openings, climate] }
 lights:
   brightness: true
