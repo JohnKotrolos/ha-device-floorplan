@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/demo/assets/device-floorplan-hero-refined.webp" width="100%" alt="Live View of your house in action">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/hero.webp" width="100%" alt="Live View of your house in action">
 </p>
 
 Put your Home Assistant devices on **your own floorplan** and see your home alive:
