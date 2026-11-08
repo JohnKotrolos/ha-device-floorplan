@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.8.2";
+const VERSION = "0.9.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -493,6 +493,8 @@ header h1 .logo { width:28px; height:28px; }
 .details .nm { font-size:15px; font-weight:500; }
 .details .sub { font-size:12px; color: var(--df-sec); margin-top:2px; }
 .details .acts { display:flex; flex-wrap:wrap; gap:6px; }
+.stage svg.ov line.she { pointer-events: stroke; cursor: move; touch-action:none; }
+.stage svg.ov line.she:hover { stroke: rgba(179,38,30,.25); }
 .shc { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#fff; border:2.5px solid #b3261e; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .shp { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background: rgba(179,38,30,.85); color:#fff; font-size:13px; line-height:16px; text-align:center; cursor:copy; pointer-events:auto; touch-action:none; z-index:5; opacity:.75; }
 .shp:hover { opacity:1; }
@@ -1826,6 +1828,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       sp.forEach((p, i) => {
         const q = sp[(i + 1) % sp.length];
         parts.push(`<line x1="${p[0] * 10}" y1="${p[1] * 10}" x2="${q[0] * 10}" y2="${q[1] * 10}" stroke="#b3261e" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        // 0.9: grab the edge itself and drag it: it moves straight out / in, its neighbours stretch.
+        parts.push(`<line class="she" data-she="${i}" x1="${p[0] * 10}" y1="${p[1] * 10}" x2="${q[0] * 10}" y2="${q[1] * 10}" stroke="transparent" stroke-width="14" vector-effect="non-scaling-stroke"><title>Drag to move this wall</title></line>`);
       });
     }
     // Device with a separate box / radio spot: dashed line when either is selected.
@@ -2179,7 +2183,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const a = this.areaById.get(aid);
     const pos = this.s.shapeBox || { x: 12, y: 12 };
     return `<div class="shbox" id="shbox" style="left:${pos.x}px;top:${pos.y}px"><div class="shgrip" data-shgrip="1" title="Move">⋮⋮ <b>${esc(a ? a.name : aid)}</b> · shape</div>
-      <div class="shtip">Drag the corners · "+" adds a corner · double-click removes one. Edges snap straight · hold Alt for a free angle. Let shapes overlap where rooms are open to each other (open-plan kitchen, a door); leave a small gap where there is a wall: light stops at gaps.</div>
+      <div class="shtip">Drag the corners, or a wall to move it · "+" adds a corner · double-click removes one. Edges snap straight · hold Alt for a free angle. Let shapes overlap where rooms are open to each other (open-plan kitchen, a door); leave a small gap where there is a wall: light stops at gaps.</div>
       <div class="shacts"><button data-act="shapereset">Reset to rectangle</button><button data-act="shapedel">🗑 Remove</button><button class="pri" data-act="shapedone">Done</button></div></div>`;
   }
 
@@ -5375,6 +5379,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     // Room shape (#111): corners, edge "+", toolbox grip.
     const shc = e.target.closest("[data-shc]");
     const shp = e.target.closest("[data-shp]");
+    const she = e.target.closest("[data-she]");
+    if (she && !shc && !shp && s.shapeEdit && (this.work.shapes || {})[s.shapeEdit]) {
+      e.preventDefault();
+      const i = Number(she.dataset.she);
+      this._gesture = { kind: "she", i, start, p0: this._pt(e), orig: clone(this.work.shapes[s.shapeEdit]), moved: false, snap: this._snap() };
+      return;
+    }
     if ((shc || shp) && s.shapeEdit) {
       e.preventDefault();
       const pts = this.work.shapes[s.shapeEdit];
@@ -5623,6 +5634,28 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
       return;
     }
+    if (g.kind === "she") {
+      // The edge moves along its normal (as on screen); both its corners follow, so the neighbouring edges stretch.
+      const pts = this.work.shapes[s.shapeEdit];
+      if (!pts) return;
+      const n = g.orig.length;
+      const a = g.orig[g.i];
+      const b = g.orig[(g.i + 1) % n];
+      const p = this._pt(e);
+      const k = this._ratio() || 1; // % across → % down, so the normal is true on screen
+      let nx = -(b[1] - a[1]);
+      let ny = (b[0] - a[0]) * k;
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len;
+      ny /= len;
+      const d = (p.x - g.p0.x) * k * nx + (p.y - g.p0.y) * ny; // distance along the normal (in "down" units)
+      const mx = (d * nx) / k;
+      const my = d * ny;
+      const r3 = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
+      for (const j of [g.i, (g.i + 1) % n]) pts[j] = [r3(g.orig[j][0] + mx), r3(g.orig[j][1] + my), ...(g.orig[j][2] ? [1] : [])];
+      this._render();
+      return;
+    }
     if (g.kind === "shc") {
       const pts = this.work.shapes[s.shapeEdit];
       if (!pts) return;
@@ -5818,7 +5851,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (g.kind === "shbox") return;
-    if (g.kind === "shc") {
+    if (g.kind === "shc" || g.kind === "she") {
       if (g.moved) {
         this._pushUndo(g.snap);
         this._scheduleSave();

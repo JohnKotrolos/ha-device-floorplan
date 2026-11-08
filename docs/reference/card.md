@@ -130,7 +130,7 @@ The state is matched to a room pin by the area's name, its id or one of its alia
 
 ![People in their rooms](/screens/card-people.webp){.shot}
 
-People show in **Live** (the People overlay is gone since 0.8.2). **Also show people in these overlays** adds them to other overlays too.
+People show in **Live** (the People overlay is gone since 0.9.0). **Also show people in these overlays** adds them to other overlays too.
 
 ## In the card editor: everything adjustable
 

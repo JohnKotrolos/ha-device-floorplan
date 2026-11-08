@@ -19,6 +19,7 @@ Each pinned room has a small **Shape** button. Press it and a four-corner shape 
 
 - drag the **corners** onto the room's inner edges; edges snap straight when they're close to horizontal or vertical (hold **Alt** for a free angle);
 - press and hold **inside the shape** and drag to move the whole shape;
+- drag an **edge** to move that wall straight out or in; its neighbouring edges stretch or shrink with it;
 - **+** in the middle of an edge adds a corner (L-shaped rooms), **double-click** a corner to remove it;
 - **Overlap or gap?** Where two rooms are open to each other (an open-plan kitchen and living room, a corridor, a door), let their shapes **overlap a little**: light flows between them. Where there is a wall, leave a **small gap**: light stops there. All other rooms stay visible in their own colour while you draw, so you see where shapes meet;
 - **Reset to rectangle**, **🗑 Remove**, **Done**.

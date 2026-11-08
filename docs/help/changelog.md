@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.8.2
+## 0.9.0
 
-**A tidier Floorplan Editor, Rooms that meet on one line, framing for every screen, and ZHA groups as bonds.**
+**A tidier Floorplan Editor, Rooms that meet on one line, one frame for the whole house, the Overlay Bar with shortcuts and the Side Rail, and ZHA groups as bonds.**
 
 - **Editor layout**: the top row (with the Device Floorplan icon) runs the full width; the steps, guide and plan sit on the left; the right column starts right under the top row.
 - **Selected device in its own card** at the top of the right column; *Devices to place* below it. It closes with ✕ or when you click an empty spot on the plan.
@@ -17,6 +17,7 @@
 - **Transparent background**: the image dialog recommends a plan with a transparent background, and says so when an uploaded image has a solid one.
 - **ZHA groups** (devices since Home Assistant 2026.11): never on the Network map (no radio of their own); in the Editor a group's card lists its devices and offers **Bond them as one marker**.
 - **Appliance progress**: washers and dryers with a progress sensor in % (Midea, SmartThings) show "45% done" when there is no time-left sensor.
+- **Drag a wall of a Room shape**: grab an edge (not only a corner) and drag it; it moves straight out or in and its neighbouring edges stretch or shrink.
 - **Glue highlights**: overlaps show as orange stripes on the plan (they pulse when you point at *Glue Rooms · N overlaps*); click a pair in the right column to centre the plan on it. After gluing, the moved edges light up green for a moment.
 - **One frame for the whole house**: *Frame the plan* on the first floor frames the house. Later floors get no frame dialog: they take the same outer size, and once measured the same scale (1 m is just as long on every floor). **Align with …** shows the first floor faint underneath so you drag the picture into place (skipping keeps it centred); this also puts the network's other-floor markers in the right spot. A later floor that is larger grows the house frame for all floors.
 - **Measure per direction**: horizontal and vertical scale are matched separately; when they differ by more than 5% the Measure step warns that the picture may be stretched.
