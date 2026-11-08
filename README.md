@@ -2,10 +2,14 @@
 
 # Device Floorplan
 
-[![Release](https://img.shields.io/github/v/release/JohnKotrolos/ha-device-floorplan)](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
+[![Release](https://img.shields.io/github/v/release/JohnKotrolos/ha-device-floorplan?color=4CAF50)](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
 [![Marketplace custom](https://img.shields.io/badge/Marketplace-custom-41BDF5)](#install)
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/demo/assets/device-floorplan-hero-refined.webp" width="100%" alt="Live View of your house in action">
+</p>
 
 Put your Home Assistant devices on **your own floorplan** and see your home alive:
 lights glowing in their real colour and staying inside their room, the AC blowing,
@@ -13,10 +17,6 @@ the TV glowing, the washer telling you it's done, people in their rooms, the
 Zigbee mesh drawn over your walls. No custom cards to combine, no templates, no YAML:
 upload your picture (or start from a sample plan), drag your rooms onto it, press
 **Auto-place** and fine-tune by dragging.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/demo/assets/device-floorplan-hero-refined.webp" width="100%" alt="Live View of your house in action">
-</p>
 
 📖 **Full guide:** https://johnkotrolos.github.io/ha-device-floorplan/
 
