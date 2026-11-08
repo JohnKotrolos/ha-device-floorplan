@@ -265,10 +265,20 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .frstage .frl { position:absolute; z-index:2; }
 .frstage .frl.v { top:0; bottom:0; width:16px; margin-left:-8px; cursor:ew-resize; background: linear-gradient(90deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
 .frstage .frl.h { left:0; right:0; height:16px; margin-top:-8px; cursor:ns-resize; background: linear-gradient(0deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
+.alstage img { position:absolute; object-fit:fill; }
+.alstage .alref { opacity:.45; filter: grayscale(.6); pointer-events:none; }
+.alstage .alimg { opacity:.72; cursor:move; outline: 2px solid var(--df-primary); pointer-events:auto; }
 .frvals { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
 .gluebox { margin: 12px 14px 0; padding:10px 12px; border-radius:10px; background: var(--df-tint); font-size:12px; color: var(--df-sec); display:flex; flex-direction:column; gap:4px; }
 .gluebox.ok { color: var(--df-ok, #43a047); }
 .gluebox.warn { background: color-mix(in srgb, var(--df-warn) 12%, var(--df-card)); }
+.glstrip { fill: #f59e0b; fill-opacity:.45; stroke:#d97706; stroke-width:2; stroke-dasharray: 5 3; }
+.glstrip.focus { fill-opacity:.75; stroke-width:3; }
+.glline { stroke:#16a34a; stroke-width:4; stroke-linecap:round; animation: glfade 4s ease-out forwards; }
+@keyframes glfade { 0%, 60% { opacity:1; } 100% { opacity:.25; } }
+.app:has([data-act="glue"]:hover) .glstrip { animation: glpulse .9s ease-in-out infinite alternate; }
+@keyframes glpulse { from { fill-opacity:.25; } to { fill-opacity:.85; } }
+.gluepair { text-align:left; font-size:12px; padding:2px 0; }
 .gluebar { display:flex; align-items:center; gap:8px; font-size:13px; padding: 4px 6px 4px 12px; border-radius: 18px; background: var(--df-tint); }
 .gluebox b { color: var(--primary-text-color); }
 .gluebox .acts { display:flex; gap:8px; justify-content:flex-end; }
@@ -665,6 +675,8 @@ function glueShapes(shapes, ratio, tol = 4) {
   };
   let moved = 0;
   const pairs = new Map(); // "a|b" → what happened
+  const strips = []; // overlapping strips before gluing
+  const lines = []; // where Rooms meet after gluing
   for (let p = 0; p < ids.length; p++) {
     for (let q = p + 1; q < ids.length; q++) {
       const PA = S[ids[p]];
@@ -699,6 +711,11 @@ function glueShapes(shapes, ratio, tol = 4) {
           const eps = 0.05; // test just inside the edge
           if (!inside(PB, onA[0] - a.n[0] * eps, onA[1] - a.n[1] * eps) || !inside(PA, onB[0] - b.n[0] * eps, onB[1] - b.n[1] * eps)) continue;
           if (g > tol) continue; // a large overlap is left as it is
+          // The overlapping strip (before gluing), for the highlight on the plan.
+          const at = (E, sv) => [E.A[0] + a.u[0] * (sv - t(E.A)), E.A[1] + a.u[1] * (sv - t(E.A))];
+          const s0 = Math.max(a0, b0);
+          const s1 = Math.min(a1, b1);
+          strips.push({ key, pts: [at(a, s0), at(a, s1), at(b, s1), at(b, s0)] });
           const ca = ov / a.L;
           const cb = ov / b.L;
           const shift = (P, e, d) => {
@@ -716,13 +733,22 @@ function glueShapes(shapes, ratio, tol = 4) {
             pairs.set(key, { a: ids[p], b: ids[q], how: "b" });
           }
           moved++;
+          // Where the two Rooms meet now (after gluing): the shared stretch of the moved edges.
+          const ea = edge(PA, i);
+          if (ea) {
+            const at2 = (sv) => [ea.A[0] + a.u[0] * (sv - t(ea.A)), ea.A[1] + a.u[1] * (sv - t(ea.A))];
+            const pb = edge(PB, j);
+            const g2 = pb ? (ea.A[0] - pb.A[0]) * a.n[0] + (ea.A[1] - pb.A[1]) * a.n[1] : 1;
+            if (Math.abs(g2) < 0.05) lines.push([at2(s0), at2(s1)]);
+          }
         }
       }
     }
   }
   const out = {};
   for (const k of ids) out[k] = S[k].map((p) => [+p[0].toFixed(3), +(p[1] * ratio).toFixed(3), ...p.slice(2)]);
-  return { shapes: out, moved, pairs: [...pairs.values()] };
+  const back = (P) => P.map(([x, y]) => [+x.toFixed(3), +(y * ratio).toFixed(3)]);
+  return { shapes: out, moved, pairs: [...pairs.values()], strips: strips.map((x) => ({ key: x.key, pts: back(x.pts) })), lines: lines.map(back) };
 }
 
 /** Is a point inside a polygon ([[x, y], …], % of the plan)? */
@@ -1260,7 +1286,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const body = { plan_id: plan.id, positions: this.work.positions, anchors: this.work.anchors, refs: this.work.refs, hidden_rooms: this.work.hidden_rooms, bonds, bond_meta: bondMeta, phantoms, shapes: this.work.shapes || {} };
     try {
       const res = await this._ws("plan/update", body);
-      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {}, bond_meta: res.bond_meta || {}, phantoms: res.phantoms || {}, shapes: res.shapes || {} });
+      Object.assign(plan, { positions: res.positions, anchors: res.anchors, refs: res.refs, hidden_rooms: res.hidden_rooms, bonds: res.bonds || {}, bond_meta: res.bond_meta || {}, phantoms: res.phantoms || {}, shapes: res.shapes || {}, frame_eff: res.frame_eff || {} });
       if (this._saveT === null && this.s.save === "busy") this.s.save = "ok";
     } catch (err) {
       this._saveError(err);
@@ -1584,7 +1610,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     return `<div class="menu" style="${style}" role="menu" aria-label="Floor options">
       <button data-act="settings" role="menuitem">${SVG.gear}${isView ? "Plan" : "Floor"} settings</button>
       <button data-act="rename" role="menuitem">${SVG.edit}Rename</button>
-      ${p.image_url ? `<button data-act="frameplan" role="menuitem">${SVG.glue}Frame the plan…</button>` : ""}
+      ${p.image_url ? (this._laterFloor(p) ? `<button data-act="alignplan" role="menuitem">${SVG.glue}Align with ${esc(this._laterFloor(p).name)}…</button>` : `<button data-act="frameplan" role="menuitem">${SVG.glue}${p.kind === "floor" ? "Frame the house…" : "Frame the plan…"}</button>`) : ""}
       <button data-act="replaceimg" role="menuitem">${SVG.image}Replace image</button>
       <button data-act="export" role="menuitem">${SVG.download}Export…</button>
       <button data-act="moveplan" data-dir="-1" role="menuitem" ${canL ? "" : "disabled"}${floorTip}>← Move left</button>
@@ -1612,9 +1638,11 @@ class DeviceFloorplanPanel extends HTMLElement {
       const sc = this._scale();
       const stretched = sc.h && sc.v && Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2) > 0.05;
       if (!sc.x) calib = `<span class="chip-status">○ Not calibrated</span>`;
-      else if (stretched) calib = `<span class="chip-status warn">! Scale set · horizontal and vertical disagree</span>`;
+      else if (stretched) calib = `<span class="chip-status warn" title="Measure again with longer lines, or keep it as it is">! Horizontal and vertical differ by ${Math.round((Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2)) * 100)} %: the picture may be stretched</span>`;
       else if (this.work.refs.length === 1) calib = `<span class="chip-status ok">✓ Scale set · add a ${sc.h ? "vertical" : "horizontal"} measurement for best accuracy</span>`;
       else calib = `<span class="chip-status ok">✓ Scale set · horizontal + vertical</span>`;
+      const ref = this._laterFloor(plan);
+      if (sc.x && ref) calib += `<button class="btn ${plan.align && "x" in plan.align ? "" : "primary"}" data-act="alignplan">${SVG.glue}Align with ${esc(ref.name)}</button>`;
     }
     // 0.8.2: gluing ends step 2: its status and actions sit next to the steps, like Measure's.
     if (this.s.tool === "rooms") {
@@ -1781,6 +1809,14 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (aid === this.s.shapeEdit) continue;
         const c = colOf(aid);
         parts.push(`<polygon points="${sp0.map((p) => `${p[0] * 10},${p[1] * 10}`).join(" ")}" fill="${c}" fill-opacity=".38" stroke="${c}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
+    // 0.8.2: overlaps that gluing will join (orange strips), and where Rooms meet right after gluing (green).
+    if (this.work && this.s.tool === "rooms" && !this.s.shapeEdit) {
+      if (this.s.glued && this.s.glueLines) {
+        for (const [A, B] of this.s.glueLines) parts.push(`<line class="glline" x1="${A[0] * 10}" y1="${A[1] * 10}" x2="${B[0] * 10}" y2="${B[1] * 10}" vector-effect="non-scaling-stroke"/>`);
+      } else {
+        for (const st of this._glueState().strips || []) parts.push(`<polygon class="glstrip ${this.s.glueFocus === st.key ? "focus" : ""}" points="${st.pts.map((q) => `${q[0] * 10},${q[1] * 10}`).join(" ")}" vector-effect="non-scaling-stroke"/>`);
       }
     }
     if (this.work && this.s.shapeEdit && (this.work.shapes || {})[this.s.shapeEdit]) {
@@ -2242,6 +2278,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
   }
 
+  /** 0.8.2: zoom in on a spot of the plan (x / y in % of the plan) and put it in the middle. */
+  _centerOn(x, y, nz = 2.5) {
+    const s = this.s;
+    nz = clamp(nz, 1, 6);
+    const lim = (v) => clamp(v, 100 * (1 - nz), 0);
+    Object.assign(s, { z: nz, tx: lim(50 - x * nz), ty: lim(50 - y * nz) });
+    this._layout();
+  }
+
   _zoomTo(nz, vx = 50, vy = 50) {
     const s = this.s;
     nz = clamp(Math.round(nz * 1000) / 1000, 0.25, 6);
@@ -2335,7 +2380,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const howTxt = (x) => (x.how === "meet" ? `${pairTxt(x)}: meet in the middle` : `${esc(this._areaName(x.how === "a" ? x.a : x.b))} moves onto ${esc(this._areaName(x.how === "a" ? x.b : x.a))}'s edge`);
     let glue = "";
     if (this.s.glued && this.s.glueLog) glue = `<div class="gluebox"><b>Glued</b>${this.s.glueLog.map((x) => `<span>· ${howTxt(x)}</span>`).join("")}<span>Gaps (walls) stayed as they were. Check the plan, then Looks good or Undo (top).</span></div>`;
-    else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle.</span>${gs.pairs.map((x) => `<span>· ${howTxt(x)}</span>`).join("")}</div>`;
+    else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle. The orange strips on the plan show where; click one below to go there.</span>${gs.pairs.map((x) => `<button class="link gluepair" data-act="gluefocus" data-k="${esc(`${x.a}|${x.b}`)}">· ${howTxt(x)}</button>`).join("")}</div>`;
     else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
       <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p></div>
@@ -3032,6 +3077,58 @@ class DeviceFloorplanPanel extends HTMLElement {
       ${all ? "They are bonded as one marker." : `<button class="btn outline" style="margin-top:6px" data-act="zhabond">Bond them as one marker</button>`}</div>`;
   }
 
+  /** 0.8.2: the floor whose frame is the house frame (from the integration), when there are 2+ floors. */
+  _houseRef(plan) {
+    const id = plan && plan.frame_eff && plan.frame_eff.ref;
+    return id ? this.plans.find((p) => p.id === id) || null : null;
+  }
+
+  /** A later floor: part of a house whose frame comes from another floor. */
+  _laterFloor(plan) {
+    const ref = this._houseRef(plan);
+    if (ref) return ref.id !== plan.id ? ref : null;
+    // Not saved yet: any other floor with a picture makes this one a later floor.
+    if (!plan || plan.kind !== "floor") return null;
+    return this.plans.find((p) => p.kind === "floor" && p.id !== plan.id && p.width) || null;
+  }
+
+  _measuredPlan(p) {
+    if (!p || !p.width || !p.height) return false;
+    return (p.refs || []).length > 0;
+  }
+
+  /** "Align with …": the reference floor faintly underneath, this floor's picture on top, drag it into place. */
+  _alignDialog(plan) {
+    const fe = plan.frame_eff || {};
+    const b = fe.box;
+    if (!b) return null;
+    const x1 = b.x - (fe.l * b.w) / 100;
+    const x2 = b.x + b.w + (fe.r * b.w) / 100;
+    const y1 = b.y - (fe.t * b.h) / 100;
+    const y2 = b.y + b.h + (fe.b * b.h) / 100;
+    // The stage leaves room to move the picture around.
+    const padX = (x2 - x1) * 0.15;
+    const padY = (y2 - y1) * 0.15;
+    return { type: "align", plan: plan.id, ref: fe.ref, x: b.x, y: b.y, w: b.w, h: b.h, o: { x1: x1 - padX, x2: x2 + padX, y1: y1 - padY, y2: y2 + padY }, aspect: fe.aspect * ((x2 - x1 + 2 * padX) / (x2 - x1)) / ((y2 - y1 + 2 * padY) / (y2 - y1)) };
+  }
+
+  _alignHtml(d, wrap) {
+    const p = this.plans.find((x) => x.id === d.plan);
+    const ref = this.plans.find((x) => x.id === d.ref);
+    if (!p || !ref) return "";
+    const W = d.o.x2 - d.o.x1;
+    const H = d.o.y2 - d.o.y1;
+    const rect = (x, y, w, h) => `left:${((x - d.o.x1) / W) * 100}%;top:${((y - d.o.y1) / H) * 100}%;width:${(w / W) * 100}%;height:${(h / H) * 100}%`;
+    return wrap(`<h2>Align ${esc(p.name)} with ${esc(ref.name)}</h2>
+      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">${esc(ref.name)} is shown faintly underneath. Drag ${esc(p.name)} until the stairs or the outer walls sit on top of each other. ${this._measuredPlan(p) && this._measuredPlan(ref) ? "Both floors are measured, so one metre is equally long on both." : "Measure both floors to match their scale exactly."}</p>
+      <div class="frstage alstage" id="alstage" style="aspect-ratio:${d.aspect}">
+        <img class="alref" src="${esc(this._imgSrc(ref) || "")}" alt="" style="${rect(0, 0, 100, 100)}" draggable="false">
+        <img class="alimg" data-alimg="1" src="${esc(this._imgSrc(p) || "")}" alt="" style="${rect(d.x, d.y, d.w, d.h)}" draggable="false">
+      </div>
+      <div class="frvals"><span>Drag the picture · arrow keys move it a little</span><button class="link" data-act="alcentre">Centre</button></div>
+      <div class="acts"><button class="btn" data-act="closedlg">Not now</button><button class="btn primary" data-act="alsave">Save</button></div>`, 820);
+  }
+
   /** 0.8.2: "Frame the plan" (after a new image, or from the plan's ⋮ menu). Values are % of the image per side:
    *  + space around the plan, − trimmed margin. The image sits in the middle 60 % of the stage. */
   _frameDialog(plan) {
@@ -3064,6 +3161,34 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _frDown(e) {
+    const al = e.target.closest && e.target.closest("[data-alimg]");
+    if (al && this.s.dialog && this.s.dialog.type === "align") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const d = this.s.dialog;
+      const stage = this.shadowRoot.getElementById("alstage");
+      const r = stage.getBoundingClientRect();
+      const sx = e.clientX;
+      const sy = e.clientY;
+      const x0 = d.x;
+      const y0 = d.y;
+      const W = d.o.x2 - d.o.x1;
+      const H = d.o.y2 - d.o.y1;
+      const move = (ev) => {
+        d.x = x0 + ((ev.clientX - sx) / r.width) * W;
+        d.y = y0 + ((ev.clientY - sy) / r.height) * H;
+        al.style.left = `${((d.x - d.o.x1) / W) * 100}%`;
+        al.style.top = `${((d.y - d.o.y1) / H) * 100}%`;
+      };
+      const up = () => {
+        this._frUp = Date.now();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
     const line = e.target.closest && e.target.closest("[data-frl]");
     const stage = line && this.shadowRoot.getElementById("frstage");
     const d = this.s.dialog;
@@ -3412,6 +3537,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" style="background:var(--error-color,#b3261e)" data-act="dodelete">Delete ${what}</button></div>`);
     }
     if (dlg.type === "frame") return this._frameHtml(dlg, wrap);
+    if (dlg.type === "align") return this._alignHtml(dlg, wrap);
     if (dlg.type === "rename") {
       return wrap(`<h2>Rename</h2><label class="f">Name<input type="text" id="rname" value="${esc(dlg.name ?? p.name)}" maxlength="60"></label><div class="err" id="formerr"></div>
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="dorename">Save</button></div>`, 420);
@@ -4042,6 +4168,33 @@ class DeviceFloorplanPanel extends HTMLElement {
           }
         }, 50);
         break;
+      case "alignplan":
+        s.menu = null;
+        if (this._plan()) {
+          await this._flushSave();
+          s.dialog = this._alignDialog(this._plan());
+          if (!s.dialog) this._toast("Measure this floor first, then align it", false);
+          else this._signImage(this.plans.find((x) => x.id === s.dialog.ref)); // the house floor's picture underneath
+        }
+        this._render();
+        break;
+      case "alcentre":
+      case "alsave": {
+        const d = s.dialog;
+        const p = d && this.plans.find((x) => x.id === d.plan);
+        if (!p) break;
+        const align = act === "alcentre" ? {} : { x: +d.x.toFixed(3), y: +d.y.toFixed(3) };
+        try {
+          const res = await this._ws("plan/update", { plan_id: p.id, align });
+          Object.assign(p, { align: res.align, frame_eff: res.frame_eff });
+        } catch (err) {
+          this._saveError(err);
+        }
+        s.dialog = act === "alcentre" ? this._alignDialog(p) : null;
+        if (act === "alsave") this._toast("Aligned: the card shows both floors in the same place", false);
+        this._render();
+        break;
+      }
       case "frameplan":
         s.menu = null;
         if (this._plan()) s.dialog = this._frameDialog(this._plan());
@@ -4065,7 +4218,8 @@ class DeviceFloorplanPanel extends HTMLElement {
         const p = this._plan();
         if (!dlg || !p) break;
         const frame = { t: dlg.t, r: dlg.r, b: dlg.b, l: dlg.l };
-        this._ws("plan/update", { plan_id: p.id, frame }).then((res) => Object.assign(p, res)).catch((err) => this._saveError(err));
+        // A floor's frame is the house frame: every other floor follows it.
+        this._ws("plan/update", { plan_id: p.id, frame, ...(p.kind === "floor" ? { frame_ref: true } : {}) }).then((res) => Object.assign(p, res)).catch((err) => this._saveError(err));
         p.frame = frame;
         s.dialog = null;
         this._toast("Frame saved: dashboards use it unless a card sets its own", false);
@@ -4714,6 +4868,19 @@ class DeviceFloorplanPanel extends HTMLElement {
         this._change(() => (this.work.shapes = { ...this.work.shapes, ...res.shapes }));
         s.glued = res.moved;
         s.glueLog = res.pairs;
+        s.glueLines = res.lines;
+        this._render();
+        break;
+      }
+      case "gluefocus": {
+        const k = el.dataset.k;
+        s.glueFocus = k;
+        const st = (this._glueState().strips || []).find((x) => x.key === k);
+        if (st) {
+          const cx = st.pts.reduce((t, q) => t + q[0], 0) / st.pts.length;
+          const cy = st.pts.reduce((t, q) => t + q[1], 0) / st.pts.length;
+          this._centerOn(cx, cy, 2.5);
+        }
         this._render();
         break;
       }
@@ -5149,6 +5316,20 @@ class DeviceFloorplanPanel extends HTMLElement {
     Object.assign(s, { ask: false, skipAuto: false, m1: null, m2: null, mh: null, lenInput: "", refSel: null });
     this._render();
     if (replaced) this._toast(`${dir === "h" ? "Horizontal" : "Vertical"} reference replaced`);
+    // 0.8.2: a later floor just got its scale: offer to align it with the house floor (once per visit).
+    const p = this._plan();
+    const ref = this._laterFloor(p);
+    if (p && ref && this._measuredPlan(ref) && !(p.align && "x" in p.align) && !(s.alignAsked || {})[p.id]) {
+      s.alignAsked = { ...(s.alignAsked || {}), [p.id]: true };
+      this._flushSave().then(() => {
+        const d = this._alignDialog(p);
+        if (d && !this.s.dialog) {
+          this.s.dialog = d;
+          this._signImage(this.plans.find((x) => x.id === d.ref));
+          this._render();
+        }
+      });
+    }
   }
 
   // ------------------------------------------------------------- pointer
@@ -6035,7 +6216,9 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (f.image) await this._applyImage(plan, f.image);
       this.plans.sort((a, b) => this._planOrder(a) - this._planOrder(b));
       // 0.8.2: a new image: frame it right away (space around the plan, or trim its margin).
-      this.s.dialog = f.image ? this._frameDialog(plan) : null;
+      // Later floors follow the house frame: no frame dialog (measure them, then align).
+      this.s.dialog = f.image && !this._laterFloor(plan) ? this._frameDialog(plan) : null;
+      if (f.image && this._laterFloor(plan)) this._toast(`This floor follows the house frame of ${this._laterFloor(plan).name}. Measure it to match the scale, then align it.`, false);
       this.s.form = null;
       if (mode !== "settings") this.s.tool = this._firstOpenStep();
       this._signImage(plan);

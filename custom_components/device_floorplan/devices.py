@@ -994,7 +994,7 @@ def build_plan_payload(
         "image_fallback_url": data.fallback_url(plan),
         "image_width": width,
         "image_height": height,
-        "frame": plan.get("frame") or {},
+        "frame": data.effective_frame(plan),
         "metres_per_px_x": round(scale["x"], 6) if scale["x"] else None,
         "metres_per_px_y": round(scale["y"], 6) if scale["y"] else None,
         "real_width_m": real_w,

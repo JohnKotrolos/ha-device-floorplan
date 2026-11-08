@@ -17,6 +17,12 @@
 - **Transparent background**: the image dialog recommends a plan with a transparent background, and says so when an uploaded image has a solid one.
 - **ZHA groups** (devices since Home Assistant 2026.11): never on the Network map (no radio of their own); in the Editor a group's card lists its devices and offers **Bond them as one marker**.
 - **Appliance progress**: washers and dryers with a progress sensor in % (Midea, SmartThings) show "45% done" when there is no time-left sensor.
+- **Glue highlights**: overlaps show as orange stripes on the plan (they pulse when you point at *Glue Rooms · N overlaps*); click a pair in the right column to centre the plan on it. After gluing, the moved edges light up green for a moment.
+- **One frame for the whole house**: *Frame the plan* on the first floor frames the house. Later floors get no frame dialog: they take the same outer size, and once measured the same scale (1 m is just as long on every floor). **Align with …** shows the first floor faint underneath so you drag the picture into place (skipping keeps it centred); this also puts the network's other-floor markers in the right spot. A later floor that is larger grows the house frame for all floors.
+- **Measure per direction**: horizontal and vertical scale are matched separately; when they differ by more than 5% the Measure step warns that the picture may be stretched.
+- **The plan fits the card**: in a card with a fixed height (panel, sections grid, wall panels) the plan takes the free space left by title, buttons and legend, never stretched. Masonry cards are unchanged.
+- **People overlay removed**: people show in **Live** (and in any overlay picked under *Also show people in*). Cards that opened on People open on Live.
+- **Overlay Bar Reloaded**: bar styles **Pill, Tiles, Circles, Plain and Sidebar** (dark strip over the full height), sizes S / M / L; **hold actions** on overlay buttons (any Home Assistant action, *Reload this page*, *Back to where you were*); **shortcuts** with tap and hold (pages, links, actions, a **browser_mod popup on this browser only**); a **···** menu for the less used ones; a **status** on every button (dot, count, short value, icon colour or another icon), automatic for Lights, Security, Health and Network. A bar with more buttons than room scrolls with a fade cue.
 
 ## 0.8.1
 

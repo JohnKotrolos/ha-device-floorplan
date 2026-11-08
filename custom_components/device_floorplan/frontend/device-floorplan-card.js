@@ -33,6 +33,56 @@ const OVERLAYS = {
 };
 const OVERLAY_ORDER = ["live", "lights", "comfort", "security", "network", "health"];
 
+// 0.8.2 Overlay Bar Reloaded: a status on a bar button (icon colour, dot, count, short value, other icon).
+const BAR_ON = ["on", "open", "opening", "playing", "home", "unlocked", "printing", "cleaning", "running", "heat", "cool", "heat_cool", "dry", "fan_only", "auto"];
+const BAR_SHAPES = ["pill", "tiles", "circles", "plain", "sidebar"];
+/** Entities of a status (groups expanded). */
+function barEnts(hass, st) {
+  const list = Array.isArray(st.entity) ? st.entity : st.entity ? [st.entity] : [];
+  return list.flatMap((e) => {
+    const s = hass.states[e];
+    const g = s && s.attributes.entity_id;
+    return Array.isArray(g) && g.length && !["person", "zone"].includes(domainOf(e)) ? g : [e];
+  }).filter((e) => hass.states[e]);
+}
+/** Does an entity count as active? `when` = "on, open" or ">50" / "<20" (any of them); default: on / open / armed… */
+function barActive(hass, e, when) {
+  const s = hass.states[e];
+  if (!s) return false;
+  const toks = String(when || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!toks.length) return BAR_ON.includes(s.state) || /^armed/.test(s.state) || s.state === "triggered";
+  return toks.some((t) => {
+    const m = t.match(/^(>=|<=|>|<|!=)\s*(.+)$/);
+    if (!m) return s.state === t;
+    if (m[1] === "!=") return s.state !== m[2];
+    const v = Number(s.state);
+    const w = Number(m[2]);
+    if (!Number.isFinite(v) || !Number.isFinite(w)) return false;
+    return m[1] === ">" ? v > w : m[1] === "<" ? v < w : m[1] === ">=" ? v >= w : v <= w;
+  });
+}
+/** The look of a status: { color, dot, badge, value, icon } (only what applies). */
+function barStatus(hass, st) {
+  if (!st || !hass) return null;
+  const ents = barEnts(hass, st);
+  if (!ents.length) return null;
+  const show = st.show || "dot";
+  if (show === "value") {
+    const s = hass.states[ents[0]];
+    if (!live(s)) return null;
+    let v = hass.formatEntityState ? hass.formatEntityState(s) : s.state;
+    if (num(s.state)) v = `${Math.round(Number(s.state) * 10) / 10}${s.attributes.unit_of_measurement ? ` ${s.attributes.unit_of_measurement}` : ""}`.replace(" %", "%");
+    const on = st.when ? barActive(hass, ents[0], st.when) : true;
+    return on ? { value: String(v).slice(0, 10), ...(st.color ? { color: st.color } : {}) } : null;
+  }
+  const n = ents.filter((e) => barActive(hass, e, st.when)).length;
+  if (!n) return null;
+  if (show === "count") return { badge: n, ...(st.color ? { color: st.color } : {}) };
+  if (show === "color") return { color: st.color || "#F2B84B" };
+  if (show === "icon") return { icon: st.icon || "", ...(st.color ? { color: st.color } : {}) };
+  return { dot: st.color || "var(--error-color, #db4437)" };
+}
+
 // What Live (and custom overlays) can show, by kind.
 const LIVE_KINDS = {
   lights: "Lights",
@@ -205,7 +255,7 @@ const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
 
 // ---- Night look and light pools (#74): pure CSS over the one plan image.
-const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["live", "lights", "people"], dim_quiet: true, shutters: true, warm_dusk: false };
+const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["live", "lights"], dim_quiet: true, shutters: true, warm_dusk: false };
 
 /** 0 = day … 1 = night for fixed times, with a 30 minute fade around each time. */
 function timesFactor(start, end, now) {
@@ -643,10 +693,10 @@ ha-card { position:relative; overflow:hidden; height:100%; display:flex; flex-di
 ha-card.dock-top { flex-direction: column-reverse; }
 ha-card.dock-left { flex-direction: row-reverse; }
 ha-card.dock-right { flex-direction: row; }
-.main { position:relative; flex:1; display:flex; flex-direction:column; min-width:0; }
+.main { position:relative; flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
 .hdr { position:absolute; left:14px; top:12px; z-index:4; font-size:15px; font-weight:500; padding:4px 10px; border-radius:10px; background: color-mix(in srgb, var(--card-background-color, #fff) 75%, transparent); backdrop-filter: blur(6px); }
 .wrap { position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding: 8px 8px 0; min-height:120px; }
-.fr { position:relative; width: min(100%, calc((100vh - var(--dfc-chrome, 170px)) * var(--fratio))); aspect-ratio: var(--fratio); }
+.fr { position:relative; width: min(100%, calc(var(--dfc-fit-h, calc(100vh - var(--dfc-chrome, 170px))) * var(--fratio))); aspect-ratio: var(--fratio); }
 .fr.crop { overflow:hidden; border-radius: 4px; }
 .box { position:relative; width: 100%; aspect-ratio: var(--ratio); }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
@@ -683,7 +733,7 @@ ha-card.dock-right { flex-direction: row; }
 .prow button { border:0; background:transparent; padding:0; cursor:pointer; display:flex; align-items:center; gap:5px; font: inherit; color: var(--primary-text-color); }
 .prow .av { width:26px; height:26px; border-radius:50%; background: var(--dfc-accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; overflow:hidden; }
 .prow .av img { width:100%; height:100%; object-fit:cover; }
-.box img.plan { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; user-select:none; -webkit-user-drag:none; }
+.box img.plan { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:block; user-select:none; -webkit-user-drag:none; }
 svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 svg.lines line { stroke-linecap: round; }
 svg.lines line.lead { stroke: var(--secondary-text-color); stroke-width:1; opacity:.55; }
@@ -771,7 +821,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .dock-top .dockrow { padding: 12px 10px 2px; }
 .dock-left .dockrow, .dock-right .dockrow { flex-direction:column; justify-content:center; padding: 10px 8px; }
 .dock { display:flex; gap:2px; padding:4px; border-radius: 22px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 80%, transparent); max-width:70%; overflow-x:auto; scrollbar-width:none; flex: 0 1 auto; min-width:0; }
-.dock-left .dock, .dock-right .dock { flex-direction:column; max-width:none; max-height:70%; overflow-y:auto; min-height:0; }
+.dock-left .dock, .dock-right .dock { flex-direction:column; max-width:none; max-height:100%; overflow-y:auto; min-height:0; }
 .dockrow { align-items:center; gap:8px; }
 .dockrow.share { justify-content:space-between; }
 .dockrow.share .lslot { flex: 1 1 0; display:flex; min-width:44px; min-height:44px; align-items:center; }
@@ -786,7 +836,53 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .dock-left .dock button, .dock-right .dock button { flex-direction:column; gap:3px; font-size:11px; padding: 9px 10px; }
 .dock button.on { background: var(--card-background-color, #fff); color: var(--dfc-accent); box-shadow: 0 1px 4px rgba(0,0,0,.18); font-weight:500; }
 .dock.icons button { padding: 8px 11px; }
-.dock.icons button span { display:none; }
+.dock.icons button .bl { display:none; }
+/* 0.8.2 Overlay Bar Reloaded: status, shapes, sizes, More menu, scroll fade */
+.dock .bi { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+.dock .bdot { position:absolute; top:-2px; right:-4px; width:8px; height:8px; border-radius:50%; box-shadow: 0 0 0 1.5px var(--card-background-color, #fff); }
+.dock .bbadge { position:absolute; top:-8px; right:-11px; min-width:16px; height:16px; padding:0 4px; box-sizing:border-box; border-radius:8px; background:#F2B84B; color:#1a1a1a; font-size:10px; font-weight:700; font-style:normal; line-height:16px; text-align:center; box-shadow: 0 0 0 1.5px var(--card-background-color, #fff); }
+.dock .bval { font-size:10px; font-weight:600; opacity:.85; }
+.dock.sz-s button { font-size:11px; padding:6px 10px; --mdc-icon-size:16px; }
+.dock.sz-l button { font-size:15px; padding:11px 18px; --mdc-icon-size:24px; }
+.dock-left .dock.sz-s button, .dock-right .dock.sz-s button { font-size:10px; padding:7px 8px; }
+.dock-left .dock.sz-l button, .dock-right .dock.sz-l button { font-size:13px; padding:12px 12px; }
+.dock.sh-tiles { background:transparent; gap:6px; padding:2px; border-radius:0; }
+.dock.sh-tiles button { flex-direction:column; gap:3px; font-size:11px; min-width:64px; border-radius:10px; background: var(--secondary-background-color, #f2f2f2); border:1px solid var(--divider-color); }
+.dock.sh-tiles button.on { background: color-mix(in srgb, var(--dfc-accent) 16%, var(--card-background-color, #fff)); border-color: var(--dfc-accent); box-shadow:none; }
+.dock.sh-circles { background:transparent; gap:8px; padding:2px; border-radius:0; }
+.dock.sh-circles button { flex-direction:column; gap:3px; font-size:11px; padding:2px 4px; border-radius:0; background:transparent; box-shadow:none; }
+.dock.sh-circles .bi { width: calc(var(--mdc-icon-size) + 20px); height: calc(var(--mdc-icon-size) + 20px); border-radius:50%; background: var(--secondary-background-color, #f2f2f2); }
+.dock.sh-circles button.on { background:transparent; box-shadow:none; }
+.dock.sh-circles button.on .bi { background: var(--dfc-accent); color:#fff; }
+.dock.sh-plain { background:transparent; gap:4px; padding:2px; }
+.dock.sh-plain button.on { background:transparent; box-shadow:none; font-weight:600; }
+.dock.sh-plain button.on .bl { text-decoration: underline 2px; text-underline-offset: 4px; }
+ha-card.sb { overflow:hidden; }
+.dockrow.sbrow { padding:0; align-self:stretch; gap:0; background:#1f2329; justify-content:flex-start; }
+.dock-bottom .dockrow.sbrow, .dock-top .dockrow.sbrow { justify-content:center; }
+.dockrow.sbrow .dock { background:transparent; border-radius:0; padding:8px 6px; gap:4px; max-width:none; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+.dock-left .dockrow.sbrow > .dock:not(.bmore), .dock-right .dockrow.sbrow > .dock:not(.bmore) { flex: 1 1 auto; max-height:none; }
+.dockrow.sbrow .dock button { color: rgba(255,255,255,.62); border-radius:12px; background:transparent; }
+.dockrow.sbrow .dock button.on { background: rgba(255,255,255,.13); color:#fff; box-shadow:none; }
+.dockrow.sbrow .dock button.on ha-icon { color: var(--dfc-accent); }
+.dockrow.sbrow .bdot, .dockrow.sbrow .bbadge { box-shadow: 0 0 0 1.5px #1f2329; }
+.dockrow.sbrow .lslot button.layers { box-shadow:none; }
+.bmwrap { position:relative; flex:none; display:flex; }
+.bmwrap .dock { max-width:none; overflow:visible; }
+.bmenu { position:absolute; z-index:9; bottom: calc(100% + 6px); right:0; display:flex; flex-direction:column; min-width:190px; max-height:60vh; overflow-y:auto; padding:4px; border-radius:12px; background: var(--card-background-color, #fff); box-shadow: 0 4px 18px rgba(0,0,0,.28); }
+.dock-top .bmenu { bottom:auto; top: calc(100% + 6px); }
+.dock-left .bmenu { bottom:0; right:auto; left: calc(100% + 6px); }
+.dock-right .bmenu { bottom:0; right: calc(100% + 6px); }
+.bmenu button { display:flex; align-items:center; gap:10px; border:0; background:transparent; color: var(--primary-text-color); font: inherit; font-size:13px; padding: 9px 12px; border-radius:8px; cursor:pointer; text-align:left; white-space:nowrap; --mdc-icon-size:18px; }
+.bmenu button:hover { background: var(--secondary-background-color, #f2f2f2); }
+.bmenu button small { margin-left:auto; padding-left:12px; color: var(--secondary-text-color); font-weight:600; }
+.bmenu .bdot { position:static; margin-left:auto; width:8px; height:8px; border-radius:50%; }
+.dock.fade-e { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); }
+.dock.fade-s { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 26px), transparent); }
+.dock.fade-s.fade-e { -webkit-mask-image: linear-gradient(to right, transparent, #000 26px, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, transparent, #000 26px, #000 calc(100% - 26px), transparent); }
+.dock[aria-orientation="vertical"].fade-e { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); }
+.dock[aria-orientation="vertical"].fade-s { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 26px), transparent); }
+.dock[aria-orientation="vertical"].fade-s.fade-e { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 26px, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 26px, #000 calc(100% - 26px), transparent); }
 .bar { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding: 8px 10px 0; }
 .bar button { display:flex; align-items:center; gap:5px; border: 1px solid var(--divider-color); background: var(--card-background-color, #fff); color: var(--primary-text-color); font: inherit; font-size:12px; padding: 5px 11px; border-radius: 16px; cursor:pointer; --mdc-icon-size: 16px; }
 .bar button.on { border-color:#ffc107; background: color-mix(in srgb, #ffc107 18%, var(--card-background-color, #fff)); }
@@ -923,6 +1019,8 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .fbtn .badge { position:absolute; right:-5px; bottom:-5px; min-width:18px; height:18px; padding:0 4px; box-sizing:border-box; border-radius:4px; background: var(--card-background-color, #fff); color: var(--primary-text-color, #000); border: 1px solid var(--divider-color, rgba(0,0,0,.2)); box-shadow:0 1px 3px rgba(0,0,0,.2); font-size:11px; font-weight:700; line-height:16px; text-align:center; }
 .fcorner { position:absolute; right:12px; bottom:12px; z-index:5; }
 .lgroup { display:flex; align-items:center; gap:8px; flex:none; }
+.dock-left .lslot .lgroup, .dock-right .lslot .lgroup { flex-direction:column; }
+.dockrow.sbrow .lslot { padding:8px 0; align-items:center; min-width:0; }
 .fwrap { position:relative; width:36px; height:36px; flex:none; display:block; }
 .fwrap .rail { position:absolute; left:0; top:0; z-index:7; }
 .fwrap.up .rail { top:auto; bottom:0; }
@@ -996,6 +1094,9 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!c.default_overlay && c.default_view) c.default_overlay = "live";
     // 0.7.4: the Plan overlay is gone; room names are a layer in every overlay. Old configs go to Live.
     if (c.default_overlay === "plan") c.default_overlay = "live";
+    // 0.8.2: the People overlay is gone; people show in Live (and the overlays chosen under People).
+    if (c.default_overlay === "people") c.default_overlay = "live";
+    if (Array.isArray(c.overlays)) c.overlays = c.overlays.filter((o) => o !== "people");
     this._config = c;
     const dock = this._overlays();
     if (!this._overlay || !dock.includes(this._overlay)) this._overlay = this._defaultOverlay();
@@ -1145,7 +1246,7 @@ class DeviceFloorplanCard extends HTMLElement {
       root.addEventListener("click", (e) => this._onClick(e));
       root.addEventListener("input", (e) => this._onInput(e));
       root.addEventListener("contextmenu", (e) => {
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
         if (!t) return;
         e.preventDefault();
         if (this._held || this._xOn) return; // a touch long press already did it
@@ -1163,7 +1264,7 @@ class DeviceFloorplanCard extends HTMLElement {
         const inBox = e.target.closest && e.target.closest(".box");
         this._pd = { x: e.clientX, y: e.clientY };
         if (inBox && e.pointerType !== "mouse") this._armT = setTimeout(() => (this._xArm = true), 300);
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
         if (!t) return;
         // A long press counts when the finger is lifted without having moved (moving = explore).
         this._pd.t = t;
@@ -1200,9 +1301,10 @@ class DeviceFloorplanCard extends HTMLElement {
         this._xOn = false;
       });
       root.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && (this._popup || this._menu)) {
+        if (e.key === "Escape" && (this._popup || this._menu || this._moreOpen)) {
           this._popup = null;
           this._menu = false;
+          this._moreOpen = false;
           this._update(true);
         }
       });
@@ -1355,7 +1457,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _overlays() {
-    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...(this._people().length ? ["people"] : []), ...this._custom().map((c) => c.id)];
+    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...this._custom().map((c) => c.id)];
     return list.filter((o) => o !== "plan" && this._ovDef(o));
   }
 
@@ -2072,7 +2174,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _peopleShown() {
     if (!this._people().length) return false;
     const ov = this._overlay;
-    return ov === "people" || (Array.isArray(this._config.people_in) && this._config.people_in.includes(ov));
+    return ov === "live" || (Array.isArray(this._config.people_in) && this._config.people_in.includes(ov));
   }
 
   /** Which room a person is in: room sensor 1, else 2; state = area name, id or alias of a room pin. */
@@ -2127,7 +2229,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const { placed, home } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
     const plan = placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y)} ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
-    const row = this._overlay === "people" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
+    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   }
 
@@ -2153,7 +2255,100 @@ class DeviceFloorplanCard extends HTMLElement {
       position: b.position || (dock === "hidden" ? "hidden" : "bottom"),
       style: b.style || (dock === "icons" ? "icons" : "labels"),
       space: b.space || "reserve",
+      shape: BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
+      size: ["s", "l"].includes(b.size) ? b.size : "m",
+      actions: b.actions || {},
+      shortcuts: (Array.isArray(b.shortcuts) ? b.shortcuts : []).filter((x) => x && (x.name || x.icon)),
     };
+  }
+
+  /** 0.8.2: the automatic status of the built-in overlay buttons, from the devices on this floor. */
+  _autoStatus() {
+    const h = this._hass;
+    const sen = this._sensor();
+    const a = sen && sen.attributes;
+    if (!h || !a) return {};
+    const items = this._items(a).filter((i) => !i.phantom);
+    const low = Number((this._config.health || {}).low ?? 20);
+    let lights = 0;
+    let sec = false;
+    let health = false;
+    let net = false;
+    const seen = new Set();
+    for (const it of items) {
+      const mainSt = h.states[it.main_entity];
+      if (it.main_entity && !it.bond && mainSt && !live(mainSt)) {
+        health = true;
+        if ((it.conns || []).length) net = true;
+      }
+      for (const e of it.entities || []) {
+        if (seen.has(e)) continue;
+        seen.add(e);
+        const st = h.states[e];
+        if (!st) continue;
+        const k = kindOf(e, st);
+        if (domainOf(e) === "light" && st.state === "on") lights++;
+        else if (k === "opening" && st.state === "on") sec = true;
+        else if (domainOf(e) === "alarm_control_panel" && (/^armed/.test(st.state) || st.state === "triggered")) sec = true;
+        else if (domainOf(e) === "lock" && st.state === "unlocked") sec = true;
+        else if (k === "battery" && live(st) && num(st.state) && Number(st.state) <= low) health = true;
+      }
+    }
+    return {
+      lights: lights ? { badge: lights, color: "#F2B84B" } : null,
+      security: sec ? { dot: "var(--error-color, #db4437)" } : null,
+      health: health ? { dot: "#ffa000" } : null,
+      network: net ? { dot: "var(--error-color, #db4437)" } : null,
+    };
+  }
+
+  /** Status of a bar button: "auto" (built-ins), "off", or your own (entity + how it shows). */
+  _btnStatus(st, auto) {
+    if (st && st.mode === "off") return null;
+    if (st && st.mode === "custom") return barStatus(this._hass, st);
+    return auto || null;
+  }
+
+  /** One bar button (an overlay or a shortcut), with its status. */
+  _barBtn({ attrs, cls, icon, label, st }) {
+    const s = st || {};
+    const ic = s.icon || icon;
+    const col = s.color && !s.dot && !s.badge ? ` style="color:${cesc(s.color)}"` : "";
+    const mark = s.badge ? `<i class="bbadge"${s.color ? ` style="background:${cesc(s.color)}"` : ""}>${s.badge > 99 ? "99+" : s.badge}</i>` : s.dot ? `<i class="bdot" style="background:${cesc(s.dot)}"></i>` : "";
+    return `<button class="${cls}" ${attrs} title="${cesc(label)}${s.value ? ` · ${cesc(s.value)}` : ""}"><span class="bi"><ha-icon icon="${cesc(ic)}"${col}></ha-icon>${mark}</span><span class="bl">${cesc(label)}</span>${s.value ? `<small class="bval">${cesc(s.value)}</small>` : ""}</button>`;
+  }
+
+  /** Tap / hold of a shortcut or an overlay's hold: Home Assistant actions, plus reload and back. */
+  _barRun(act, ent) {
+    if (!act || act.action === "none") return;
+    if (this._pick) return this._toast("Shortcuts aren't run while editing");
+    if (act.action === "reload") return location.reload();
+    if (act.action === "back") return history.back();
+    this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: ent, tap_action: act }, action: "tap" }, bubbles: true, composed: true }));
+  }
+
+  _barHold(t) {
+    const b = this._buttons();
+    if (t.dataset.ov) {
+      const act = (b.actions[t.dataset.ov] || {}).hold_action;
+      if (act) this._barRun(act);
+      return;
+    }
+    const sc = b.shortcuts[Number(t.dataset.sc)];
+    if (!sc) return;
+    const ent = (Array.isArray((sc.status || {}).entity) ? sc.status.entity[0] : (sc.status || {}).entity) || undefined;
+    if (sc.hold_action) this._barRun(sc.hold_action, ent);
+    else if (ent) this._moreInfo(ent);
+  }
+
+  _barTap(i) {
+    const sc = this._buttons().shortcuts[i];
+    if (!sc) return;
+    this._moreOpen = false;
+    const ent = (Array.isArray((sc.status || {}).entity) ? sc.status.entity[0] : (sc.status || {}).entity) || undefined;
+    if (sc.tap_action) this._barRun(sc.tap_action, ent);
+    else if (ent) this._moreInfo(ent);
+    this._update(true);
   }
 
   _rooms() {
@@ -2341,13 +2536,15 @@ class DeviceFloorplanCard extends HTMLElement {
   _frame(a, ratio) {
     const cf = this._config.frame || {};
     const f = cf.mode === "custom" ? cf : (a && a.frame) || {};
-    const v = (k) => Math.max(-45, Math.min(60, Number(f[k]) || 0));
+    // House frames (several floors) can be larger than 60 %: a big ground floor around a small upper floor.
+    const v = (k) => Math.max(-45, Math.min(500, Number(f[k]) || 0));
     const [t, r, b, l] = ["t", "r", "b", "l"].map(v);
     const W = 100 + l + r;
     const H = 100 + t + b;
     if (!t && !r && !b && !l) return { ratio, style: "", crop: false };
     return {
-      ratio: +(ratio * (W / H)).toFixed(4),
+      // 0.8.2: a floor of a house uses the house's outer shape (its picture may be scaled per direction).
+      ratio: cf.mode !== "custom" && Number(f.aspect) > 0 ? Number(f.aspect) : +(ratio * (W / H)).toFixed(4),
       crop: t < 0 || r < 0 || b < 0 || l < 0,
       style: `position:absolute;width:${(10000 / W).toFixed(3)}%;height:${(10000 / H).toFixed(3)}%;left:${((l * 100) / W).toFixed(3)}%;top:${((t * 100) / H).toFixed(3)}%;aspect-ratio:auto`,
     };
@@ -2743,15 +2940,20 @@ class DeviceFloorplanCard extends HTMLElement {
   /** 0.8.1: devices of the other floors (where they sit there), by device id, ZHA IEEE and access point. */
   _otherIdx() {
     const idx = { byId: {}, byIeee: {}, aps: {} };
+    // 0.8.2: floors placed in one house (scaled and aligned): convert the other floor's spot into this floor's.
+    const here = ((this._a || {}).frame || {}).box;
     for (const f of this._floors()) {
       if (f.id === this._floor) continue;
       const a2 = f.sensor.attributes || {};
+      const there = (a2.frame || {}).box;
+      const conv = here && there ? (x, y) => [((there.x + (x / 100) * there.w - here.x) / here.w) * 100, ((there.y + (y / 100) * there.h - here.y) / here.h) * 100] : (x, y) => [x, y];
       Object.assign(idx.aps, a2.aps || {});
       for (const it of this._items(a2)) {
         const pos = it.box || it;
         if (pos.x == null || it.phantom) continue;
         const conn = CONN_ORDER.find((c) => (it.conns || []).includes(c));
-        const g = { key: `ghost:${f.id}:${it.id}`, name: this._dev(it.id).name || it.name, floor: f.name, x: pos.x, y: pos.y, conns: it.conns || [], icon: conn ? CONNS[conn].icon : "mdi:devices" };
+        const [gx, gy] = conv(pos.x, pos.y);
+        const g = { key: `ghost:${f.id}:${it.id}`, name: this._dev(it.id).name || it.name, floor: f.name, x: gx, y: gy, conns: it.conns || [], icon: conn ? CONNS[conn].icon : "mdi:devices" };
         idx.byId[it.id] = g;
         if (it.ieee) idx.byIeee[ieeeKey(it.ieee)] = g;
       }
@@ -3102,7 +3304,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const dock = this._overlays();
     const labels = c.overlay_names || {};
     const vertical = btn.position === "left" || btn.position === "right";
-    const dockShown = dock.length > 1 && btn.position !== "hidden";
+    const dockShown = (dock.length > 1 || btn.shortcuts.length > 0) && btn.position !== "hidden";
     // Layers live in the floor rail when there is one, else in the button bar, never on the plan
     // (#63, #75); without a bar, in the legend row.
     const lpos = this._layersPos();
@@ -3123,17 +3325,20 @@ class DeviceFloorplanCard extends HTMLElement {
     const lg = () => (multi ? `<span class="lgroup">${this._layersBtn(true)}<span class="fwrap">${this._floorHtml(floors)}</span></span>` : this._layersBtn(true));
     const lgShown = () => lCorner || touch || (layersInBar && dockShown);
     const slot = (on) => `<span class="lslot ${on ? "" : "lvoid"}">${on ? lg() : ""}</span>`;
+    const autoSt = dockShown ? this._autoStatus() : {};
+    const scMain = btn.shortcuts.map((sc, i) => ({ sc, i })).filter((x) => !x.sc.more);
+    const scMore = btn.shortcuts.map((sc, i) => ({ sc, i })).filter((x) => x.sc.more);
     const dockHtml = dockShown
-      ? `<div class="dockrow ${touch ? "share" : ""}">${touch ? slot(atStart) : ""}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${dock.map((o) => {
+      ? `<div class="dockrow ${touch ? "share" : ""} ${btn.shape === "sidebar" ? "sbrow" : ""}">${touch ? slot(atStart) : ""}<nav class="dock ${btn.style === "icons" ? "icons" : ""} sh-${btn.shape} sz-${btn.size}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${dock.map((o) => {
         const d = this._ovDef(o);
         const label = labels[o] || d.label;
-        return `<button class="${o === ov ? "on" : ""}" data-ov="${cesc(o)}" aria-pressed="${o === ov}" title="${cesc(label)}"><ha-icon icon="${cesc(d.icon)}"></ha-icon><span>${cesc(label)}</span></button>`;
-      }).join("")}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+        const oa = btn.actions[o] || {};
+        return this._barBtn({ cls: o === ov ? "on" : "", attrs: `data-ov="${cesc(o)}" ${oa.hold_action ? "data-bh=\"1\"" : ""} aria-pressed="${o === ov}"`, icon: d.icon, label, st: this._btnStatus(oa.status, autoSt[o]) });
+      }).join("")}${scMain.map(({ sc, i }) => this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || "Shortcut", st: this._btnStatus(sc.status, null) })).join("")}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${scMore.length ? `<span class="bmwrap"><nav class="dock ${btn.style === "icons" ? "icons" : ""} sh-${btn.shape} sz-${btn.size} bmore"><button data-bmore="1" class="${this._moreOpen ? "on" : ""}" title="More"><span class="bi"><ha-icon icon="mdi:dots-horizontal"></ha-icon>${scMore.some(({ sc }) => this._btnStatus(sc.status, null)) ? '<i class="bdot" style="background:var(--dfc-accent)"></i>' : ""}</span><span class="bl">More</span></button></nav>${this._moreOpen ? `<div class="bmenu">${scMore.map(({ sc, i }) => { const st = this._btnStatus(sc.status, null) || {}; return `<button data-sc="${i}" data-bh="1"><ha-icon icon="${cesc(st.icon || sc.icon || "mdi:gesture-tap")}"${st.color ? ` style="color:${cesc(st.color)}"` : ""}></ha-icon><span>${cesc(sc.name || "Shortcut")}</span>${st.value || st.badge ? `<small>${cesc(st.value || st.badge)}</small>` : st.dot ? `<i class="bdot" style="background:${cesc(st.dot)}"></i>` : ""}</button>`; }).join("")}</div>` : ""}</span>` : ""}${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = look.title !== false && c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
     const people = this._peopleHtml(a);
-    if (ov === "people" && !this._people().length) emptyMsg = `<div class="empty">Add people in the card settings (People)</div>`;
     // 0.7.7: no "nothing to show" text on the plan: an empty overlay just means nothing is happening.
     const pos = btn.position === "hidden" ? "bottom" : btn.position;
     const scale = this._scale || 1;
@@ -3141,7 +3346,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const fr = this._frame(a, ratio);
     const boxCls = `${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
     const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
-    setShadow(this, `${style}<ha-card class="dock-${pos} ${floatCls} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    setShadow(this, `${style}<ha-card class="dock-${pos} ${floatCls} ${dockShown && btn.shape === "sidebar" ? "sb" : ""} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
@@ -3168,6 +3373,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (this._ro && box) {
       this._ro.disconnect();
       this._ro.observe(box);
+      this._ro.observe(this); // 0.8.2: the card's own size (the plan fits its free area)
     }
     this._layoutSoon();
     requestAnimationFrame(() => this._alignFloor());
@@ -3781,13 +3987,61 @@ ${reset}
   }
 
   // ------------------------------------------------------------- layout
+  /** 0.8.2: a fade at the end(s) of the button bar while it scrolls (more buttons than space). */
+  _dockFade() {
+    const nav = this.shadowRoot && this.shadowRoot.querySelector("nav.dock:not(.bmore)");
+    if (!nav) return;
+    const upd = () => {
+      const v = nav.getAttribute("aria-orientation") === "vertical";
+      const pos = v ? nav.scrollTop : nav.scrollLeft;
+      const max = v ? nav.scrollHeight - nav.clientHeight : nav.scrollWidth - nav.clientWidth;
+      nav.classList.toggle("fade-s", max > 2 && pos > 2);
+      nav.classList.toggle("fade-e", max > 2 && pos < max - 2);
+    };
+    if (!nav._fadeOn) {
+      nav._fadeOn = true;
+      nav.addEventListener("scroll", upd, { passive: true });
+    }
+    upd();
+  }
+
   _layoutSoon() {
     cancelAnimationFrame(this._lraf);
     this._lraf = requestAnimationFrame(() => this._layout());
   }
 
   /** Keep close markers readable: spread them in a small grid, then push any remaining overlaps apart; a leader line points to the real spot. */
+  /** 0.8.2: in a card with a fixed height (panel view, sections grid, wall panel, preview) the plan fills the area
+   *  left after the buttons, legend and people: as large as possible, never stretched. Elsewhere (masonry) the
+   *  card grows with the plan, which then uses the full width as before. */
+  _fitPlan() {
+    const sr = this.shadowRoot;
+    const card = sr && sr.querySelector("ha-card");
+    const wrap = sr && sr.querySelector(".wrap");
+    if (!card || !wrap) return;
+    const fixed = this.isPanel || this.layout === "panel" || this.layout === "grid" || this._fitHost;
+    const fr = sr.querySelector(".fr");
+    if (!fixed || !fr) {
+      this.style.removeProperty("--dfc-fit-h");
+      return;
+    }
+    const main = wrap.parentElement;
+    const cs = getComputedStyle(wrap);
+    const padV = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    // The plan's column (.main) has what the buttons leave; title, legend, people and scene bar take their share.
+    let others = 0;
+    for (const c of main.children) if (c !== wrap && getComputedStyle(c).position !== "absolute") others += c.offsetHeight;
+    const natural = others + padV + fr.offsetHeight;
+    // Only when the card has room to spare (or too little): an auto-height card is left as it was.
+    if (Math.abs(main.clientHeight - natural) <= 2) return;
+    const h = Math.max(120, main.clientHeight - others - padV - 2);
+    const cur = parseFloat(this.style.getPropertyValue("--dfc-fit-h")) || 0;
+    if (Math.abs(cur - h) > 1) this.style.setProperty("--dfc-fit-h", `${Math.round(h)}px`);
+  }
+
   _layout() {
+    this._fitPlan();
+    this._dockFade();
     const box = this.shadowRoot && this.shadowRoot.querySelector(".box");
     if (!box) return;
     const W = box.clientWidth;
@@ -4011,7 +4265,24 @@ ${reset}
     const pp = this._pick && t.closest("[data-person]");
     if (pp) return this._pick(`person:${pp.dataset.person}`);
     const ov = t.closest("[data-ov]");
-    if (ov) return this._setOverlay(ov.dataset.ov);
+    const scb = t.closest("[data-sc]");
+    if ((ov || scb) && this._held) {
+      this._held = false; // a long press already ran the hold action
+      return;
+    }
+    if (ov) {
+      this._moreOpen = false;
+      return this._setOverlay(ov.dataset.ov);
+    }
+    if (scb) return this._barTap(Number(scb.dataset.sc));
+    if (t.closest("[data-bmore]")) {
+      this._moreOpen = !this._moreOpen;
+      return this._update(true);
+    }
+    if (this._moreOpen) {
+      this._moreOpen = false;
+      this._update(true);
+    }
     if (t.closest("[data-menu]")) {
       this._menu = !this._menu;
       this._fopen = false;
@@ -4248,7 +4519,8 @@ ${reset}
 
   /** Hold / right-click: Home Assistant's details (graphs for a phantom). In Edit markers it's only simulated. */
   _holdEl(t) {
-    if (t.dataset.k) this._hold(t.dataset.k);
+    if (t.dataset.bh) this._barHold(t);
+    else if (t.dataset.k) this._hold(t.dataset.k);
     else if (t.dataset.airent) this._moreInfo(t.dataset.airent);
     else this._holdAppl(t.dataset.appl);
   }
@@ -4734,7 +5006,7 @@ ${reset}
   }
 
   _setOverlay(o) {
-    if (o === "plan") o = "live"; // 0.7.4: Plan is gone
+    if (o === "plan" || o === "people") o = "live"; // 0.7.4: Plan is gone, 0.8.2: People too (people are in Live)
     if (!this._ovDef(o)) return;
     this._overlay = o;
     this._popup = null;
@@ -5037,7 +5309,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   _ovOptions() {
-    return [...[...OVERLAY_ORDER, "people"].map((o) => ({ value: o, label: OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
+    return [...OVERLAY_ORDER.map((o) => ({ value: o, label: OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
   }
 
   /** The editor's settings forms, in display order (#70). */
@@ -5055,6 +5327,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "overlays", selector: { select: { options: ovOpts, multiple: true, reorder: true, mode: "list" } } },
         { name: "default_overlay", selector: { select: { options: ovOpts, mode: "dropdown" } } },
         { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
+        { name: "buttons_shape", selector: { select: { options: [{ value: "pill", label: "Pill (one rounded bar)" }, { value: "tiles", label: "Tiles" }, { value: "circles", label: "Circles" }, { value: "plain", label: "Plain (no background)" }, { value: "sidebar", label: "Sidebar (dark strip, full height on the left / right)" }], mode: "dropdown" } } },
+        { name: "buttons_size", selector: { select: { options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }], mode: "dropdown" } } },
         { name: "buttons_style", selector: { select: { options: [{ value: "labels", label: "Icons and labels" }, { value: "icons", label: "Icons only" }], mode: "dropdown" } } },
         { name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside them)" }, { value: "float", label: "Float over the plan, see-through bar" }, { value: "float_icons", label: "Float over the plan, buttons only" }], mode: "dropdown" } } },
         { name: "layers_button", selector: { select: { options: [{ value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
@@ -5132,7 +5406,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the buttons are", buttons_style: "Button style", buttons_space: "Space for the buttons", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
+      buttons_position: "Where the buttons are", buttons_style: "Labels", buttons_shape: "Bar style", buttons_size: "Size", buttons_space: "Space for the buttons", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
@@ -5153,7 +5427,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const look = c.look || {};
     const b = c.buttons || {};
     return {
-      overlays: [...OVERLAY_ORDER, ...(Array.isArray(c.people) && c.people.length ? ["people"] : []), ...this._custom().map((x) => x.id)],
+      overlays: [...OVERLAY_ORDER, ...this._custom().map((x) => x.id)],
       default_overlay: "live",
       ...c,
       ...(Array.isArray(c.overlays) ? { overlays: c.overlays.filter((o) => o !== "plan") } : {}),
@@ -5161,6 +5435,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       buttons_position: b.position || (look.dock === "hidden" ? "hidden" : "bottom"),
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
       buttons_space: b.space || "reserve",
+      buttons_shape: b.shape || "pill",
+      buttons_size: b.size || "m",
       frame_mode: (c.frame || {}).mode === "custom" ? "custom" : "plan",
       frame_linked: (c.frame || {}).linked !== false,
       frame_all: Number((c.frame || {}).t) || 0,
@@ -5238,7 +5514,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
         <div id="fopts"></div>
         <div data-form="general"></div>
-        ${sec("mdi:gesture-tap-button", "Overlay buttons on the card", "Which buttons, their order, where they sit and how they look.", `<div data-form="buttons"></div>`)}
+        ${sec("mdi:gesture-tap-button", "Overlay buttons on the card", "Which buttons, their order, where they sit and how they look.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Buttons: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…); put the less used ones in the ··· menu.</p><div id="bbar"></div></div>`)}
         ${sec("mdi:layers-outline", "Overlays", "What each overlay shows.", `<div data-form="overlaysA"></div>
           <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><p>Buttons in the Lights overlay. Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
           <div data-form="overlaysB"></div>
@@ -5302,16 +5578,16 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       return;
     }
     if (key === "buttons") {
-      c.buttons = { position: v.buttons_position, style: v.buttons_style, ...(v.buttons_space && v.buttons_space !== "reserve" ? { space: v.buttons_space } : {}) };
-      delete c.buttons_position;
-      delete c.buttons_style;
-      delete c.buttons_space;
+      const { space: _s, shape: _h, size: _z, ...keep } = this._config.buttons || {};
+      c.buttons = { ...keep, position: v.buttons_position, style: v.buttons_style, ...(v.buttons_space && v.buttons_space !== "reserve" ? { space: v.buttons_space } : {}), ...(v.buttons_shape && v.buttons_shape !== "pill" ? { shape: v.buttons_shape } : {}), ...(v.buttons_size && v.buttons_size !== "m" ? { size: v.buttons_size } : {}) };
+      for (const k of ["buttons_position", "buttons_style", "buttons_space", "buttons_shape", "buttons_size"]) delete c[k];
     }
     // Only what depends on the changed form is redrawn; the form you type in is left alone.
     this._set(c, { sections: false });
     this._refreshForms(key);
     if (key === "buttons" || key === "general") {
       this._renderRooms();
+      if (key === "buttons") this._renderBar();
     }
   }
 
@@ -5347,8 +5623,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const card = document.createElement("device-floorplan-card");
     card.setConfig(this._config);
     card.style.height = "100%";
-    // The plan's height is measured against the window (100vh): make that match the previewed screen.
-    card.style.setProperty("--dfc-chrome", `${Math.round(window.innerHeight - (size.h - 110))}px`);
+    card._fitHost = true; // a fixed screen: the plan fits the card's free area
     wrap.querySelector(".in").appendChild(card);
     card.hass = this._hass;
     const close = () => wrap.remove();
@@ -5362,6 +5637,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _renderSections() {
     this._refreshForms();
     this._renderCustom();
+    this._renderBar();
     this._renderScenes();
     this._renderRooms();
     this._renderPeople();
@@ -5376,7 +5652,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const list = Array.isArray(this._config.people) ? this._config.people : [];
     const save = (next, redraw) => {
       const c = { ...this._config, people: next };
-      if (Array.isArray(c.overlays) && next.length && !c.overlays.includes("people")) c.overlays = [...c.overlays, "people"];
       this._config = this._prune(c);
       this._emit();
       if (redraw) this._renderPeople();
@@ -5570,6 +5845,150 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   // ---- light scenes (#54)
+  // ---- 0.8.2 Overlay Bar Reloaded: hold, status, shortcuts
+  _statusSchema(st, allowAuto) {
+    const mode = st.mode || (allowAuto ? "auto" : st.entity ? "custom" : "off");
+    return [
+      { name: "st_mode", selector: { select: { options: [...(allowAuto ? [{ value: "auto", label: "Automatic" }] : []), { value: "off", label: "None" }, { value: "custom", label: "From entities I pick" }], mode: "dropdown" } } },
+      ...(mode === "custom" ? [
+        { name: "st_entity", selector: { entity: { multiple: true } } },
+        { name: "st_show", selector: { select: { options: [{ value: "dot", label: "A dot while any is active" }, { value: "count", label: "How many are active (number)" }, { value: "value", label: "Short value (e.g. 45%)" }, { value: "color", label: "Icon colour while active" }, { value: "icon", label: "Another icon while active" }], mode: "dropdown" } } },
+        { name: "st_when", selector: { text: {} } },
+        { name: "st_color", selector: { text: {} } },
+        ...((st.show || "dot") === "icon" ? [{ name: "st_icon", selector: { icon: {} } }] : []),
+      ] : []),
+    ];
+  }
+
+  _statusData(st, allowAuto) {
+    return { st_mode: st.mode || (allowAuto ? "auto" : st.entity ? "custom" : "off"), st_entity: Array.isArray(st.entity) ? st.entity : st.entity ? [st.entity] : [], st_show: st.show || "dot", st_when: st.when || "", st_color: st.color || "", st_icon: st.icon || "" };
+  }
+
+  _statusFrom(v, allowAuto) {
+    const mode = v.st_mode || (allowAuto ? "auto" : "off");
+    if (mode === "auto" && allowAuto) return null;
+    if (mode === "off") return allowAuto ? { mode: "off" } : null;
+    const st = { mode: "custom", entity: v.st_entity || [], show: v.st_show || "dot" };
+    if (v.st_when) st.when = v.st_when;
+    if (v.st_color) st.color = v.st_color;
+    if (v.st_icon && st.show === "icon") st.icon = v.st_icon;
+    return st;
+  }
+
+  _renderBar() {
+    const box = this.querySelector("#bbar");
+    if (!box) return;
+    const b = this._config.buttons || {};
+    const actions = b.actions || {};
+    const shortcuts = Array.isArray(b.shortcuts) ? b.shortcuts : [];
+    const ovs = (Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...this._custom().map((x) => x.id)]).filter((o) => o !== "plan" && o !== "people");
+    const def = (o) => OVERLAYS[o] || (this._custom().find((x) => x.id === o) ? { label: this._custom().find((x) => x.id === o).name || "Custom", icon: this._custom().find((x) => x.id === o).icon || "mdi:layers-outline" } : null);
+    const AUTO = { lights: "count of lights on", security: "dot when open / armed / unlocked", health: "amber dot when a battery is low or a device offline", network: "dot when a device is offline" };
+    const actTxt = (a) => (!a ? "" : { reload: "reload page", back: "back", navigate: "open a page", url: "open a link", "more-info": "details", "perform-action": "action", "call-service": "action", toggle: "toggle", "fire-dom-event": "popup", assist: "Assist", none: "" }[a.action] || a.action);
+    const stTxt = (st, o) => (st && st.mode === "off" ? "no status" : st && st.mode === "custom" ? `status: ${st.show || "dot"}` : o && AUTO[o] ? "auto status" : "");
+    const save = (nb, redraw = true) => {
+      const next = { ...nb };
+      if (next.actions && !Object.keys(next.actions).length) delete next.actions;
+      if (next.shortcuts && !next.shortcuts.length) delete next.shortcuts;
+      this._config = this._prune({ ...this._config, buttons: next });
+      this._emit();
+      if (redraw) this._renderBar();
+    };
+    const rows = [
+      ...ovs.filter(def).map((o) => ({ key: `o:${o}`, icon: def(o).icon, name: (this._config.overlay_names || {})[o] || def(o).label, small: [actions[o] && actions[o].hold_action ? `hold: ${actTxt(actions[o].hold_action)}` : "", stTxt((actions[o] || {}).status, o)].filter(Boolean).join(" · ") || "overlay" })),
+      ...shortcuts.map((sc, i) => ({ key: `s:${i}`, icon: sc.icon || "mdi:gesture-tap", name: sc.name || `Shortcut ${i + 1}`, small: [sc.more ? "in ···" : "shortcut", sc.tap_action ? `tap: ${actTxt(sc.tap_action)}` : "", sc.hold_action ? `hold: ${actTxt(sc.hold_action)}` : "", stTxt(sc.status)].filter(Boolean).join(" · ") })),
+    ];
+    box.innerHTML = rows.map((r) => `<div class="row" data-bk="${cesc(r.key)}"><button class="hd" data-bopen="${cesc(r.key)}"><ha-icon icon="${cesc(r.icon)}"></ha-icon>${cesc(r.name)}<small style="margin-left:auto">${cesc(r.small)}</small></button>${this._bopen === r.key ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-badd="1"><ha-icon icon="mdi:plus"></ha-icon>Add shortcut</button>`;
+    box.querySelector("[data-badd]").addEventListener("click", () => {
+      this._bopen = `s:${shortcuts.length}`;
+      save({ ...b, shortcuts: [...shortcuts, { name: "Shortcut", icon: "mdi:gesture-tap" }] });
+    });
+    for (const el of box.querySelectorAll("[data-bopen]")) el.addEventListener("click", () => {
+      this._bopen = this._bopen === el.dataset.bopen ? null : el.dataset.bopen;
+      this._renderBar();
+    });
+    const body = this._bopen && box.querySelector(`.row[data-bk="${CSS.escape(this._bopen)}"] .body`);
+    if (!body) return;
+    const [kind, id] = [this._bopen.slice(0, 1), this._bopen.slice(2)];
+    const LBL = { hold_action: "Hold action", st_mode: "Status on the button", st_entity: "Entities", st_show: "Shows", st_when: "Counts as active (optional: states like on, open, printing, or a number test like >50; default on / open / armed / unlocked)", st_color: "Colour (optional, e.g. #F2B84B, red, var(--accent-color))", st_icon: "Icon while active", name: "Name", icon: "Icon", tap_kind: "Tap", tap_action: "Tap action", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)", more: "In the ··· menu (less used)", hold_kind: "Hold" };
+    if (kind === "o") {
+      const cur = actions[id] || {};
+      const hk = (cur.hold_action || {}).action;
+      const data = { hold_kind: hk === "reload" || hk === "back" ? hk : cur.hold_action ? "action" : "none", hold_action: hk && hk !== "reload" && hk !== "back" ? cur.hold_action : undefined, ...this._statusData(cur.status || {}, true) };
+      const schema = [
+        { name: "hold_kind", selector: { select: { options: [{ value: "none", label: "Nothing" }, { value: "action", label: "A Home Assistant action" }, { value: "reload", label: "Reload this page" }, { value: "back", label: "Back to where you were" }], mode: "dropdown" } } },
+        ...(data.hold_kind === "action" ? [{ name: "hold_action", selector: { ui_action: {} } }] : []),
+        ...this._statusSchema(cur.status || {}, !!AUTO[id]),
+      ];
+      const f = this._form(schema, data, LBL, (v) => {
+        const nx = {};
+        if (v.hold_kind === "reload" || v.hold_kind === "back") nx.hold_action = { action: v.hold_kind };
+        else if (v.hold_kind === "action") nx.hold_action = v.hold_action && v.hold_action.action ? v.hold_action : { action: "navigate", navigation_path: "/" };
+        const st = this._statusFrom(v, !!AUTO[id]);
+        if (st) nx.status = st;
+        const na = { ...actions };
+        if (Object.keys(nx).length) na[id] = nx;
+        else delete na[id];
+        const redraw = v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || v.st_show !== data.st_show;
+        save({ ...b, actions: na }, redraw);
+      });
+      body.appendChild(f);
+      if (AUTO[id]) body.insertAdjacentHTML("beforeend", `<p class="note">Automatic: ${cesc(AUTO[id])} (devices on the floor shown).</p>`);
+      return;
+    }
+    const i = Number(id);
+    const sc = shortcuts[i] || {};
+    const tk = (sc.tap_action || {}).action;
+    const bm = tk === "fire-dom-event" && sc.tap_action.browser_mod && sc.tap_action.browser_mod.service === "browser_mod.popup" ? sc.tap_action.browser_mod.data || {} : null;
+    const hk = (sc.hold_action || {}).action;
+    const data = {
+      name: sc.name || "", icon: sc.icon || "", more: !!sc.more,
+      tap_kind: bm ? "popup" : tk === "reload" || tk === "back" ? tk : sc.tap_action ? "action" : "details",
+      tap_action: !bm && tk && tk !== "reload" && tk !== "back" ? sc.tap_action : undefined,
+      popup_title: bm ? bm.title || "" : "", popup_card: bm ? bm.content : undefined,
+      hold_kind: hk === "reload" || hk === "back" ? hk : sc.hold_action ? "action" : "details",
+      hold_action: hk && hk !== "reload" && hk !== "back" ? sc.hold_action : undefined,
+      ...this._statusData(sc.status || {}, false),
+    };
+    const kinds = (withPopup) => [{ value: "details", label: "Details of the status entity" }, { value: "action", label: "A Home Assistant action (page, link, action…)" }, ...(withPopup ? [{ value: "popup", label: "Popup on this browser only (browser_mod)" }] : []), { value: "reload", label: "Reload this page" }, { value: "back", label: "Back to where you were" }];
+    const schema = [
+      { name: "name", selector: { text: {} } },
+      { name: "icon", selector: { icon: {} } },
+      { name: "tap_kind", selector: { select: { options: kinds(true), mode: "dropdown" } } },
+      ...(data.tap_kind === "action" ? [{ name: "tap_action", selector: { ui_action: {} } }] : []),
+      ...(data.tap_kind === "popup" ? [{ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } }] : []),
+      { name: "hold_kind", selector: { select: { options: kinds(false), mode: "dropdown" } } },
+      ...(data.hold_kind === "action" ? [{ name: "hold_action", selector: { ui_action: {} } }] : []),
+      { name: "more", selector: { boolean: {} } },
+      ...this._statusSchema(sc.status || {}, false),
+    ];
+    body.appendChild(this._form(schema, data, LBL, (v) => {
+      const nx = { name: v.name || "", icon: v.icon || "" };
+      if (v.more) nx.more = true;
+      if (v.tap_kind === "reload" || v.tap_kind === "back") nx.tap_action = { action: v.tap_kind };
+      else if (v.tap_kind === "action") nx.tap_action = v.tap_action && v.tap_action.action ? v.tap_action : { action: "navigate", navigation_path: "/" };
+      else if (v.tap_kind === "popup") nx.tap_action = { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(v.popup_title ? { title: v.popup_title } : {}), content: v.popup_card || { type: "markdown", content: "Pick a card" } } } };
+      if (v.hold_kind === "reload" || v.hold_kind === "back") nx.hold_action = { action: v.hold_kind };
+      else if (v.hold_kind === "action") nx.hold_action = v.hold_action && v.hold_action.action ? v.hold_action : { action: "navigate", navigation_path: "/" };
+      const st = this._statusFrom(v, false);
+      if (st) nx.status = st;
+      const redraw = v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || v.st_show !== data.st_show;
+      save({ ...b, shortcuts: shortcuts.map((x, j) => (j === i ? nx : x)) }, redraw);
+    }));
+    body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-bmv="-1" ${i === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-bmv="1" ${i === shortcuts.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-bdel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
+    for (const el of body.querySelectorAll("[data-bmv]")) el.addEventListener("click", () => {
+      const j = i + Number(el.dataset.bmv);
+      const next = [...shortcuts];
+      [next[i], next[j]] = [next[j], next[i]];
+      this._bopen = `s:${j}`;
+      save({ ...b, shortcuts: next });
+    });
+    body.querySelector("[data-bdel]").addEventListener("click", () => {
+      this._bopen = null;
+      save({ ...b, shortcuts: shortcuts.filter((x, j) => j !== i) });
+    });
+  }
+
   _renderScenes() {
     const box = this.querySelector("#scenes");
     if (!box) return;
@@ -6034,8 +6453,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       save(next);
     }));
     const eng = this._engine();
-    const ovs = eng._overlays().filter((o) => o !== "plan" && o !== "people" && o !== "network" && o !== "health");
-    body.appendChild(this._form([{ name: "people_in", selector: { select: { options: ovs.map((o) => ({ value: o, label: eng._ovDef(o).label })), multiple: true, mode: "list" } } }], { people_in: this._config.people_in || [] }, { people_in: "Also show people in these overlays (all people)" }, (v) => save(list, { people_in: v.people_in })));
+    const ovs = eng._overlays().filter((o) => o !== "plan" && o !== "people" && o !== "live" && o !== "network" && o !== "health");
+    body.appendChild(this._form([{ name: "people_in", selector: { select: { options: ovs.map((o) => ({ value: o, label: eng._ovDef(o).label })), multiple: true, mode: "list" } } }], { people_in: this._config.people_in || [] }, { people_in: "People show in Live; also show them in (all people)" }, (v) => save(list, { people_in: v.people_in })));
     const del = document.createElement("button");
     del.className = "qbtn";
     del.textContent = "Remove this person from the card";
@@ -6484,7 +6903,7 @@ class DeviceFloorplanChipEditor extends HTMLElement {
     for (const s of planSensors(this._hass)) for (const [pid, ph] of Object.entries(s.attributes.phantoms || {})) phOpts.push({ value: `${s.attributes.plan_id}:${pid}`, label: `${ph.name} (${s.attributes.plan_name || s.attributes.plan_id})` });
     for (const s of planSensors(this._hass)) for (const [bid, b] of Object.entries(s.attributes.bonds || {})) bdOpts.push({ value: `${s.attributes.plan_id}:${bid}`, label: `${bondName(b)} (${s.attributes.plan_name || s.attributes.plan_id})` });
     const schema = [
-      { name: "overlay", selector: { select: { options: [...OVERLAY_ORDER, "people"].map((o) => ({ value: o, label: OVERLAYS[o].label })), mode: "dropdown", custom_value: true } } },
+      { name: "overlay", selector: { select: { options: OVERLAY_ORDER.map((o) => ({ value: o, label: OVERLAYS[o].label })), mode: "dropdown", custom_value: true } } },
       { name: "card_id", selector: { text: {} } },
       { name: "label", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },

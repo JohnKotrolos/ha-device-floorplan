@@ -10,6 +10,8 @@ A plan with a **transparent background** (PNG or WebP, nothing around the house)
 
 Right after adding an image, **Frame the plan** opens (later: the plan's ⋮ menu → *Frame the plan…*). Drag the four dashed lines: **outwards** adds space around the plan, so labels and buttons have room to breathe; **inwards** trims empty margin. Values are a % of the image, so the frame looks the same on every screen. Markers, Rooms and measurements never move. Every dashboard card uses this frame unless it sets its own (card editor → *Frame and preview*).
 
+**Several floors: one frame for the house.** Frame the first floor (*Frame the house…*); later floors get no frame dialog. They take the same outer size so switching floors doesn't jump, and once you [measure](/using/floors) a floor its scale matches the first one (1 m is the same length on every floor, horizontally and vertically on their own). Then **Align with …** (the floor's ⋮ menu, or right after measuring) shows the first floor faint underneath: drag the picture until the walls line up, or skip to keep it centred. If a later floor is larger, the house frame grows so every floor fits. A card's *custom for this card* frame applies to all floors.
+
 ## Three ways to add an image
 
 ![Choosing the image when creating a plan](/screens/image-chooser.webp){.shot}

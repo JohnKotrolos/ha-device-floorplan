@@ -159,6 +159,67 @@ class FloorplanData:
         one = per_dir.get("h") or per_dir.get("v")
         return {"x": per_dir.get("h") or one, "y": per_dir.get("v") or one}
 
+    def house_ref(self) -> dict[str, Any] | None:
+        """0.8.2: the floor whose frame is the house frame: the one framed first, else the first floor."""
+        floors = [p for p in self.plans.values() if p.get("kind") == "floor" and p.get("width") and p.get("height")]
+        if not floors:
+            return None
+        return next((p for p in floors if p.get("frame_ref")), None) or next((p for p in floors if p.get("frame")), None) or floors[0]
+
+    def floor_box(self, plan: dict[str, Any], ref: dict[str, Any]) -> dict[str, float]:
+        """Where a floor's image sits in the house, in % of the reference floor's image (x, y = top left).
+
+        Both measured: one metre is equally long on every floor, per direction (this also evens out a slightly
+        stretched picture). Otherwise the picture keeps its own shape and fits the reference's size.
+        The position is the floor's own alignment, else centred."""
+        if plan is ref:
+            return {"x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}
+        s, r = self.scale(plan), self.scale(ref)
+        if s["x"] and s["y"] and r["x"] and r["y"]:
+            w = plan["width"] * s["x"] / (ref["width"] * r["x"]) * 100
+            h = plan["height"] * s["y"] / (ref["height"] * r["y"]) * 100
+        else:
+            a_f = plan["width"] / plan["height"]
+            a_r = ref["width"] / ref["height"]
+            w, h = (100.0, 100 * a_r / a_f) if a_f > a_r else (100 * a_f / a_r, 100.0)
+        al = plan.get("align") or {}
+        x = float(al["x"]) if "x" in al else (100 - w) / 2
+        y = float(al["y"]) if "y" in al else (100 - h) / 2
+        return {"x": x, "y": y, "w": w, "h": h}
+
+    def effective_frame(self, plan: dict[str, Any]) -> dict[str, Any]:
+        """0.8.2: the frame a plan is shown with. Floors share one house frame: every floor's picture (scaled and
+        aligned as in floor_box) inside one outer box = all floors together + the space set on the reference
+        floor; each floor gets that box as its own frame, so switching floors keeps the same size.
+        Views (and a house with one floor) use their own frame. Values: % of this plan's image per side;
+        "aspect": the outer box's width / height in screen pixels."""
+        own = dict(plan.get("frame") or {})
+        ref = self.house_ref()
+        floors = [p for p in self.plans.values() if p.get("kind") == "floor" and p.get("width") and p.get("height")]
+        if plan.get("kind") != "floor" or ref is None or len(floors) < 2 or not (plan.get("width") and plan.get("height")):
+            return own
+        boxes = {p["id"]: self.floor_box(p, ref) for p in floors}
+        x1 = min(b["x"] for b in boxes.values())
+        y1 = min(b["y"] for b in boxes.values())
+        x2 = max(b["x"] + b["w"] for b in boxes.values())
+        y2 = max(b["y"] + b["h"] for b in boxes.values())
+        rf = ref.get("frame") or {}
+        x1 -= float(rf.get("l", 0))
+        x2 += float(rf.get("r", 0))
+        y1 -= float(rf.get("t", 0))
+        y2 += float(rf.get("b", 0))
+        b = boxes[plan["id"]]
+        return {
+            "t": round((b["y"] - y1) * 100 / b["h"], 3),
+            "b": round((y2 - b["y"] - b["h"]) * 100 / b["h"], 3),
+            "l": round((b["x"] - x1) * 100 / b["w"], 3),
+            "r": round((x2 - b["x"] - b["w"]) * 100 / b["w"], 3),
+            "aspect": round(((x2 - x1) * ref["width"]) / ((y2 - y1) * ref["height"]), 5),
+            "house": True,
+            "ref": ref["id"],
+            "box": {k: round(v, 3) for k, v in b.items()},
+        }
+
     @callback
     def plan_public(self, plan_id: str) -> dict[str, Any]:
         plan = self.plans[plan_id]
@@ -170,6 +231,9 @@ class FloorplanData:
             "level": self.plan_level(plan),
             "image_type": plan["image_type"],
             "frame": plan.get("frame") or {},
+            "frame_eff": self.effective_frame(plan),
+            "frame_ref": bool(plan.get("frame_ref")),
+            "align": plan.get("align") or {},
             "image_url": self.image_url(plan),
             "image_fallback_url": self.fallback_url(plan),
             "image_source": "ha" if plan.get("image_external") else ("upload" if plan.get("image") else None),
@@ -349,6 +413,13 @@ class FloorplanData:
                     for p in pts[:40]
                 ]
             plan["shapes"] = shapes
+        if "align" in changes:
+            # 0.8.2: where this floor's picture sits in the house, % of the reference floor (top left); {} = centred.
+            plan["align"] = {k: round(float(v), 3) for k, v in (changes["align"] or {}).items() if k in ("x", "y")}
+        if changes.get("frame_ref"):
+            for other in self.plans.values():
+                other.pop("frame_ref", None)
+            plan["frame_ref"] = True
         if "frame" in changes:
             # 0.8.2: space around the plan (+) or trimmed margin (-), % of the image, per side.
             plan["frame"] = {k: round(min(60.0, max(-45.0, float(v))), 2) for k, v in (changes["frame"] or {}).items() if k in ("t", "r", "b", "l")}
@@ -412,6 +483,11 @@ class FloorplanData:
             ]
         self._save()
         async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+        # 0.8.2: the house frame depends on every floor: tell the other floors too.
+        if {"frame", "align", "refs", "frame_ref", "kind", "level", "floor_id"} & changes.keys():
+            for other in self.plans:
+                if other != plan_id:
+                    async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, other)
         return plan
 
     @callback

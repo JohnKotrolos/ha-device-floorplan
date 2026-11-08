@@ -21,7 +21,6 @@ The card shows your plan and its **overlay buttons**. That's all there is to do 
 | **Security** | Doors and windows, motion, locks, alarm panels, smoke / leak / gas sensors and cameras. Alerts are highlighted. |
 | **Network** | How each device connects (Zigbee, Wi-Fi / LAN, Matter, Bluetooth, Z-Wave), at its box spot for [split devices](/together/split). See [Network](#network). |
 | **Health** | Battery levels (red when low) and devices that are offline. |
-| **People** | Each person at the room they are in. Appears once you add people. See [People](#people). |
 | *Your own* | [Custom overlays](#custom-overlays) you create in the card editor. |
 
 **One device, one marker per overlay.** Each overlay shows a device once, using one of its entities (the *leading* one: icon, colour, on/off, tap). Its other sensors are in its popup, or shown as small extra lines if you add them (see [Edit markers](#edit-markers)). The look follows the kind of device everywhere: round markers for lights, switches, doors and motion; the climate chip for ACs and thermostats (compact in Live and your own overlays, full in Comfort); reading chips for temperature and humidity; battery chips.
@@ -126,12 +125,12 @@ The state is matched to a room pin by the area's name, its id or one of its alia
 |---|---|
 | Home, room known | Avatar at the room pin |
 | Room sensor reports low confidence (attribute `confidence` below 0.5 / 50 %) | Avatar faded, dashed |
-| Home, no room known | In the **Home** row under the plan (People overlay) |
+| Home, no room known | In the **Home** row under the plan (Live) |
 | Away | Not shown |
 
 ![People in their rooms](/screens/card-people.webp){.shot}
 
-**Also show people in these overlays** adds the avatars to Live (or any other overlay).
+People show in **Live** (the People overlay is gone since 0.8.2). **Also show people in these overlays** adds them to other overlays too.
 
 ## In the card editor: everything adjustable
 
@@ -142,7 +141,7 @@ Open the dashboard's edit mode and edit the card. It has two parts:
 - **Per floor**, in a frame with the floor tabs: for the floor you picked, **Markers** (the **Edit markers** button) and **Rooms on this floor** (custom Room names, Rooms hidden on the card). Nothing else depends on the floor.
 - **Card settings (the whole house, all floors)**: the floor the card opens with and swiping · title and card ID · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** (how names look, where they show) · **People** · **Day & night** · **Look and tap behaviour**. Overlays are the same on every floor.
 
-- **Overlay buttons on the card**: which ones and in which order (drag), the one shown when the card opens, **where the buttons are** (below, above, left or right of the plan, or hidden) and their **style** (icons and labels, or icons only). **Overlay names** renames them.
+- **Overlay buttons on the card**: which ones and in which order (drag), the one shown when the card opens, **where the buttons are** (below, above, left or right of the plan, or hidden), the **bar style** (Pill, Tiles, Circles, Plain, or **Sidebar**: a dark strip over the full height on the left or right), the **size** (S / M / L) and **labels** (icons and labels, or icons only). **Overlay names** renames them. See [Button bar](#button-bar).
 - **Live**: which kinds of devices it shows, **things that are off** hidden (default) or faint, values next to icons, **lights show as** glow only (default: no light markers, lights that are on just glow, tap the glow to switch off; switch lights on in the Lights overlay) or markers.
 - **Lights**: switches and plugs that run lights, brightness of lamps that are on, lamps that are off (faint, normal or hidden), All off / All on buttons.
 - **Comfort**: humidity, humidity-only devices, ACs and thermostats as climate chips, how bonds and phantoms combine sensors.
@@ -194,7 +193,7 @@ Under **Custom overlays**, **Add overlay**: a button name, an icon, and **which 
 
 Use this when the card is part of your own dashboard, for example a wallpanel with a top row of chips: tapping a chip shows the matching overlay. The simplest way is the [chip card](/reference/chip), which also glows for the overlay that's showing. Set the overlay buttons to **Hidden** if you only want to switch from outside.
 
-Overlay names: `plan`, `live`, `lights`, `comfort`, `security`, `network`, `health`, `people`, your custom overlays' IDs (e.g. `custom1`), or `reset` (back to the card's default overlay).
+Overlay names: `live`, `lights`, `comfort`, `security`, `network`, `health`, your custom overlays' IDs (e.g. `custom1`), or `reset` (back to the card's default overlay).
 
 ### 1. The action (every screen)
 
@@ -337,6 +336,35 @@ cards:
 - Prefer the card's own overlay buttons? Leave out `buttons: { position: hidden }` and the rail.
 - Card-mod styles on the floorplan card stay in place when you switch overlays. Put the layout (grid, background) on the **stack**, as above: the stack doesn't redraw, so the layout holds.
 
+## Button bar
+
+Under **Overlay buttons on the card → Buttons: hold, status and shortcuts**, each button has its own row:
+
+- **Overlay buttons**: tap switches the overlay as always. **Hold** can run any Home Assistant action, *Reload this page* or *Back to where you were*. A **status** shows on the button: *Automatic* for the built-ins (Lights: how many lights are on · Security: a dot when a door or window is open, the alarm armed or a lock unlocked · Health: an amber dot when a battery is low or a device offline · Network: a dot when a device is offline; all for the floor shown), *None*, or **from entities you pick**.
+- **Shortcuts** (**Add shortcut**): your own buttons with a name and icon. **Tap** and **hold**: the details of the status entity, any Home Assistant action (open a dashboard page, a link, run an action…), a **popup on this browser only** (needs [browser_mod](https://github.com/thomasloven/hass-browser_mod); pick any card for the popup), *Reload this page* or *Back to where you were*. Less used ones go into the **···** menu, pinned at the end of the bar.
+- **Status from entities**: one or more entities, shown as a **dot** while any is active, **how many** are active, a **short value** (e.g. a printer's *45%*), the **icon colour** or **another icon** while active. *Counts as active* is optional: states like `on, open, printing`, or a number test like `>50`; by default on / open / armed / unlocked.
+
+When the buttons need more room than there is, the bar scrolls and fades at the end that has more.
+
+```yaml
+buttons:
+  position: left
+  shape: sidebar          # pill | tiles | circles | plain | sidebar
+  size: m                 # s | m | l
+  actions:
+    live: { hold_action: { action: reload } }
+    network: { hold_action: { action: navigate, navigation_path: /config/zha/dashboard } }
+    health: { status: { mode: off } }
+  shortcuts:
+    - name: 3D Printer
+      icon: mdi:printer-3d
+      status: { mode: custom, entity: sensor.printer_progress, show: value, when: ">0" }
+      tap_action:
+        action: fire-dom-event
+        browser_mod: { service: browser_mod.popup, data: { title: 3D Printer, content: { type: entities, entities: [sensor.printer_progress] } } }
+    - { name: Home Health, icon: mdi:heart-pulse, more: true, tap_action: { action: navigate, navigation_path: /home-health } }
+```
+
 ## YAML
 
 Everything the editor sets is plain YAML; only what differs from the defaults is stored.
@@ -345,10 +373,10 @@ Everything the editor sets is plain YAML; only what differs from the defaults is
 type: custom:device-floorplan-card
 plans: [ground_floor, first_floor]  # or plan: ground_floor (one floor)
 title: Home
-overlays: [live, lights, comfort, security, people, custom1, plan]
+overlays: [live, lights, comfort, security, custom1]
 default_overlay: live
 overlay_names: { live: Home }
-buttons: { position: left, style: icons }     # bottom | top | left | right | hidden
+buttons: { position: left, style: icons, shape: tiles, size: s }   # see Button bar
 live: { show: [lights, motion, openings, climate] }
 lights:
   brightness: true
@@ -365,7 +393,7 @@ rooms: { show_in: [plan, comfort], style: pill, size: m, names: { kitchen: Kitch
 people:
   - { entity: person.anna, room: sensor.anna_watch_area, room2: sensor.anna_phone_area }
 people_in: [live]
-night: { mode: sun, start: "20:00", end: "07:00", overlays: [plan, live, lights, people], strength: 70, style: moon, dim_quiet: true, shutters: true }
+night: { mode: sun, start: "20:00", end: "07:00", overlays: [live, lights], strength: 70, style: moon, dim_quiet: true, shutters: true }
 custom_overlays:
   - { id: custom1, name: Downstairs, icon: mdi:stairs-down, kinds: [lights, covers] }
 tap: { cover: more-info, reading: readings }
