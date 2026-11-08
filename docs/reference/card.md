@@ -340,10 +340,11 @@ cards:
 
 The overlay buttons sit in **one bar, exactly as long as the plan with its frame** (as wide as the plan above or below it, as tall as the plan on its left or right) and right next to it. What doesn't fit scrolls inside the bar: a small chevron at the end shows there is more (and one at the start once you scrolled); tap it to scroll. A faint line separates the card's overlays, your own overlays and shortcuts.
 
-- **Bar background**: theme colour, dark, or transparent (the buttons alone).
+- **Side Rail** (left or right, under *Where the Overlay Bar is*): instead of a bar next to the plan, a strip over the **full height of the card at its edge**, with plain icon buttons, dark by default (or theme colour). Space and button style don't apply to it, so the editor hides them.
+- **Overlay Bar background**: theme colour, dark, or transparent (the buttons alone).
 - **Buttons**: Pill, Tiles or Circles; **size** S / M / L; labels or icons only.
 
-Under **Overlay buttons on the card → Buttons: hold, status and shortcuts**, each button has its own row:
+Under **Overlay Bar → Overlay Bar: hold, status and shortcuts**, each button has its own row:
 
 - **Overlay buttons**: tap switches the overlay as always. **Hold** can run any Home Assistant action, *Reload this page* or *Back to where you were*.
 - **Shortcuts** (**Add shortcut**): your own buttons with a name and icon. **Tap** and **hold**: the details of the status entity, any Home Assistant action (open a dashboard page, a link, run an action…), a **popup on this browser only** (needs [browser_mod](https://github.com/thomasloven/hass-browser_mod); pick any card for the popup), *Reload this page* or *Back to where you were*.
@@ -358,7 +359,7 @@ In a card with a fixed height (wall panel, sections grid) the plan sits at the *
 ```yaml
 plan_position: top        # top | centre
 buttons:
-  position: left
+  position: left           # bottom | top | left | right | rail_left | rail_right | hidden
   bar: dark               # theme | dark | clear
   shape: pill             # pill | tiles | circles
   size: m                 # s | m | l

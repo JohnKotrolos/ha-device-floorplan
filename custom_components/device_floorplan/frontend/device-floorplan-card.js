@@ -892,6 +892,17 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .ovbar.vert.cs .dock { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 34px), transparent); }
 .ovbar.vert.cs.ce .dock { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); }
 /* fixed-height cards: the plan sits at the top (or centred), the bar right next to it */
+/* the Side Rail: full height, flush with the card's edge */
+ha-card.srail .dockrow { padding:0; margin:0; height:auto; max-height:none; align-self:stretch; gap:0; }
+ha-card.srail .dockrow.rail-dark { background:#1f2329; }
+ha-card.srail .dockrow.rail-theme { background: color-mix(in srgb, var(--secondary-background-color, #eee) 85%, transparent); }
+ha-card.srail .ovbar { border-radius:0; background:transparent; }
+ha-card.srail .dockrow .lslot { padding: 8px 0; }
+ha-card.srail .dockrow.rail-dark .lslot button.layers { box-shadow:none; }
+.ovbar.sh-rail .dock { padding:10px 6px; --bgap:4px; }
+.ovbar.sh-rail .dock button { border-radius:12px; background:transparent; box-shadow:none; }
+.ovbar.sh-rail .dock button.on { background: var(--bon-bg); box-shadow:none; color: var(--bon-fg); }
+.ovbar.sh-rail.theme .dock button.on ha-icon { color: var(--dfc-accent); }
 :host([fit]) .wrap { flex: 0 1 auto; }
 :host([fit]) ha-card.dock-top .main, :host([fit]) ha-card.dock-bottom .main { flex: 0 1 auto; }
 :host([fit]) ha-card.dock-top { justify-content:flex-end; }
@@ -2263,13 +2274,16 @@ class DeviceFloorplanCard extends HTMLElement {
   _buttons() {
     const b = this._config.buttons || {};
     const dock = (this._config.look || {}).dock;
+    // 0.8.2: the Side Rail: full height at the card's left / right edge, plain icon buttons, dark by default.
+    const rail = b.position === "rail_left" || b.position === "rail_right";
     return {
-      position: b.position || (dock === "hidden" ? "hidden" : "bottom"),
+      position: rail ? b.position.slice(5) : b.position || (dock === "hidden" ? "hidden" : "bottom"),
+      rail,
       style: b.style || (dock === "icons" ? "icons" : "labels"),
-      space: b.space || "reserve",
+      space: rail ? "reserve" : b.space || "reserve",
       // 0.8.2: the bar (background) and the buttons are separate; old "sidebar" / "plain" shapes map onto them.
-      shape: BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
-      bar: b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear"].includes(b.bar) ? b.bar : "theme",
+      shape: rail ? "rail" : BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
+      bar: rail ? (b.bar === "theme" ? "theme" : "dark") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear"].includes(b.bar) ? b.bar : "theme",
       auto: b.auto_status === true,
       size: ["s", "l"].includes(b.size) ? b.size : "m",
       actions: b.actions || {},
@@ -3355,7 +3369,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const barHtml = barItems.map((x, i) => (i && x.g !== barItems[i - 1].g ? '<i class="bsep" aria-hidden="true"></i>' : "") + x.html).join("");
     const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? "Scroll back" : "More buttons"}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${touch ? "share" : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${btn.bar} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${touch ? "share" : ""} ${btn.rail ? `rail-${btn.bar}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${btn.bar} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = look.title !== false && c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -3367,7 +3381,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const fr = this._frame(a, ratio);
     const boxCls = `${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
     const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
-    setShadow(this, `${style}<ha-card class="dock-${pos} ${floatCls} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    setShadow(this, `${style}<ha-card class="dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
@@ -5357,6 +5371,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const plans = planSensors(this._hass).map((s) => ({ value: s.attributes.plan_id, label: s.attributes.plan_name || s.attributes.plan_id }));
     const ovOpts = this._ovOptions();
     const conns = [{ value: "all", label: "All connections" }, ...CONN_ORDER.map((c) => ({ value: c, label: CONNS[c].label }))];
+    const rail = String((this._config.buttons || {}).position || "").startsWith("rail_");
     return {
       general: [
         { name: "title", selector: { text: {} } },
@@ -5366,13 +5381,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       buttons: [
         { name: "overlays", selector: { select: { options: ovOpts, multiple: true, reorder: true, mode: "list" } } },
         { name: "default_overlay", selector: { select: { options: ovOpts, mode: "dropdown" } } },
-        { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
-        { name: "buttons_bar", selector: { select: { options: [{ value: "theme", label: "Theme colour" }, { value: "dark", label: "Dark" }, { value: "clear", label: "Transparent (the buttons alone)" }], mode: "dropdown" } } },
-        { name: "buttons_shape", selector: { select: { options: [{ value: "pill", label: "Pill" }, { value: "tiles", label: "Tiles" }, { value: "circles", label: "Circles" }], mode: "dropdown" } } },
+        { name: "buttons_position", selector: { select: { options: [{ value: "bottom", label: "Below the plan" }, { value: "top", label: "Above the plan" }, { value: "left", label: "Left of the plan" }, { value: "right", label: "Right of the plan" }, { value: "rail_left", label: "Side Rail, left (full height, at the card's edge)" }, { value: "rail_right", label: "Side Rail, right (full height, at the card's edge)" }, { value: "hidden", label: "Hidden (switch from other cards, see Card ID)" }], mode: "dropdown" } } },
+        { name: "buttons_bar", selector: { select: { options: [{ value: "theme", label: "Theme colour" }, { value: "dark", label: "Dark" }, ...(rail ? [] : [{ value: "clear", label: "Transparent (the buttons alone)" }])], mode: "dropdown" } } },
+        ...(rail ? [] : [{ name: "buttons_shape", selector: { select: { options: [{ value: "pill", label: "Pill" }, { value: "tiles", label: "Tiles" }, { value: "circles", label: "Circles" }], mode: "dropdown" } } }]),
         { name: "buttons_size", selector: { select: { options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }], mode: "dropdown" } } },
         { name: "buttons_auto", selector: { boolean: {} } },
         { name: "buttons_style", selector: { select: { options: [{ value: "labels", label: "Icons and labels" }, { value: "icons", label: "Icons only" }], mode: "dropdown" } } },
-        { name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside them)" }, { value: "float", label: "Float over the plan" }], mode: "dropdown" } } },
+        ...(rail ? [] : [{ name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside it)" }, { value: "float", label: "Float over the plan" }], mode: "dropdown" } } }]),
         { name: "layers_button", selector: { select: { options: [{ value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
         { type: "expandable", name: "overlay_names", title: "Overlay names", icon: "mdi:rename", schema: ovOpts.filter((o) => OVERLAYS[o.value]).map((o) => ({ name: o.value, selector: { text: {} } })) },
       ],
@@ -5449,7 +5464,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the buttons are", buttons_style: "Labels", buttons_bar: "Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the buttons", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
+      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
@@ -5479,7 +5494,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       buttons_style: b.style || (look.dock === "icons" ? "icons" : "labels"),
       buttons_space: b.space === "float_icons" ? "float" : b.space || "reserve",
       buttons_shape: BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
-      buttons_bar: b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : b.bar || "theme",
+      buttons_bar: String(b.position || "").startsWith("rail_") ? (b.bar === "theme" ? "theme" : "dark") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : b.bar || "theme",
       buttons_size: b.size || "m",
       buttons_auto: b.auto_status === true,
       plan_position: c.plan_position === "centre" ? "centre" : "top",
@@ -5560,7 +5575,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
         <div id="fopts"></div>
         <div data-form="general"></div>
-        ${sec("mdi:gesture-tap-button", "Overlay buttons on the card", "Which buttons, their order, where they sit and how they look.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Buttons: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div>`)}
+        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div>`)}
         ${sec("mdi:layers-outline", "Overlays", "What each overlay shows.", `<div data-form="overlaysA"></div>
           <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><p>Buttons in the Lights overlay. Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
           <div data-form="overlaysB"></div>
@@ -5628,8 +5643,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (key === "buttons") {
       const { space: _s, shape: _h, size: _z, bar: _b, auto_status: _a, ...keep } = this._config.buttons || {};
       const space = v.buttons_space === "float_icons" ? "float" : v.buttons_space; // "buttons only" = a transparent bar now
-      const bar = v.buttons_space === "float_icons" ? "clear" : v.buttons_bar;
-      c.buttons = { ...keep, position: v.buttons_position, style: v.buttons_style, ...(space && space !== "reserve" ? { space } : {}), ...(BAR_SHAPES.includes(v.buttons_shape) && v.buttons_shape !== "pill" ? { shape: v.buttons_shape } : {}), ...(bar && bar !== "theme" ? { bar } : {}), ...(v.buttons_size && v.buttons_size !== "m" ? { size: v.buttons_size } : {}), ...(v.buttons_auto ? { auto_status: true } : {}) };
+      const rail = String(v.buttons_position || "").startsWith("rail_");
+      const wasRail = String((this._config.buttons || {}).position || "").startsWith("rail_");
+      // Switching to / from the Side Rail: each keeps its own default background (rail dark, bar theme).
+      let bar = v.buttons_space === "float_icons" ? "clear" : rail !== wasRail ? (rail ? "dark" : _b && _b !== "dark" ? _b : "theme") : v.buttons_bar;
+      if (rail && bar === "clear") bar = "dark";
+      const keepShape = rail ? _h : v.buttons_shape;
+      const keepSpace = rail ? _s : space;
+      c.buttons = { ...keep, position: v.buttons_position, style: v.buttons_style, ...(keepSpace && keepSpace !== "reserve" ? { space: keepSpace } : {}), ...(BAR_SHAPES.includes(keepShape) && keepShape !== "pill" ? { shape: keepShape } : {}), ...(rail ? (bar === "theme" ? { bar } : {}) : bar && bar !== "theme" ? { bar } : {}), ...(v.buttons_size && v.buttons_size !== "m" ? { size: v.buttons_size } : {}), ...(v.buttons_auto ? { auto_status: true } : {}) };
       for (const k of ["buttons_position", "buttons_style", "buttons_space", "buttons_shape", "buttons_bar", "buttons_size", "buttons_auto"]) delete c[k];
     }
     // Only what depends on the changed form is redrawn; the form you type in is left alone.
