@@ -29,7 +29,7 @@ Draw shapes **roughly**: no need to fit them exactly against each other. Where t
 
 While Room shapes overlap, step 2 isn't finished: the top bar shows **Glue Rooms · 3 overlaps** and *Place devices* waits. Press it: overlapping Rooms meet on one line, so they are properly connected. An edge that the overlap covers completely (a corridor against a long wall) moves onto the other Room's edge; the long edge stays where it is. When both edges are covered, they meet in the middle. **Gaps are never touched**: they stay walls. The right column lists what changes, pair by pair.
 
-Check the shapes on the plan, then **Looks good** or **Undo** (top bar). An overlap of more than about 4 % of the plan's width is shown as *overlap too much*: likely a drawing slip; pull one edge back. Glued Rooms still count as open to each other (light and the Comfort heatmap pass between them).
+Check the shapes on the plan, then **Looks good** or **Undo** (top bar). Glued Rooms still count as open to each other (light and the Comfort heatmap pass between them).
 
 The shape is see-through while you draw. After **Done** it hides and the button turns green (**Shape ✓**). A light now stays inside its room and the rooms that overlap with it: the glow no longer shines through walls into the next room or outside the home. Rooms without a shape work as before; *Done, place devices →* never waits for shapes.
 

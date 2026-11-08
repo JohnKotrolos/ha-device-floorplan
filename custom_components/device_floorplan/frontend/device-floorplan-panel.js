@@ -665,7 +665,6 @@ function glueShapes(shapes, ratio, tol = 4) {
   };
   let moved = 0;
   const pairs = new Map(); // "a|b" → what happened
-  const big = new Set(); // "a|b": overlap too large to glue
   for (let p = 0; p < ids.length; p++) {
     for (let q = p + 1; q < ids.length; q++) {
       const PA = S[ids[p]];
@@ -685,10 +684,21 @@ function glueShapes(shapes, ratio, tol = 4) {
           const ov = Math.min(a1, b1) - Math.max(a0, b0);
           if (ov <= 0.2) continue;
           const key = `${ids[p]}|${ids[q]}`;
-          if (g > tol) {
-            big.add(key);
-            continue;
-          }
+          // A real overlap: the middle of the shared stretch of each edge lies inside the other Room.
+          // (Edges far apart on opposite sides of two Rooms also face each other, but nothing overlaps there.)
+          const mid = (Math.max(a0, b0) + Math.min(a1, b1)) / 2;
+          const onA = [a.A[0] + a.u[0] * (mid - t(a.A)), a.A[1] + a.u[1] * (mid - t(a.A))];
+          const onB = [b.A[0] + a.u[0] * (mid - t(b.A)), b.A[1] + a.u[1] * (mid - t(b.A))];
+          const inside = (P, x, y) => {
+            let c = false;
+            for (let m = 0, n = P.length - 1; m < P.length; n = m++) {
+              if (P[m][1] > y !== P[n][1] > y && x < ((P[n][0] - P[m][0]) * (y - P[m][1])) / (P[n][1] - P[m][1]) + P[m][0]) c = !c;
+            }
+            return c;
+          };
+          const eps = 0.05; // test just inside the edge
+          if (!inside(PB, onA[0] - a.n[0] * eps, onA[1] - a.n[1] * eps) || !inside(PA, onB[0] - b.n[0] * eps, onB[1] - b.n[1] * eps)) continue;
+          if (g > tol) continue; // a large overlap is left as it is
           const ca = ov / a.L;
           const cb = ov / b.L;
           const shift = (P, e, d) => {
@@ -712,7 +722,7 @@ function glueShapes(shapes, ratio, tol = 4) {
   }
   const out = {};
   for (const k of ids) out[k] = S[k].map((p) => [+p[0].toFixed(3), +(p[1] * ratio).toFixed(3), ...p.slice(2)]);
-  return { shapes: out, moved, pairs: [...pairs.values()], big: [...big].filter((k) => !pairs.has(k)).map((k) => k.split("|")) };
+  return { shapes: out, moved, pairs: [...pairs.values()] };
 }
 
 /** Is a point inside a polygon ([[x, y], …], % of the plan)? */
@@ -1609,11 +1619,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     // 0.8.2: gluing ends step 2: its status and actions sit next to the steps, like Measure's.
     if (this.s.tool === "rooms") {
       const gs = this._glueState();
-      const bigNote = gs.big.length ? `<span class="chip-status warn" title="Pull one edge back, then glue again">! ${esc(gs.big.map(([a, b]) => `${this._areaName(a)} / ${this._areaName(b)}`).join(", "))} overlap too much</span>` : "";
       if (this.s.glued) calib = `<span class="gluebar"><b>${this.s.glued} edge${this.s.glued > 1 ? "s" : ""} glued</b> · check the plan<button class="btn" data-act="glueundo">Undo</button><button class="btn primary" data-act="glueok">Looks good</button></span>`;
       else if (gs.moved) calib = `<button class="btn primary" data-act="glue" title="Overlapping Rooms meet on one line; gaps stay walls">${SVG.glue}Glue Rooms · ${gs.pairs.length} overlap${gs.pairs.length > 1 ? "s" : ""}</button>`;
       else if (Object.values(this.work.shapes || {}).filter((sh) => Array.isArray(sh) && sh.length >= 3).length > 1) calib = `<span class="chip-status ok">✓ Rooms glued</span>`;
-      calib += bigNote;
     }
     let placing = "";
     const pd = this.s.placing && this.byId.get(this.s.placing);
@@ -2329,7 +2337,6 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (this.s.glued && this.s.glueLog) glue = `<div class="gluebox"><b>Glued</b>${this.s.glueLog.map((x) => `<span>· ${howTxt(x)}</span>`).join("")}<span>Gaps (walls) stayed as they were. Check the plan, then Looks good or Undo (top).</span></div>`;
     else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle.</span>${gs.pairs.map((x) => `<span>· ${howTxt(x)}</span>`).join("")}</div>`;
     else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
-    if (gs.big.length) glue += `<div class="gluebox warn"><b>Overlap too much to glue</b>${gs.big.map(([a, b]) => `<span>· ${esc(this._areaName(a))} / ${esc(this._areaName(b))}</span>`).join("")}<span>Pull one edge back (more than about 4 % of the plan's width is likely a drawing slip), then glue again.</span></div>`;
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
       <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p></div>
       <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
