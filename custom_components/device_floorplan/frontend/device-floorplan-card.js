@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.10.0b6";
+const CARD_VERSION = "0.10.0b7";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -896,6 +896,8 @@ svg.rpath { position:absolute; inset:0; width:100%; height:100%; pointer-events:
 svg.rpath polyline { fill:none; stroke: rgb(33,150,243); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; opacity:.55; vector-effect: non-scaling-stroke; }
 svg.fresh { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 svg.fresh polygon { pointer-events: visiblePainted; cursor:pointer; stroke:none; transition: fill .3s; }
+.room.solo { padding: 1px 7px; }
+.room.solo small.rage { opacity: 1; font-size: .9em; font-weight: 600; }
 .room small.rage { display:block; font-size:.78em; opacity:.75; font-weight:400; text-align:center; }
 .rdock.chg { color:#43a047; }
 .rdock .rdw { position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:#ffa000; border:1.5px solid var(--card-background-color, #fff); }
@@ -1691,8 +1693,6 @@ class DeviceFloorplanCard extends HTMLElement {
   /** Room names: shown by default in the overlays chosen in the editor (Live, when not set: where Plan was). */
   _roomsDefault(ov) {
     const si = (this._config.rooms || {}).show_in;
-    // 0.10: Cleaning shows room names by default: they carry when each room was cleaned.
-    if (ov === "cleaning") return true;
     if (!Array.isArray(si)) return ov === "live";
     return si.includes(ov) || (ov === "live" && si.includes("plan"));
   }
@@ -2711,9 +2711,11 @@ class DeviceFloorplanCard extends HTMLElement {
     let items = null;
     for (const [eid, cfg] of Object.entries(a.robots || {})) {
       const st = this._hass.states[eid];
-      if (!cfg || !Array.isArray(cfg.m) || !st) continue;
-      const d = rbRead(this._hass, eid, cfg);
+      if (!cfg || !st) continue;
+      let d = rbRead(this._hass, eid, cfg);
       if (!rbOnMap(cfg.map, d)) continue;
+      // 0.10: a robot without a map (or not aligned yet) shows where it is placed; that spot is its dock.
+      if (!(Array.isArray(cfg.m) && cfg.m.length === 6)) d = { ...d, pos: null, dock: null, lines: [] };
       const active = RB_ACTIVE.includes(d.state);
       items = items || this._items(a);
       const placed = items.find((it) => !it.phantom && [it.main_entity, ...(it.entities || []), ...(it.allEntities || [])].includes(eid));
@@ -2746,8 +2748,9 @@ class DeviceFloorplanCard extends HTMLElement {
       const tone = info.err ? "err" : info.attn ? "warn" : "";
       this._rb.push({ eid, cfg, d, info, active });
       out = out.filter((x) => x.item.id !== item.id);
-      const dev = placed ? this._dev(placed.id) : {};
-      out.push({ type: "robot", kind: "appliance", key: `robot:${eid}`, item, eid, ents: [eid], name: dev.name || item.name, x: +p.x.toFixed(3), y: +p.y.toFixed(3), on: true, color: `rgb(${col})`, head, state: d.state, icon: (placed && this._per(placed, ov).icon) || dev.icon || st.attributes.icon || "mdi:robot-vacuum", badge, tone: ov === "health" ? "" : tone, tip: this._rbTip(st, d, info, a, cfg) });
+      // Name and icon from Edit markers, also for a robot that isn't placed (item robot:<entity>).
+      const dev = this._dev(item.id);
+      out.push({ type: "robot", kind: "appliance", key: `robot:${eid}`, item, eid, ents: [eid], name: dev.name || item.name, x: +p.x.toFixed(3), y: +p.y.toFixed(3), on: true, color: `rgb(${col})`, head, state: d.state, icon: this._per(item, ov).icon || dev.icon || st.attributes.icon || "mdi:robot-vacuum", badge, tone: ov === "health" ? "" : tone, tip: this._rbTip(st, d, info, a, cfg) });
     }
     return out;
   }
@@ -2768,6 +2771,9 @@ class DeviceFloorplanCard extends HTMLElement {
     const parts = {};
     const station = [];
     const last = {};
+    // How it cleans: suction, water, mode (attributes and select entities of the robot).
+    const settings = [];
+    if (vs && vs.attributes.fan_speed != null && vs.attributes.fan_speed !== "") settings.push(String(vs.attributes.fan_speed));
     let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "Error" : "";
     const OK = /^(ok|normal|none|no_error|no error|idle|off|installed|not_full|0|false|unknown|unavailable|completed|clean|good)$/i;
     for (const e of ents) {
@@ -2791,10 +2797,11 @@ class DeviceFloorplanCard extends HTMLElement {
       else if (/(cleaned_area|cleaning_area|clean_area|last_clean_area)/.test(id) && num(st.state)) last.area = this._fmt(e);
       else if (/(dust_bag|dustbin|bin_full|water_tank|clean_water|dirty_water|water_box|station|dock|self_clean|drainage|detergent|mop_pad_status|mop_status)/.test(id) && ((domainOf(e) === "binary_sensor" && dc === "problem" && st.state === "on") || (domainOf(e) === "sensor" && !num(st.state) && /(full|empty|lack|missing|not_installed|dirty|low|shortage|no_water|error)/i.test(st.state) && !OK.test(st.state)))) station.push({ e, name: name(e), txt: this._fmt(e) });
       else if (/(^|_)error$|_error_|fault/.test(id) && domainOf(e) === "sensor" && !OK.test(st.state) && d.state === "error") err = this._fmt(e);
+      else if (["select", "input_select"].includes(domainOf(e)) && /(fan|suction|water|mop|mode|route|intensity)/.test(id) && !/(^unknown|unavailable)$/.test(st.state) && settings.length < 4) settings.push(this._fmt(e));
     }
     if (d.state === "docked" && battery != null && battery < 100 && !charging) charging = true;
     const cons = Object.values(parts);
-    return { battery, charging, cons, station, last, err, attn: cons.some((c) => c.low) || station.length > 0 };
+    return { battery, charging, cons, station, last, err, settings: [...new Set(settings)], attn: cons.some((c) => c.low) || station.length > 0 };
   }
 
   /** Hover line: state, room and battery, or the robot's own error text. */
@@ -2802,34 +2809,51 @@ class DeviceFloorplanCard extends HTMLElement {
     const word = { cleaning: "Cleaning", returning: "Returning", paused: "Paused", error: "Error", docked: info.charging ? "Charging" : "Docked", idle: "Idle" }[d.state] || this._fmt(st.entity_id);
     if (info.err) return info.err === "Error" ? word : `${word}: ${info.err}`;
     const room = this._rbRoom(a, cfg, d);
-    return [word, room, info.battery != null ? `${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
+    return [word, room, info.battery != null ? `Battery ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
   }
 
   /** The room the robot is in: where it is on the plan's room shapes. */
   _rbRoom(a, cfg, d) {
-    if (!d.pos || !RB_ACTIVE.includes(d.state)) return "";
+    if (!RB_ACTIVE.includes(d.state)) return "";
+    const seg = d.room != null && (cfg.seg || {})[d.room];
+    if (seg && (a.areas || {})[seg]) return (this._rooms().names || {})[seg] || a.areas[seg].name;
+    if (!d.pos || !Array.isArray(cfg.m)) return "";
     const p = rbApply(cfg.m, d.pos);
     const hit = Object.entries(a.areas || {}).find(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3 && inPoly(p.x, p.y, r.shape));
     return hit ? (this._rooms().names || {})[hit[0]] || hit[1].name : "";
+  }
+
+  /** "just now", "5 min ago", "2 d ago". */
+  _agoTxt(t) {
+    const x = this._ageTxt(t);
+    return x === "just now" || !x ? x : `${x} ago`;
   }
 
   _ageTxt(t) {
     const ms = Date.now() - new Date(t).getTime();
     if (!t || !(ms >= 0)) return "";
     const m = Math.round(ms / 60000);
-    if (m < 60) return m < 2 ? "now" : `${m} min`;
+    if (m < 60) return m < 2 ? "just now" : `${m} min`;
     const hrs = Math.round(m / 60);
     return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
+  }
+
+  /** Days between cleanings of a room (plan setting per room, else the plan's default; 0 = never due). */
+  _pace(a, id) {
+    const v = (a.pace || {})[id] ?? a.pace_default ?? (this._config.cleaning || {}).overdue ?? 7;
+    return Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 7;
   }
 
   /** 0.10: rooms tinted by how long ago a robot cleaned them (a layer of Cleaning; tap a room to clean it). */
   _freshHtml(a) {
     if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true)) return "";
-    const over = Number((this._config.cleaning || {}).overdue) || 7;
     const polys = Object.entries(a.areas || {}).filter(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3).map(([id, r]) => {
       const c = (a.cleaned || {})[id];
-      const hrs = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 3600000 : null;
-      const fill = hrs == null ? "rgba(0,0,0,0)" : hrs < 24 ? "rgba(67,160,71,.30)" : hrs < 72 ? "rgba(67,160,71,.14)" : hrs >= over * 24 ? "rgba(255,160,0,.22)" : "rgba(0,0,0,0)";
+      const days = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 86400000 : null;
+      // Smooth: fresh green fades out by 60% of the room's pace, amber grows once it is due.
+      const pace = this._pace(a, id);
+      const f = days == null ? null : pace ? days / pace : days / 7;
+      const fill = f == null ? "rgba(0,0,0,0)" : f < 0.6 ? `rgba(102,187,106,${(0.3 * (1 - f / 0.6)).toFixed(3)})` : pace && f >= 1 ? `rgba(255,160,0,${Math.min(0.28, 0.12 + 0.16 * (f - 1)).toFixed(3)})` : "rgba(0,0,0,0)";
       return `<polygon data-croom="${cesc(id)}" points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:${fill}"></polygon>`;
     }).join("");
     return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>`;
@@ -2880,9 +2904,10 @@ class DeviceFloorplanCard extends HTMLElement {
     const mine = Object.values(a.cleaned || {}).filter((c) => c.by === eid).map((c) => c.t).sort().pop();
     const lastT = info.last.t || mine;
     const rows = [];
-    if (lastT) rows.push(["Last cleaning", `${this._ageTxt(lastT)} ago`]);
+    if (lastT) rows.push(["Last cleaning", this._agoTxt(lastT)]);
     if (info.last.dur) rows.push(["Took", info.last.dur]);
-    if (info.last.area) rows.push(["Area", info.last.area]);
+    if (info.last.area) rows.push([RB_ACTIVE.includes(d.state) ? "This run" : "Area", info.last.area]);
+    if (info.settings.length) rows.push(["Settings", info.settings.join(" · ")]);
     if (info.battery != null) rows.push(["Battery", `${Math.round(info.battery)}%${info.charging ? " · charging" : ""}`]);
     const cons = info.cons.length ? `<h4>Consumables</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
     const dock = info.station.length ? `<h4>Dock</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
@@ -2902,7 +2927,12 @@ class DeviceFloorplanCard extends HTMLElement {
     const name = (this._rooms().names || {})[p.area] || room.name;
     const c = (a.cleaned || {})[p.area];
     const by = c && this._hass.states[c.by] ? this._hass.states[c.by].attributes.friendly_name : "";
-    const when = c && c.t ? `Cleaned ${this._ageTxt(c.t)} ago${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    const when = c && c.t ? `Cleaned ${this._agoTxt(c.t)}${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    const ref = (a.room_area || {})[p.area];
+    const cov = c && c.m2 != null ? `${c.m2} m²${c.pct != null ? ` (${c.pct}%)` : ""}` : "";
+    const pace = this._pace(a, p.area);
+    const daysAgo = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 86400000 : null;
+    const due = !pace ? "never" : daysAgo == null ? `every ${pace} d` : daysAgo >= pace ? "now" : `in ${Math.max(1, Math.round(pace - daysAgo))} d`;
     // Visits of the last runs (the integration logs when a robot enters and leaves a room); one run = one clean.
     const runs = [];
     for (const v of ((a.clean_log || {})[p.area] || []).slice().sort((x, y) => (x.s < y.s ? -1 : 1))) {
@@ -2917,7 +2947,13 @@ class DeviceFloorplanCard extends HTMLElement {
     const week = runs.filter((r) => Date.now() - r.s < 7 * 86400000).length;
     const ds = runs.slice(-10).map((r) => r.d).sort((x, y) => x - y);
     const usual = ds.length ? Math.max(1, Math.round(ds[Math.floor(ds.length / 2)] / 60000)) : 0;
-    const stats = runs.length ? `<div class="kv"><span>Last 7 days</span><span>${week ? `${week}×` : "not cleaned"}</span>${usual ? `<span>Usually takes</span><span>${usual} min</span>` : ""}</div>` : "";
+    const kv = [];
+    if (cov) kv.push(["Cleaned last time", cov]);
+    if (runs.length) kv.push(["Last 7 days", week ? `${week}×` : "not cleaned"]);
+    if (usual) kv.push(["Usually takes", `${usual} min`]);
+    if (ref && ref.a && ref.n >= 2) kv.push(["Robot usually cleans", `${Math.round(ref.a)} m²`]);
+    if (c && c.t) kv.push(["Due", due]);
+    const stats = kv.length ? `<div class="kv">${kv.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : "";
     const robots = Object.entries(a.robots || {}).filter(([e]) => this._hass.states[e]);
     const can = robots.filter(([e]) => Number(this._hass.states[e].attributes.supported_features || 0) & CLEAN_AREA);
     const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean now${can.length > 1 ? ` with ${cesc(this._hass.states[e].attributes.friendly_name || e)}` : ""}</button>`).join("");
@@ -4234,16 +4270,20 @@ class DeviceFloorplanCard extends HTMLElement {
   /** Rooms (#53): names at their spots, in the overlays chosen in the editor. */
   _roomsHtml(a) {
     const r = this._rooms();
-    if (!this._layerOn(this._overlay, "rooms", this._roomsDefault(this._overlay))) return "";
+    const names = this._layerOn(this._overlay, "rooms", this._roomsDefault(this._overlay));
+    // 0.10: how long ago each room was cleaned belongs to the Last cleaned layer (alone when names are off).
+    const ages = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true);
+    if (!names && !ages) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
     return Object.entries(a.areas || {}).filter(([id]) => !(r.hidden || []).includes(id)).map(([id, room]) => {
+      const c = ages && ((a.cleaned || {})[id] || {}).t;
+      if (!names && !c) return "";
       const name = (r.names && r.names[id]) || room.name;
-      const icon = r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
+      const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
-      const c = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true) && ((a.cleaned || {})[id] || {}).t;
       const age = c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px">${icon}${cesc(name)}${age}</div>`;
+      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
     }).join("");
   }
 
@@ -4406,14 +4446,16 @@ ${reset}
   /** Lights overlay: All off / All on / the user's scenes (#54). */
   _sceneBarHtml(specs) {
     const L = this._lights();
-    const scenes = Array.isArray(L.scenes) ? L.scenes : [];
+    const pid = (this._a || {}).plan_id;
+    // Scenes for some floors only show on those floors (indices stay those of the whole list).
+    const scenes = (Array.isArray(L.scenes) ? L.scenes : []).map((s, i) => [s, i]).filter(([s]) => !(Array.isArray(s.plans) && s.plans.length && !s.plans.includes(pid)));
     if (!L.all_off && !L.all_on && !scenes.length) return "";
     const ents = this._lightEnts(specs);
     const anyOn = ents.some((e) => (this._hass.states[e] || {}).state === "on");
     const b = [];
     if (L.all_off) b.push(`<button data-scene="all_off" class="${ents.length && !anyOn ? "on" : ""}"><ha-icon icon="mdi:lightbulb-off-outline"></ha-icon>All off</button>`);
     if (L.all_on) b.push(`<button data-scene="all_on"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>All on</button>`);
-    scenes.forEach((s, i) => {
+    scenes.forEach(([s, i]) => {
       b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}</button>`);
     });
     return `<div class="bar" role="toolbar" aria-label="Light scenes">${b.join("")}</div>`;
@@ -5829,6 +5871,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._ftab = Number(b.dataset.ft);
       this._renderFloors();
       this._renderRooms();
+      this._renderActs();
+      this._renderScenes();
     }));
     const bb = this.querySelector("#bigbtn span");
     if (bb) bb.textContent = ids.length > 1 ? `Edit markers on ${name(cur)}` : "Edit markers";
@@ -6118,13 +6162,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         <h3 class="grp"><ha-icon icon="mdi:office-building-outline"></ha-icon>Per floor <small>(Markers and Rooms of the floor picked in the tabs)</small></h3>
         <div class="fpanel"><div class="floors" id="floors"></div>
         ${sec("mdi:devices", "Markers", "What each device shows per overlay, extra readings, icon, tap, hide / add, people: all on the plan of this floor.", `<button class="bigbtn" id="bigbtn"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><span>Edit markers</span></button>`)}
-        ${sec("mdi:texture-box", "Rooms on this floor", "Rooms from the Floorplan Editor: rename them for the card or hide them.", `<div id="rooms"></div>`)}</div>
+        ${sec("mdi:texture-box", "Rooms on this floor", "Rooms from the Floorplan Editor: rename them for the card or hide them.", `<div id="rooms"></div>`)}
+        ${sec("mdi:gesture-tap-button", "Buttons on this floor", "Overlay actions and light scenes shown only on this floor. Those for every floor are under Card settings.", `<div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions</h5><div id="oacts_f"></div></div><div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><div id="scenes_f"></div></div>`)}</div>
         <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
         <div id="fopts"></div>
         <div data-form="general"></div>
-        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions</h5><p>Your own buttons under the plan, shown in one overlay and on the floors you pick: run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
+        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions on every floor</h5><p>Your own buttons under the plan, shown in one overlay (buttons for one floor are in the floor menu above): run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
         ${sec("mdi:layers-outline", "Overlays", "What each overlay shows.", `<div data-form="overlaysA"></div>
-          <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><p>Buttons in the Lights overlay. Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
+          <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes on every floor</h5><p>Buttons in the Lights overlay (scenes for one floor are in the floor menu above). Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
           <div data-form="overlaysB"></div>
           <div class="sub"><h5><ha-icon icon="mdi:layers-plus"></ha-icon>Custom overlays</h5><p>Your own overlay buttons, e.g. “Downstairs lights” or “Plants”: pick the kinds of devices it shows, and add single devices in the device list below.</p><div id="custom"></div></div>`)}
         ${sec("mdi:texture-box", "Rooms", "How Room names look on the plan, and in which overlays they show by default.", `<div id="roomsg"></div>`)}
@@ -6510,10 +6555,29 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   /** 0.10: Overlay actions (buttons under the plan), per overlay and per floor. */
+  /** The floor picked in the tabs (its plan id). */
+  _curFloor() {
+    const ids = this._planIds();
+    return ids[Math.min(this._ftab || 0, Math.max(0, ids.length - 1))] || null;
+  }
+
+  /** Is a per-floor list (actions, scenes: items with plans) in scope: this floor, or every floor (no plans)? */
+  _inScope(x, scope) {
+    const pl = Array.isArray(x.plans) ? x.plans : [];
+    return scope ? pl.includes(scope) : !pl.length;
+  }
+
+  /** 0.10: overlay actions on this floor (in the floor menu) and on every floor (card settings). */
   _renderActs() {
-    const box = this.querySelector("#oacts");
+    this._actsIn("#oacts", null);
+    this._actsIn("#oacts_f", this._curFloor());
+  }
+
+  _actsIn(sel, scope) {
+    const box = this.querySelector(sel);
     if (!box) return;
     const list = Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
+    const idx = list.map((_x, i) => i).filter((i) => this._inScope(list[i], scope));
     const plans = planSensors(this._hass).map((x) => ({ value: x.attributes.plan_id, label: x.attributes.plan_name || x.attributes.plan_id }));
     const ovName = (o) => (this._ovOptions().find((x) => x.value === o) || {}).label || o;
     const save = (next, redraw = true) => {
@@ -6524,8 +6588,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (redraw) this._renderActs();
     };
     const rb = (this._config.cleaning || {}).robot_buttons !== false;
-    box.innerHTML = `<div class="oaopt"></div>` + list.map((x, i) => `<div class="row" data-i="${i}"><button class="hd" data-aopen="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || `Action ${i + 1}`)}<small style="margin-left:auto">${cesc(ovName(x.overlay || "cleaning"))} · ${cesc(Array.isArray(x.plans) && x.plans.length ? x.plans.map((id) => (plans.find((q) => q.value === id) || {}).label || id).join(", ") : "every floor")}</small></button>${this._aopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-aadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add action</button>`;
-    box.querySelector(".oaopt").appendChild(this._form([{ name: "rb", selector: { boolean: {} } }], { rb }, { rb: "Cleaning: the robot's Start / Pause / Dock under the plan" }, (v) => {
+    box.innerHTML = (scope ? "" : `<div class="oaopt"></div>`) + idx.map((i) => [list[i], i]).map(([x, i]) => `<div class="row" data-i="${i}"><button class="hd" data-aopen="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || `Action ${i + 1}`)}<small style="margin-left:auto">${cesc(ovName(x.overlay || "cleaning"))} · ${cesc(Array.isArray(x.plans) && x.plans.length ? x.plans.map((id) => (plans.find((q) => q.value === id) || {}).label || id).join(", ") : "every floor")}</small></button>${this._aopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-aadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add action</button>`;
+    if (!scope) box.querySelector(".oaopt").appendChild(this._form([{ name: "rb", selector: { boolean: {} } }], { rb }, { rb: "Cleaning: the robot's Start / Pause / Dock under the plan" }, (v) => {
       const c = { ...(this._config.cleaning || {}) };
       if (v.rb) delete c.robot_buttons;
       else c.robot_buttons = false;
@@ -6536,7 +6600,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     }));
     box.querySelector("[data-aadd]").addEventListener("click", () => {
       this._aopen = list.length;
-      save([...list, { name: "Action", icon: "mdi:gesture-tap", overlay: "cleaning" }]);
+      save([...list, { name: "Action", icon: "mdi:gesture-tap", overlay: "cleaning", ...(scope ? { plans: [scope] } : {}) }]);
     });
     for (const el of box.querySelectorAll("[data-aopen]")) el.addEventListener("click", () => {
       const i = Number(el.dataset.aopen);
@@ -6582,9 +6646,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const redraw = v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || (v.st_show === "count" || v.st_show === "value") !== (data.st_show === "count" || data.st_show === "value");
       save(list.map((y, j) => (j === i ? nx : y)), redraw);
     }));
-    body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-amv="-1" ${i === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-amv="1" ${i === list.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-adel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
+    const at = idx.indexOf(i);
+    body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-amv="-1" ${at <= 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-amv="1" ${at >= idx.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-adel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
     for (const el of body.querySelectorAll("[data-amv]")) el.addEventListener("click", () => {
-      const j = i + Number(el.dataset.amv);
+      const j = idx[at + Number(el.dataset.amv)];
       const next = [...list];
       [next[i], next[j]] = [next[j], next[i]];
       this._aopen = j;
@@ -6708,11 +6773,18 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     });
   }
 
+  /** Light scenes on this floor (floor menu) and on every floor (card settings). */
   _renderScenes() {
-    const box = this.querySelector("#scenes");
+    this._scenesIn("#scenes", null);
+    this._scenesIn("#scenes_f", this._curFloor());
+  }
+
+  _scenesIn(sel, scope) {
+    const box = this.querySelector(sel);
     if (!box) return;
     const L = this._config.lights || {};
     const list = Array.isArray(L.scenes) ? L.scenes : [];
+    const idx = list.map((_x, i) => i).filter((i) => this._inScope(list[i], scope));
     const setList = (next, sections = true) => {
       const lights = { ...(this._config.lights || {}), scenes: next };
       if (!next.length) delete lights.scenes;
@@ -6723,10 +6795,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._emit();
       }
     };
-    box.innerHTML = list.map((s, i) => `<div class="row" data-i="${i}"><button class="hd" data-sopen="${i}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}<small style="margin-left:auto">${s.entity ? cesc(s.entity) : `${(s.lights || []).length} lights${s.states ? " · saved state" : ""}`}</small></button>${this._sopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-sadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add scene</button>`;
+    box.innerHTML = idx.map((i) => [list[i], i]).map(([s, i]) => `<div class="row" data-i="${i}"><button class="hd" data-sopen="${i}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}<small style="margin-left:auto">${s.entity ? cesc(s.entity) : `${(s.lights || []).length} lights${s.states ? " · saved state" : ""}`}</small></button>${this._sopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-sadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add scene</button>`;
     box.querySelector("[data-sadd]").addEventListener("click", () => {
       this._sopen = list.length;
-      setList([...list, { name: list.length ? `Scene ${list.length + 1}` : "Movie night", icon: "mdi:movie-open-outline", lights: [], brightness: 30 }]);
+      setList([...list, { name: list.length ? `Scene ${list.length + 1}` : "Movie night", icon: "mdi:movie-open-outline", lights: [], brightness: 30, ...(scope ? { plans: [scope] } : {}) }]);
     });
     for (const b of box.querySelectorAll("[data-sopen]")) b.addEventListener("click", () => {
       const i = Number(b.dataset.sopen);
@@ -6744,12 +6816,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "lights", selector: { entity: { multiple: true, filter: [{ domain: "light" }, { domain: "switch" }] } } },
         { name: "brightness", selector: { number: { min: 0, max: 100, step: 5, mode: "slider", unit_of_measurement: "%" } } },
         { name: "entity", selector: { entity: { filter: [{ domain: "scene" }, { domain: "script" }] } } },
+        { name: "plans", selector: { select: { options: planSensors(this._hass).map((x) => ({ value: x.attributes.plan_id, label: x.attributes.plan_name || x.attributes.plan_id })), multiple: true, mode: "list" } } },
       ],
-      { lights: [], brightness: 50, ...s },
-      { name: "Button name", icon: "Icon", lights: "Lights in this scene", brightness: "Brightness (0 = off), unless the state is saved below", entity: "…or run a Home Assistant scene / script instead" },
+      { lights: [], brightness: 50, plans: [], ...s },
+      { name: "Button name", icon: "Icon", lights: "Lights in this scene", brightness: "Brightness (0 = off), unless the state is saved below", entity: "…or run a Home Assistant scene / script instead", plans: "Floors (none ticked = every floor)" },
       (v) => {
         const next = list.map((x, j) => (j === i ? { ...v, ...(x.states ? { states: x.states } : {}) } : x));
         if (!next[i].entity) delete next[i].entity;
+        if (!(next[i].plans || []).length) delete next[i].plans;
+        if (JSON.stringify(next[i].plans || []) !== JSON.stringify(s.plans || [])) return setList(next);
         if (next[i].states) for (const e of Object.keys(next[i].states)) if (!(next[i].lights || []).includes(e)) delete next[i].states[e];
         setList(next, false);
         const hd = box.querySelector(`.row[data-i="${i}"] .hd`);
@@ -6882,6 +6957,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       fov.innerHTML = `<option value="">All overlays</option>${ovs.map((o) => `<option value="${cesc(o)}" ${this._fov === o ? "selected" : ""}>Only in ${cesc(eng._ovDef(o).label)}</option>`).join("")}`;
     }
     const items = eng._items(a).map((it) => ({ ...it, label: it.bond || (it.parts && it.parts.length) ? `${it.name} (bonded)` : it.phantom ? `${it.name} (phantom)` : it.name }));
+    // 0.10: robots on the plan's robot list but not placed: their name and icon are set here too.
+    const known = new Set(items.flatMap((it) => [it.main_entity, ...(it.entities || [])]));
+    for (const eid of Object.keys(a.robots || {})) {
+      if (known.has(eid) || !this._hass.states[eid]) continue;
+      const nm = this._hass.states[eid].attributes.friendly_name || eid;
+      items.push({ id: `robot:${eid}`, name: nm, main_entity: eid, entities: [eid], label: `${nm} (robot)` });
+    }
     items.sort((x, y) => x.label.localeCompare(y.label));
     const devs = this._config.devices || {};
     const info = (it) => ovs.map((o) => {

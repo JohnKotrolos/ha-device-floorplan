@@ -1,6 +1,9 @@
 {
   "domain": "device_floorplan",
   "name": "Device Floorplan",
+  "after_dependencies": [
+    "camera"
+  ],
   "codeowners": [
     "@JohnKotrolos"
   ],
@@ -20,5 +23,5 @@
   "issue_tracker": "https://github.com/JohnKotrolos/ha-device-floorplan/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.10.0b6"
+  "version": "0.10.0b7"
 }

@@ -2,7 +2,7 @@
 
 DOMAIN = "device_floorplan"
 NAME = "Device Floorplan"
-VERSION = "0.10.0b6"
+VERSION = "0.10.0b7"
 
 STORAGE_KEY = DOMAIN
 STORAGE_VERSION = 1

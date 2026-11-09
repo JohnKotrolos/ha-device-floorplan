@@ -21,6 +21,7 @@ from .const import (
 from .devices import build_plan_payload, list_devices
 from .entity import plan_device_info, sync_plan_device
 from .store import FloorplanData
+from .valetudo import async_setup_valetudo
 
 
 async def async_setup_entry(
@@ -36,6 +37,7 @@ async def async_setup_entry(
         async_add_entities([PlanSensor(data, plan_id)])
 
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_PLAN_ADDED, _plan_added))
+    async_setup_valetudo(hass, entry, async_add_entities)
 
 
 class PlanSensor(SensorEntity):
@@ -50,7 +52,7 @@ class PlanSensor(SensorEntity):
             "plan_id", "plan_name", "kind", "floor_id", "level", "image_type",
             "image_url", "image_fallback_url", "image_width", "image_height", "frame", "metres_per_px_x",
             "metres_per_px_y", "real_width_m", "real_height_m", "approx_count",
-            "devices", "entities", "bonds", "phantoms", "zigbee_devices", "areas", "robots", "cleaned", "clean_log",
+            "devices", "entities", "bonds", "phantoms", "zigbee_devices", "areas", "robots", "cleaned", "clean_log", "room_area", "pace", "pace_default",
         }
     )
 

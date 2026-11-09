@@ -257,6 +257,9 @@ class FloorplanData:
             "robots": plan.get("robots", {}),
             "cleaned": plan.get("cleaned", {}),
             "clean_log": plan.get("clean_log", {}),
+            "room_area": plan.get("room_area", {}),
+            "pace": plan.get("pace", {}),
+            "pace_default": plan.get("pace_default", 7),
             "device_id": self.plan_device_id(plan_id),
             "image_entity": self.entity_id_for(plan_id, "image"),
             "sensor_entity": self.entity_id_for(plan_id, "sensor"),
@@ -444,8 +447,15 @@ class FloorplanData:
                 mp = r.get("map")
                 if isinstance(mp, dict):
                     entry["map"] = {"name": str(mp["name"])[:80] if mp.get("name") else None, "rooms": [str(x)[:40] for x in (mp.get("rooms") or [])][:60]}
+                if isinstance(r.get("op"), (int, float)):
+                    entry["op"] = max(0, min(100, int(r["op"])))  # map picture opacity in the robot dialog
                 robots[str(eid)] = entry
             plan["robots"] = robots
+        if "pace" in changes:
+            # 0.10: days between cleanings per room (0 = never due); pace_default for the others.
+            plan["pace"] = {str(k): max(0.0, min(365.0, float(v))) for k, v in (changes["pace"] or {}).items() if isinstance(v, (int, float))}
+        if "pace_default" in changes:
+            plan["pace_default"] = max(0.0, min(365.0, float(changes["pace_default"] or 0)))
         if "anchors_centered" in changes:
             plan["anchors_centered"] = bool(changes["anchors_centered"])
         if "sort" in changes:

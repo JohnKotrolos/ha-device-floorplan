@@ -15,6 +15,7 @@ from homeassistant.helpers import (
 )
 
 from .const import DOMAIN
+from .robots import PACE, due_rooms
 from .store import FloorplanData
 
 _LOGGER = logging.getLogger(__name__)
@@ -1011,6 +1012,11 @@ def build_plan_payload(
         # A copy: the plan's dict changes in place, and HA only writes a state whose attributes changed.
         "cleaned": {k: dict(v) for k, v in (plan.get("cleaned") or {}).items()},
         "clean_log": {k: [dict(x) for x in v] for k, v in (plan.get("clean_log") or {}).items()},
+        "room_area": {k: dict(v) for k, v in (plan.get("room_area") or {}).items()},
+        "pace": dict(plan.get("pace") or {}),
+        "pace_default": plan.get("pace_default", PACE),
+        # Rooms due for cleaning, for automations ("clean what is due").
+        "due": due_rooms(plan),
     }
 
 

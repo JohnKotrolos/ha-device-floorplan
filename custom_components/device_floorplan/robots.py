@@ -6,15 +6,17 @@ room: the position goes through the plan's alignment (m) into the room shapes dr
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
+from math import hypot
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 
 from .const import SIGNAL_PLAN_UPDATED
 
@@ -22,6 +24,13 @@ POS_KEYS = ("vacuum_position", "robot_position", "position")
 ROOM_KEYS = ("vacuum_room", "current_segment", "current_room")
 MAP_KEYS = ("map_name", "selected_map", "current_map", "active_map", "map_id")
 REFRESH = 60  # seconds between two "still cleaning this room" updates
+PATH_KEYS = ("path", "vacuum_path", "cleaned_path")
+SWATH = 0.22  # metres cleaned beside the path, when the robot doesn't report the area it cleaned
+COUNTS = 0.6  # a room counts as cleaned when the robot did at least this share of what it usually does there
+PACE = 7  # days between cleanings, unless set per plan or room
+# The robot's "area cleaned in this run" sensor (not its lifetime total).
+AREA_RE = re.compile(r"(clean(ed|ing)?_?area|statistics_area|current_area|area_cleaned)")
+END_STATES = ("docked", "idle", "returning", "charging", "off")
 
 
 def _pt(v: Any) -> tuple[float, float] | None:
@@ -82,8 +91,59 @@ def _inside(x: float, y: float, poly: list) -> bool:
     return hit
 
 
+def _lines(v: Any, out: list | None = None, d: int = 0) -> list[list[tuple[float, float]]]:
+    """Every polyline in a path attribute, whatever its nesting (same rule as the card)."""
+    out = [] if out is None else out
+    if d > 6 or not isinstance(v, (list, dict)):
+        return out
+    if isinstance(v, dict):
+        for w in v.values():
+            _lines(w, out, d + 1)
+        return out
+    pts = [_pt(p) for p in v]
+    if len(v) > 1 and all(pts):
+        out.append(pts)
+    elif len(v) > 3 and len(v) % 2 == 0 and all(isinstance(n, (int, float)) for n in v):
+        out.append([(float(v[i]), float(v[i + 1])) for i in range(0, len(v), 2)])
+    else:
+        for w in v:
+            _lines(w, out, d + 1)
+    return out
+
+
+def pace_of(plan: dict[str, Any], area: str) -> float:
+    """Days between cleanings for a room (0 = never due)."""
+    v = (plan.get("pace") or {}).get(area)
+    if v is None:
+        v = plan.get("pace_default", PACE)
+    try:
+        return max(0.0, float(v))
+    except (TypeError, ValueError):
+        return PACE
+
+
+def due_rooms(plan: dict[str, Any], now: datetime | None = None) -> list[str]:
+    """Rooms a robot cleaned before and that are due again (for automations: "clean what is due")."""
+    if not plan.get("robots"):
+        return []
+    now = now or datetime.now(timezone.utc)
+    hidden = set(plan.get("hidden_rooms") or [])
+    out = []
+    for area, c in (plan.get("cleaned") or {}).items():
+        days = pace_of(plan, area)
+        if area in hidden or not days or not c.get("t"):
+            continue
+        try:
+            age = (now - datetime.fromisoformat(c["t"])).total_seconds() / 86400
+        except (TypeError, ValueError):
+            continue
+        if age >= days:
+            out.append(area)
+    return sorted(out)
+
+
 class RobotWatcher:
-    """Follows every robot on every plan and stamps the room it cleans."""
+    """Follows every robot on every plan and stamps the room it cleans, with how much of it."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, data: Any) -> None:
         self.hass = hass
@@ -93,11 +153,19 @@ class RobotWatcher:
         self._watched: tuple[str, ...] = ()
         # The room each robot is in right now, per plan: {(plan, vacuum): {"area", "start", "last"}}.
         self._visit: dict[tuple[str, str], dict[str, Any]] = {}
+        # This run, per plan and robot: {"rooms": {area: m²}, "prev": {area: entry before the run}, "base": m², "cur": area}.
+        self._run: dict[tuple[str, str], dict[str, Any]] = {}
+        # Rooms asked with vacuum.clean_area, for robots that don't say where they are.
+        self._asked: dict[str, list[str]] = {}
+        self._due: dict[str, list[str]] = {}
+        self._ended: set[str] = set()
 
     @callback
     def async_start(self) -> None:
         self.entry.async_on_unload(async_dispatcher_connect(self.hass, SIGNAL_PLAN_UPDATED, self._resubscribe))
         self.entry.async_on_unload(self._stop)
+        self.entry.async_on_unload(self.hass.bus.async_listen(EVENT_CALL_SERVICE, self._service))
+        self.entry.async_on_unload(async_track_time_interval(self.hass, self._tick, timedelta(minutes=10)))
         if self.hass.is_running:
             self._resubscribe()
         else:
@@ -126,23 +194,98 @@ class RobotWatcher:
             self._unsub = async_track_state_change_event(self.hass, list(watched), self._changed)
 
     @callback
+    def _tick(self, _now: Any = None) -> None:
+        """Rooms become due with time alone: refresh the plan sensor when its due list changes."""
+        for plan_id, plan in self.data.plans.items():
+            due = due_rooms(plan)
+            if plan_id in self._due and due != self._due[plan_id]:
+                async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+            self._due[plan_id] = due
+
+    @callback
+    def _service(self, event: Event) -> None:
+        d = event.data
+        if d.get("domain") != "vacuum" or d.get("service") != "clean_area":
+            return
+        sd = d.get("service_data") or {}
+        areas = sd.get("cleaning_area_id") or []
+        eids = sd.get("entity_id") or []
+        areas = [areas] if isinstance(areas, str) else list(areas)
+        for eid in [eids] if isinstance(eids, str) else eids:
+            self._asked[eid] = [str(a) for a in areas]
+
+    @callback
     def _changed(self, event: Event) -> None:
         eid = event.data["entity_id"]
         for plan_id, plan in self.data.plans.items():
             for vac, r in (plan.get("robots") or {}).items():
                 if eid in (vac, r.get("source")):
                     self._stamp(plan_id, plan, vac, r)
+        for vac in self._ended:
+            self._asked.pop(vac, None)
+        self._ended.clear()
+
+    def _area_now(self, vac: str) -> float | None:
+        """The robot's "cleaned in this run" sensor, in m² (None when it has none)."""
+        reg = er.async_get(self.hass)
+        ent = reg.async_get(vac)
+        if not ent or not ent.device_id:
+            return None
+        for e in er.async_entries_for_device(reg, ent.device_id):
+            if e.domain != "sensor" or "total" in e.entity_id or not AREA_RE.search(f"{e.entity_id} {e.original_name or ''} {e.translation_key or ''}".lower()):
+                continue
+            st = self.hass.states.get(e.entity_id)
+            try:
+                v = float(st.state) if st else None
+            except ValueError:
+                continue
+            if v is None:
+                continue
+            unit = str(st.attributes.get("unit_of_measurement") or "")
+            return v / 10000 if unit.startswith("cm") else v / 1e6 if unit.startswith("mm") else v
+        return None
+
+    def _path_area(self, plan: dict[str, Any], m: list, attrs: dict[str, Any], area: str) -> float | None:
+        """m² the robot covered in a room this run, from its path: length inside the room × SWATH."""
+        path = next((attrs[k] for k in PATH_KEYS if attrs.get(k)), None)
+        poly = (plan.get("shapes") or {}).get(area)
+        if not path or not poly or len(poly) < 3:
+            return None
+        s = self.data.scale(plan)
+        w, h = plan.get("width") or 0, plan.get("height") or 0
+        # Metres per plan % when the plan is measured, else robot units taken as mm.
+        mx = w * s["x"] / 100 if s["x"] and w else None
+        my = h * s["y"] / 100 if s["y"] and h else None
+        xs = [p[0] for p in poly]
+        ys = [p[1] for p in poly]
+        box = (min(xs), min(ys), max(xs), max(ys))
+        length = 0.0
+        for line in _lines(path):
+            prev = None
+            for rx, ry in line:
+                x = m[0] * rx + m[1] * ry + m[2]
+                y = m[3] * rx + m[4] * ry + m[5]
+                inside = box[0] <= x <= box[2] and box[1] <= y <= box[3] and _inside(x, y, poly)
+                if inside and prev:
+                    length += hypot((x - prev[0]) * mx, (y - prev[1]) * my) if mx and my else hypot(rx - prev[2], ry - prev[3]) / 1000
+                prev = (x, y, rx, ry) if inside else None
+        return length * SWATH
 
     @callback
     def _stamp(self, plan_id: str, plan: dict[str, Any], vac: str, r: dict[str, Any]) -> None:
         vs = self.hass.states.get(vac)
-        if not vs or vs.state != "cleaning":
+        state = vs.state if vs else "unavailable"
+        if state != "cleaning":
             self._close(plan_id, plan, vac)
+            if state in END_STATES:
+                self._end_run(plan_id, plan, vac)
             return
         ms = self.hass.states.get(r["source"]) if r.get("source") else None
         attrs = {**vs.attributes, **(ms.attributes if ms else {})}
         if not map_match(r.get("map"), attrs):
             return
+        run = self._run.setdefault((plan_id, vac), {"rooms": {}, "prev": {}, "base": None, "cur": None, "seen": False})
+        total = self._area_now(vac)
         area = None
         # HA's own room mapping (2026.3+) first, else where the robot is on the plan's room shapes.
         room = next((attrs[k] for k in ROOM_KEYS if attrs.get(k) not in (None, "") and not isinstance(attrs[k], (dict, list))), None)
@@ -157,8 +300,19 @@ class RobotWatcher:
             y = m[3] * pos[0] + m[4] * pos[1] + m[5]
             hidden = set(plan.get("hidden_rooms") or [])
             area = next((a for a, poly in (plan.get("shapes") or {}).items() if a not in hidden and len(poly) >= 3 and _inside(x, y, poly)), None)
+        # Area cleaned since the last update goes to the room the robot was in.
+        if total is not None:
+            if run["base"] is not None and run["cur"] and total >= run["base"]:
+                run["rooms"][run["cur"]] = run["rooms"].get(run["cur"], 0.0) + total - run["base"]
+            run["base"] = total
+        run["cur"] = area
         if not area:
             return
+        run["seen"] = True
+        if total is None and isinstance(m, list) and len(m) == 6:
+            cov = self._path_area(plan, m, attrs, area)
+            if cov is not None:
+                run["rooms"][area] = cov
         now = datetime.now(timezone.utc)
         v = self._visit.get((plan_id, vac))
         if v and v["area"] == area:
@@ -168,15 +322,67 @@ class RobotWatcher:
             self._visit[(plan_id, vac)] = {"area": area, "start": now, "last": now}
         cleaned = plan.setdefault("cleaned", {})
         prev = cleaned.get(area) or {}
+        if area not in run["prev"]:
+            run["prev"][area] = dict(prev) if prev else None
         try:
             age = (now - datetime.fromisoformat(prev["t"])).total_seconds() if prev.get("t") else None
         except (TypeError, ValueError):
             age = None
         if prev.get("by") == vac and age is not None and age < REFRESH:
             return
-        cleaned[area] = {"t": now.isoformat(timespec="seconds"), "by": vac}
+        cleaned[area] = {"t": now.isoformat(timespec="seconds"), "by": vac, **self._cover(plan, area, run["rooms"].get(area))}
         self.data.touch()
         async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+
+    @staticmethod
+    def _cover(plan: dict[str, Any], area: str, m2: float | None) -> dict[str, Any]:
+        """m² cleaned in a room this run, and its share of what the robot usually cleans there."""
+        if m2 is None:
+            return {}
+        out: dict[str, Any] = {"m2": round(m2, 1)}
+        ref = (plan.get("room_area") or {}).get(area) or {}
+        if ref.get("a") and ref.get("n", 0) >= 2:
+            out["pct"] = min(100, round(m2 / ref["a"] * 100))
+        return out
+
+    @callback
+    def _end_run(self, plan_id: str, plan: dict[str, Any], vac: str) -> None:
+        """Back at the dock: rooms only partly done don't count as cleaned; learn how big each room is."""
+        run = self._run.pop((plan_id, vac), None)
+        asked = self._asked.get(vac)
+        if run is not None:
+            self._ended.add(vac)
+        changed = False
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        cleaned = plan.setdefault("cleaned", {})
+        if run and run["seen"]:
+            learned = plan.setdefault("room_area", {})
+            for area, m2 in run["rooms"].items():
+                ref = learned.get(area) or {}
+                share = m2 / ref["a"] if ref.get("a") and ref.get("n", 0) >= 2 else 1
+                if share < COUNTS and area in run["prev"]:
+                    # A quick pass: keep the last real cleaning.
+                    if run["prev"][area]:
+                        cleaned[area] = run["prev"][area]
+                    else:
+                        cleaned.pop(area, None)
+                elif area in cleaned:
+                    cleaned[area] = {**cleaned[area], **self._cover(plan, area, m2)}
+                if m2 > 0.5:
+                    # The most the robot usually cleans there, slowly forgetting (furniture moves).
+                    a = max(m2, (ref.get("a") or 0) * 0.97)
+                    learned[area] = {"a": round(a, 2), "n": min(ref.get("n", 0) + 1, 99)}
+                changed = True
+        elif asked and run is not None:
+            # The robot doesn't say where it is: the rooms it was asked to clean.
+            areas = {a for a in (self.data.plans[plan_id].get("shapes") or {})}
+            for area in asked:
+                if area in areas:
+                    cleaned[area] = {"t": now, "by": vac}
+                    changed = True
+        if changed:
+            self.data.touch()
+            async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
 
     @callback
     def _close(self, plan_id: str, plan: dict[str, Any], vac: str) -> None:

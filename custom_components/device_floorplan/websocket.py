@@ -156,6 +156,8 @@ def ws_plan_create(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Optional("align"): {vol.Optional(k): vol.Coerce(float) for k in ("x", "y")},
         vol.Optional("frame_ref"): cv.boolean,
         vol.Optional("robots"): {cv.string: dict},
+        vol.Optional("pace"): {cv.string: vol.Coerce(float)},
+        vol.Optional("pace_default"): vol.Coerce(float),
     }
 )
 @callback
