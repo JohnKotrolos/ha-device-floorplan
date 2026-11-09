@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.9.1).
+ * Device Floorplan – dashboard card (v0.10.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.9.1";
+const CARD_VERSION = "0.10.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -264,6 +264,93 @@ function setShadow(el, html) {
 const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
+
+// ---- 0.10: robot vacuums. A map integration (Xiaomi Cloud Map Extractor, Dreame, Roborock Custom Map, AnyVac…)
+// gives the robot, dock, path and rooms in its own units; m turns them into % of the plan image.
+const RB_ACTIVE = ["cleaning", "returning", "paused", "error"];
+const RB_COL = { cleaning: "33,150,243", returning: "0,172,193", paused: "251,140,0", error: "229,57,53", docked: "120,144,156", idle: "120,144,156" };
+function rbPt(v) {
+  if (Array.isArray(v) && v.length >= 2 && v.length <= 3 && num(v[0]) && num(v[1])) return { x: +v[0], y: +v[1], a: num(v[2]) ? +v[2] : null };
+  if (v && typeof v === "object" && !Array.isArray(v) && num(v.x) && num(v.y)) return { x: +v.x, y: +v.y, a: num(v.a) ? +v.a : num(v.angle) ? +v.angle : null };
+  return null;
+}
+/** Every polyline inside a path attribute, whatever its nesting ({x,y} lists, [x,y] lists, flat numbers). */
+function rbLines(v, out = [], d = 0) {
+  if (!v || d > 6 || typeof v !== "object") return out;
+  if (Array.isArray(v)) {
+    const pts = v.map(rbPt);
+    if (v.length > 1 && pts.every(Boolean)) out.push(pts);
+    else if (v.length > 3 && v.length % 2 === 0 && v.every((n) => typeof n === "number")) {
+      const p = [];
+      for (let i = 0; i < v.length; i += 2) p.push({ x: v[i], y: v[i + 1] });
+      out.push(p);
+    } else for (const w of v) rbLines(w, out, d + 1);
+  } else for (const w of Object.values(v)) rbLines(w, out, d + 1);
+  return out;
+}
+function rbRooms(v) {
+  const list = Array.isArray(v) ? v.map((r, i) => [String((r && (r.id ?? r.segment_id ?? r.room_id)) ?? i), r]) : v && typeof v === "object" ? Object.entries(v) : [];
+  return list.map(([k, r]) => {
+    if (!r || typeof r !== "object") return null;
+    const b = Array.isArray(r.box) ? r.box : [r.x0, r.y0, r.x1, r.y1];
+    if (!b.every(num)) return null;
+    const id = String(r.room_id ?? r.segment_id ?? r.id ?? k);
+    return { id, name: String(r.name || r.room_name || ""), x0: Math.min(b[0], b[2]), y0: Math.min(b[1], b[3]), x1: Math.max(b[0], b[2]), y1: Math.max(b[1], b[3]) };
+  }).filter(Boolean);
+}
+/** What a robot reports now: its vacuum entity's state plus the map entity's attributes. */
+function rbRead(hass, eid, cfg) {
+  const vs = hass.states[eid];
+  const ms = cfg && cfg.source ? hass.states[cfg.source] : null;
+  const A = { ...((vs && vs.attributes) || {}), ...((ms && ms.attributes) || {}) };
+  const lines = rbLines(A.path || A.vacuum_path || A.cleaned_path);
+  const calib = Array.isArray(A.calibration_points) ? A.calibration_points.map((c) => ({ r: rbPt(c && c.vacuum), p: rbPt(c && c.map) })).filter((c) => c.r && c.p) : [];
+  const room = A.vacuum_room ?? A.current_segment ?? A.current_room ?? null;
+  return {
+    state: vs ? vs.state : "unavailable",
+    pos: rbPt(A.vacuum_position || A.robot_position || A.position),
+    dock: rbPt(A.charger || A.charger_position || A.dock_position),
+    lines,
+    rooms: rbRooms(A.rooms || A.segments),
+    room: room != null && typeof room !== "object" ? String(room) : null,
+    calib,
+    pic: ms && ms.attributes.entity_picture,
+  };
+}
+const rbApply = (m, p) => ({ x: m[0] * p.x + m[1] * p.y + m[2], y: m[3] * p.x + m[4] * p.y + m[5] });
+/** Best fit robot → plan (scale, turn, move; mirrored or not) from pairs {r:{x,y}, p:{x,y} in %}. */
+function rbFit(pairs, ratio) {
+  if (pairs.length < 2) return null;
+  let best = null;
+  for (const fy of [-1, 1]) {
+    const R = pairs.map((q) => [q.r.x, fy * q.r.y]);
+    const P = pairs.map((q) => [q.p.x * ratio, q.p.y]);
+    const n = R.length;
+    const rc = [R.reduce((t, q) => t + q[0], 0) / n, R.reduce((t, q) => t + q[1], 0) / n];
+    const pc = [P.reduce((t, q) => t + q[0], 0) / n, P.reduce((t, q) => t + q[1], 0) / n];
+    let ar = 0;
+    let ai = 0;
+    let sr = 0;
+    for (let i = 0; i < n; i++) {
+      const [rx, ry] = [R[i][0] - rc[0], R[i][1] - rc[1]];
+      const [px, py] = [P[i][0] - pc[0], P[i][1] - pc[1]];
+      ar += px * rx + py * ry;
+      ai += py * rx - px * ry;
+      sr += rx * rx + ry * ry;
+    }
+    if (!sr) continue;
+    ar /= sr;
+    ai /= sr;
+    const tu = pc[0] - (ar * rc[0] - ai * rc[1]);
+    const tv = pc[1] - (ai * rc[0] + ar * rc[1]);
+    let err = 0;
+    for (let i = 0; i < n; i++) err += (ar * R[i][0] - ai * R[i][1] + tu - P[i][0]) ** 2 + (ai * R[i][0] + ar * R[i][1] + tv - P[i][1]) ** 2;
+    // Two rooms fit both ways: robot maps usually count y upwards, so mirrored wins a tie.
+    if (!best || err < best.err - 1e-6) best = { err, m: [ar / ratio, (-ai * fy) / ratio, tu / ratio, ai, ar * fy, tv] };
+  }
+  return best && best.m;
+}
+if (!window.__dfcRobot) window.__dfcRobot = { read: rbRead, apply: rbApply, fit: rbFit, active: RB_ACTIVE, col: RB_COL };
 
 // ---- Night look and light pools (#74): pure CSS over the one plan image.
 const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["live", "lights"], dim_quiet: true, shutters: true, warm_dusk: false };
@@ -746,6 +833,15 @@ ha-card.dock-right { flex-direction: row; }
 .prow .av { width:26px; height:26px; border-radius:50%; background: var(--dfc-accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; overflow:hidden; }
 .prow .av img { width:100%; height:100%; object-fit:cover; }
 .box img.plan { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:block; user-select:none; -webkit-user-drag:none; }
+svg.rpath { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+svg.rpath polyline { fill:none; stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; opacity:.55; vector-effect: non-scaling-stroke; }
+.rdock { position:absolute; transform: translate(-50%,-50%); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); color: var(--secondary-text-color); box-shadow: 0 1px 3px rgba(0,0,0,.3); --mdc-icon-size:14px; pointer-events:none; }
+.m.robot { z-index:3; }
+.m.robot .ic { background: color-mix(in srgb, var(--dfc-c) 18%, var(--card-background-color, #fff)); color: var(--dfc-c); }
+.m.robot .rhd { position:absolute; inset:-7px; pointer-events:none; }
+.m.robot .rhd::before { content:""; position:absolute; left:50%; top:0; transform: translateX(-50%); border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:7px solid var(--dfc-c); }
+.m.robot.error .ic, .m.robot.paused .ic { animation: dfcrb 1.6s ease-in-out infinite; }
+@keyframes dfcrb { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--dfc-c) 30%, transparent), 0 1px 6px rgba(0,0,0,.35); } }
 svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 svg.lines line { stroke-linecap: round; }
 svg.lines line.lead { stroke: var(--secondary-text-color); stroke-width:1; opacity:.55; }
@@ -2499,7 +2595,64 @@ class DeviceFloorplanCard extends HTMLElement {
       if (isSel && !sp.length && !((ov === "live" || ov === "lights") && this._applOf(item))) sp = this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, on: true, dim: false, cls: "" }));
       out.push(...sp);
     }
+    return this._robotSpecs(a, ov, out);
+  }
+
+  /** 0.10: a robot out cleaning is one marker at its live position (tap / hold as the device) instead of its usual one;
+   *  its path and dock are drawn by _robotHtml. */
+  _robotSpecs(a, ov, out) {
+    this._rb = [];
+    if (ov !== "live") return out;
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    let items = null;
+    for (const [eid, cfg] of Object.entries(a.robots || {})) {
+      const st = this._hass.states[eid];
+      if (!cfg || !Array.isArray(cfg.m) || !st) continue;
+      const d = rbRead(this._hass, eid, cfg);
+      if (!RB_ACTIVE.includes(d.state) || !d.pos) continue;
+      items = items || this._items(a);
+      const item = items.find((it) => [it.main_entity, ...(it.entities || []), ...(it.allEntities || [])].includes(eid)) || { id: `robot:${eid}`, name: st.attributes.friendly_name || eid, main_entity: eid, entities: [eid] };
+      if (this._hidden(item, ov)) continue;
+      const p = rbApply(cfg.m, d.pos);
+      let head = null;
+      if (d.pos.a != null) {
+        const r = (d.pos.a * Math.PI) / 180;
+        const q = rbApply(cfg.m, { x: d.pos.x + Math.cos(r), y: d.pos.y + Math.sin(r) });
+        head = (Math.atan2(q.y - p.y, (q.x - p.x) * ratio) * 180) / Math.PI + 90;
+      }
+      const col = RB_COL[d.state] || RB_COL.idle;
+      this._rb.push({ eid, cfg, d, col });
+      out = out.filter((x) => x.item.id !== item.id);
+      out.push({ type: "robot", kind: "appliance", key: `robot:${eid}`, item, eid, ents: [eid], name: this._dev(item.id).name || item.name, x: +p.x.toFixed(3), y: +p.y.toFixed(3), on: true, color: `rgb(${col})`, head, state: d.state });
+    }
     return out;
+  }
+
+  /** 0.10: the cleaning path (a layer) and the dock of each robot out cleaning. */
+  _robotHtml() {
+    if (!(this._rb || []).length) return "";
+    const path = this._layerOn(this._overlay, "rpath", true);
+    let svg = "";
+    let html = "";
+    for (const r of this._rb) {
+      if (path) {
+        for (const line of r.d.lines) {
+          const step = Math.max(1, Math.ceil(line.length / 1500));
+          const pts = line.filter((_p, i) => i % step === 0 || i === line.length - 1).map((p0) => rbApply(r.cfg.m, p0)).map((p0) => `${p0.x.toFixed(2)},${p0.y.toFixed(2)}`).join(" ");
+          svg += `<polyline points="${pts}" style="stroke:rgb(${r.col})"></polyline>`;
+        }
+      }
+      if (r.d.dock) {
+        const p = rbApply(r.cfg.m, r.d.dock);
+        html += `<div class="rdock" style="left:${p.x.toFixed(3)}%;top:${p.y.toFixed(3)}%"><ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon></div>`;
+      }
+    }
+    return `${svg ? `<svg class="rpath" viewBox="0 0 100 100" preserveAspectRatio="none">${svg}</svg>` : ""}${html}`;
+  }
+
+  _robotMarker(s) {
+    const word = { cleaning: "Cleaning", returning: "Returning", paused: "Paused", error: "Error" }[s.state] || s.state;
+    return `<button class="m robot on ${s.state} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name} · ${word}`)}"><span class="ic"><ha-icon icon="mdi:robot-vacuum"></ha-icon>${s.head != null ? `<i class="rhd" style="transform:rotate(${s.head.toFixed(1)}deg)"></i>` : ""}</span><span class="tip">${cesc(s.name)}<span class="tst"> · ${cesc(word)}</span></span></button>`;
   }
 
   /** Does this item show up in this overlay at all (ignoring its current state)? Used by the editor (#52). */
@@ -3334,6 +3487,7 @@ class DeviceFloorplanCard extends HTMLElement {
       for (const item of this._items(a)) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") watch.add(e);
     }
     if (this._peopleShown()) for (const pp of this._people()) for (const e of [pp.entity, pp.room, pp.room2]) if (e) watch.add(e);
+    if (ov === "live") for (const [eid, r] of Object.entries(a.robots || {})) for (const e of [eid, r && r.source]) if (e) watch.add(e);
     this._watch = [...watch].sort();
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     const nNew = Number((this._hass.states["sensor.device_floorplan_new_devices"] || {}).state) || 0;
@@ -3395,8 +3549,8 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
           ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
-          <svg class="lines"></svg>
-          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
+          ${this._robotHtml()}<svg class="lines"></svg>
+          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
         ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
@@ -3887,7 +4041,8 @@ class DeviceFloorplanCard extends HTMLElement {
     };
     const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
     const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
-    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}`;
+    const rpath = ov === "live" && (this._rb || []).length ? lay("rpath", "mdi:vector-polyline", "Cleaning path") : "";
+    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
     return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
       <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>

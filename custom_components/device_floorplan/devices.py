@@ -1007,4 +1007,20 @@ def build_plan_payload(
         "zigbee_devices": zigbee,
         "aps": aps,
         "areas": areas,
+        "robots": _robots(hass, plan),
     }
+
+
+def _robots(hass: HomeAssistant, plan: dict[str, Any]) -> dict[str, Any]:
+    """0.10: robot vacuums on this plan, with HA's room mapping (2026.3+) as {segment id: area id}."""
+    out: dict[str, Any] = {}
+    ent_reg = er.async_get(hass)
+    for eid, r in (plan.get("robots") or {}).items():
+        entry = dict(r)
+        ent = ent_reg.async_get(eid)
+        mapping = ((ent.options.get("vacuum") or {}).get("area_mapping") if ent else None) or {}
+        seg = {str(s): area for area, segs in mapping.items() for s in (segs or [])}
+        if seg:
+            entry["seg"] = seg
+        out[eid] = entry
+    return out

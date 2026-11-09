@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.9.1";
+const VERSION = "0.10.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -138,6 +138,7 @@ function lsSet(key, val) {
 }
 
 const SVG = {
+  robot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="8.5" r="2"/><path d="M7 15.5h10"/></svg>',
   undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
   redo: '<svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -266,6 +267,17 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .frstage .frl.v { top:0; bottom:0; width:16px; margin-left:-8px; cursor:ew-resize; background: linear-gradient(90deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
 .frstage .frl.h { left:0; right:0; height:16px; margin-top:-8px; cursor:ns-resize; background: linear-gradient(0deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
 .alstage img { position:absolute; object-fit:fill; }
+.rbstage { cursor: move; }
+.rbstage #rbdraw { position:absolute; inset:0; pointer-events:none; }
+.rbsvg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+.rbsvg polygon { fill: rgba(33,150,243,.14); stroke:#2196f3; stroke-width:1.5; vector-effect: non-scaling-stroke; }
+.rbsvg polyline { fill:none; stroke:#2196f3; stroke-width:1.5; opacity:.6; vector-effect: non-scaling-stroke; }
+.rbname { position:absolute; transform: translate(-50%,-50%); font-size:11px; line-height:1.5; padding:0 6px; border-radius:8px; background: rgba(33,150,243,.88); color:#fff; white-space:nowrap; }
+.rbdot { position:absolute; transform: translate(-50%,-50%); width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.rbdot.dock { background:#fff; color:#f9a825; }
+.rbdot.bot { background:#2196f3; border:2px solid #fff; }
+.rbrow { display:flex; gap:12px; flex-wrap:wrap; } .rbrow label.f { flex:1 1 220px; }
+.rbtools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 0; } .rbtools .btn { padding:6px 10px; } .rbgap { flex:1; }
 .alstage .alref { opacity:.45; filter: grayscale(.6); pointer-events:none; }
 .alstage .alimg { opacity:.72; cursor:move; outline: 2px solid var(--df-primary); pointer-events:auto; }
 .frvals { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
@@ -1613,6 +1625,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <button data-act="settings" role="menuitem">${SVG.gear}${isView ? "Plan" : "Floor"} settings</button>
       <button data-act="rename" role="menuitem">${SVG.edit}Rename</button>
       ${p.image_url ? (this._laterFloor(p) ? `<button data-act="alignplan" role="menuitem">${SVG.glue}Align with ${esc(this._laterFloor(p).name)}…</button>` : `<button data-act="frameplan" role="menuitem">${SVG.glue}${p.kind === "floor" ? "Frame the house…" : "Frame the plan…"}</button>`) : ""}
+      ${p.image_url && this._rbVacuums().length ? `<button data-act="robotdlg" role="menuitem">${SVG.robot}Robot vacuum…</button>` : ""}
       <button data-act="replaceimg" role="menuitem">${SVG.image}Replace image</button>
       <button data-act="export" role="menuitem">${SVG.download}Export…</button>
       <button data-act="moveplan" data-dir="-1" role="menuitem" ${canL ? "" : "disabled"}${floorTip}>← Move left</button>
@@ -3133,6 +3146,223 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div class="acts"><button class="btn" data-act="closedlg">Not now</button><button class="btn primary" data-act="alsave">Save</button></div>`, 820);
   }
 
+  // -------------------------------------------------------------- 0.10: robot vacuums
+  _rbVacuums() {
+    return Object.keys((this._hass && this._hass.states) || {}).filter((e) => e.startsWith("vacuum.")).sort();
+  }
+
+  /** Map entities: anything reporting a robot position or map calibration; the robot's own first. */
+  _rbSources(eid) {
+    const obj = String(eid || "").split(".")[1] || "";
+    const list = Object.values(this._hass.states).filter((st) => /^(camera|image|sensor|vacuum)\./.test(st.entity_id) && st.attributes && (st.attributes.vacuum_position || st.attributes.robot_position || st.attributes.calibration_points)).map((st) => st.entity_id);
+    return list.sort((a, b) => Number(b.includes(obj)) - Number(a.includes(obj)) || a.localeCompare(b));
+  }
+
+  _rbRatio() {
+    const p = this._plan();
+    return p && p.width && p.height ? p.width / p.height : 1.6;
+  }
+
+  _rbData(d) {
+    return window.__dfcRobot.read(this._hass, d.eid, { source: d.source });
+  }
+
+  _robotDialog(plan, eid) {
+    eid = eid || Object.keys(plan.robots || {})[0] || this._rbVacuums()[0];
+    if (!eid) return null;
+    const cfg = (plan.robots || {})[eid] || {};
+    const d = { type: "robot", plan: plan.id, eid, source: cfg.source || this._rbSources(eid)[0] || "", m: cfg.m ? [...cfg.m] : null, seg: null, msg: cfg.m ? "Drag the robot's map, or use the buttons, until its rooms sit on yours." : "Reading the robot…" };
+    this._rbPic(d);
+    const done = () => {
+      if (this.s.dialog !== d) return;
+      if (!d.m) this._rbAuto(d);
+      this._render();
+    };
+    // HA 2026.3+: the robot's rooms mapped to areas ("Map vacuum segments to areas") make auto-align exact.
+    this._hass.callWS({ type: "config/entity_registry/get", entity_id: eid }).then((e) => {
+      const map = (((e && e.options) || {}).vacuum || {}).area_mapping || {};
+      const seg = {};
+      for (const [area, segs] of Object.entries(map)) for (const sg of segs || []) seg[String(sg)] = area;
+      d.seg = Object.keys(seg).length ? seg : null;
+      done();
+    }).catch(done);
+    return d;
+  }
+
+  /** The map picture under the rooms, when the map entity has one with calibration points. */
+  _rbPic(d) {
+    d.picW = 0;
+    const data = this._rbData(d);
+    if (!data.pic || data.calib.length < 3) return;
+    const im = new Image();
+    im.onload = () => {
+      d.picW = im.naturalWidth;
+      d.picH = im.naturalHeight;
+      const draw = this.s.dialog === d && this.shadowRoot.getElementById("rbdraw");
+      if (draw) draw.innerHTML = this._rbDraw(d, this._rbData(d));
+    };
+    im.src = data.pic;
+  }
+
+  /** Where a room is on this plan: the middle of its shape, else its name. */
+  _rbPlanPt(area) {
+    const sh = ((this.work || {}).shapes || {})[area];
+    if (sh && sh.length >= 3) {
+      let A = 0;
+      let cx = 0;
+      let cy = 0;
+      for (let i = 0; i < sh.length; i++) {
+        const [x0, y0] = sh[i];
+        const [x1, y1] = sh[(i + 1) % sh.length];
+        const k = x0 * y1 - x1 * y0;
+        A += k;
+        cx += (x0 + x1) * k;
+        cy += (y0 + y1) * k;
+      }
+      if (Math.abs(A) > 1e-9) return { x: cx / (3 * A), y: cy / (3 * A) };
+    }
+    const an = ((this.work || {}).anchors || {})[area];
+    return an ? { x: an.x, y: an.y } : null;
+  }
+
+  /** Auto-align: the robot's rooms matched to this plan's rooms (HA's room mapping, else names), best fit. */
+  _rbAuto(d) {
+    const R = window.__dfcRobot;
+    const data = this._rbData(d);
+    const ratio = this._rbRatio();
+    const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\u03b1-\u03c9]/g, "");
+    const nameOf = (a) => (this.areaById.get(a) || {}).name || a;
+    const areas = [...new Set([...Object.keys((this.work || {}).anchors || {}), ...Object.keys((this.work || {}).shapes || {})])];
+    const pairs = [];
+    const used = new Set();
+    for (const r of data.rooms) {
+      let area = d.seg && d.seg[r.id];
+      const n = norm(r.name);
+      if (!area && n) area = areas.find((a) => norm(nameOf(a)) === n) || (n.length >= 4 ? areas.find((a) => { const m = norm(nameOf(a)); return m.length >= 4 && (m.includes(n) || n.includes(m)); }) : null);
+      if (!area || used.has(area) || !areas.includes(area)) continue;
+      const pp = this._rbPlanPt(area);
+      if (!pp) continue;
+      used.add(area);
+      pairs.push({ r: { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 }, p: pp, name: nameOf(area) });
+    }
+    const m = R.fit(pairs, ratio);
+    if (m) {
+      d.m = m;
+      d.msg = `Matched ${pairs.length} rooms (${pairs.map((q) => q.name).join(", ")}). Check it, then fine-tune by eye.`;
+      return;
+    }
+    if (!d.m) d.m = this._rbBox(data, ratio);
+    if (!d.m) d.msg = "No position or rooms from this map entity yet. Choose another map, or wait until the robot reports one.";
+    else if (!data.rooms.length) d.msg = "This map has no rooms: drag it into place and use the buttons to turn and size it.";
+    else d.msg = `Couldn't match enough rooms (${pairs.length} found, 2 needed). ${d.seg ? "" : "Map the robot's rooms to areas in its settings (Map vacuum segments to areas), or "}align it by eye: drag it and use the buttons.`;
+  }
+
+  /** First guess without matches: everything the robot knows, fitted into the plan. */
+  _rbBox(data, ratio) {
+    const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y1 }]), data.dock, data.pos, ...data.lines.flat()].filter(Boolean);
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    if (x1 - x0 < 1e-6 && y1 - y0 < 1e-6) return [0.01, 0, 50 - 0.01 * x0, 0, -0.01 * ratio, 50 + 0.01 * ratio * y0];
+    return window.__dfcRobot.fit([{ r: { x: x0, y: y1 }, p: { x: 10, y: 10 } }, { r: { x: x1, y: y0 }, p: { x: 90, y: 90 } }], ratio);
+  }
+
+  /** Turn / size / mirror the robot's map around its middle (in real proportions, not % of the image). */
+  _rbOp(d, op, val) {
+    if (!d.m) return;
+    const ratio = this._rbRatio();
+    const data = this._rbData(d);
+    const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y1 }]), data.dock, data.pos].filter(Boolean);
+    const mid = pts.length ? window.__dfcRobot.apply(d.m, { x: pts.reduce((t, p) => t + p.x, 0) / pts.length, y: pts.reduce((t, p) => t + p.y, 0) / pts.length }) : { x: 50, y: 50 };
+    const c = [mid.x * ratio, mid.y];
+    const M = [d.m[0] * ratio, d.m[1] * ratio, d.m[2] * ratio, d.m[3], d.m[4], d.m[5]];
+    const t = (val * Math.PI) / 180;
+    const L = op === "rot" ? [Math.cos(t), -Math.sin(t), Math.sin(t), Math.cos(t)] : op === "scale" ? [val, 0, 0, val] : [-1, 0, 0, 1];
+    const ap = (u, v) => [L[0] * u + L[1] * v, L[2] * u + L[3] * v];
+    const [a0, a3] = ap(M[0], M[3]);
+    const [a1, a4] = ap(M[1], M[4]);
+    const [tx, ty] = ap(M[2] - c[0], M[5] - c[1]);
+    d.m = [a0 / ratio, a1 / ratio, (tx + c[0]) / ratio, a3, a4, ty + c[1]];
+  }
+
+  /** Rooms, path, dock and robot of the map, drawn over the plan with the current fit. */
+  _rbDraw(d, data) {
+    if (!d.m) return "";
+    const A = (p) => window.__dfcRobot.apply(d.m, p);
+    const f = (v) => v.toFixed(2);
+    let img = "";
+    if (d.picW && data.calib.length >= 3) {
+      // Picture px → robot units (inverse of the calibration), then robot → plan %.
+      const [q1, q2, q3] = data.calib;
+      const det = (q2.r.x - q1.r.x) * (q3.r.y - q1.r.y) - (q3.r.x - q1.r.x) * (q2.r.y - q1.r.y);
+      const solve = (k) => {
+        const b2 = q2.p[k] - q1.p[k];
+        const b3 = q3.p[k] - q1.p[k];
+        const a = (b2 * (q3.r.y - q1.r.y) - b3 * (q2.r.y - q1.r.y)) / det;
+        const b = ((q2.r.x - q1.r.x) * b3 - (q3.r.x - q1.r.x) * b2) / det;
+        return [a, b, q1.p[k] - a * q1.r.x - b * q1.r.y];
+      };
+      if (Math.abs(det) > 1e-9) {
+        const [c0, c1, c2] = solve("x");
+        const [c3, c4, c5] = solve("y");
+        const id = c0 * c4 - c1 * c3;
+        if (Math.abs(id) > 1e-12) {
+          const i0 = c4 / id;
+          const i1 = -c1 / id;
+          const i3 = -c3 / id;
+          const i4 = c0 / id;
+          const i2 = -(i0 * c2 + i1 * c5);
+          const i5 = -(i3 * c2 + i4 * c5);
+          const m = d.m;
+          const T = [m[0] * i0 + m[1] * i3, m[0] * i1 + m[1] * i4, m[0] * i2 + m[1] * i5 + m[2], m[3] * i0 + m[4] * i3, m[3] * i1 + m[4] * i4, m[3] * i2 + m[4] * i5 + m[5]];
+          img = `<image href="${esc(data.pic)}" width="${d.picW}" height="${d.picH}" preserveAspectRatio="none" opacity=".45" transform="matrix(${T[0]} ${T[3]} ${T[1]} ${T[4]} ${T[2]} ${T[5]})"></image>`;
+        }
+      }
+    }
+    let svg = "";
+    let html = "";
+    for (const r of data.rooms) {
+      const c = [[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]].map(([x, y]) => A({ x, y }));
+      svg += `<polygon points="${c.map((q) => `${f(q.x)},${f(q.y)}`).join(" ")}"></polygon>`;
+      const m = A({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 });
+      if (r.name) html += `<span class="rbname" style="left:${f(m.x)}%;top:${f(m.y)}%">${esc(r.name)}</span>`;
+    }
+    for (const line of data.lines) {
+      const step = Math.max(1, Math.ceil(line.length / 800));
+      svg += `<polyline points="${line.filter((_p, i) => i % step === 0).map(A).map((q) => `${f(q.x)},${f(q.y)}`).join(" ")}"></polyline>`;
+    }
+    if (data.dock) {
+      const q = A(data.dock);
+      html += `<span class="rbdot dock" style="left:${f(q.x)}%;top:${f(q.y)}%" title="Dock">⚡</span>`;
+    }
+    if (data.pos) {
+      const q = A(data.pos);
+      html += `<span class="rbdot bot" style="left:${f(q.x)}%;top:${f(q.y)}%" title="Robot"></span>`;
+    }
+    return `<svg class="rbsvg" viewBox="0 0 100 100" preserveAspectRatio="none">${img}${svg}</svg>${html}`;
+  }
+
+  _robotHtml(d, wrap) {
+    const p = this._plan();
+    if (!p) return "";
+    const data = this._rbData(d);
+    const srcs = this._rbSources(d.eid);
+    if (d.source && !srcs.includes(d.source)) srcs.unshift(d.source);
+    const name = (e) => ((this._hass.states[e] || {}).attributes || {}).friendly_name || e;
+    const opt = (e, cur) => `<option value="${esc(e)}" ${e === cur ? "selected" : ""}>${esc(name(e))}${(p.robots || {})[e] && e.startsWith("vacuum.") ? " ✓" : ""}</option>`;
+    const btn = (op, v, label, title) => `<button class="btn" data-act="rbop" data-op="${op}" data-v="${v}" title="${title}" ${d.m ? "" : "disabled"}>${label}</button>`;
+    return wrap(`<h2>Robot vacuum on ${esc(p.name)}</h2>
+      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">The card shows the robot where it really is while it cleans, with its path. This needs a map integration that reports the robot's position: Xiaomi Cloud Map Extractor, Dreame Vacuum, Roborock Custom Map, AnyVac…</p>
+      <div class="rbrow"><label class="f">Robot<select id="rbeid">${this._rbVacuums().map((e) => opt(e, d.eid)).join("")}</select></label>
+        <label class="f">Map<select id="rbsrc">${srcs.length ? srcs.map((e) => opt(e, d.source)).join("") : `<option value="">No map entity found</option>`}</select></label></div>
+      <div class="frstage rbstage" id="rbstage" style="aspect-ratio:${this._rbRatio()}"><img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:0;top:0;width:100%;height:100%" draggable="false"><div id="rbdraw">${this._rbDraw(d, data)}</div></div>
+      <div class="frvals"><span>${esc(d.msg || "")}</span></div>
+      <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button><span class="rbgap"></span>
+        ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("scale", 0.96, "−", "Smaller")}${btn("scale", 1 / 0.96, "+", "Bigger")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
+      <div class="acts">${(p.robots || {})[d.eid] ? `<button class="btn danger" data-act="rbdel" style="margin-right:auto">Remove from plan</button>` : ""}<button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="rbsave" ${d.m && d.source ? "" : "disabled"}>Save</button></div>`, 880);
+  }
+
   /** 0.8.2: "Frame the plan" (after a new image, or from the plan's ⋮ menu). Values are % of the image per side:
    *  + space around the plan, − trimmed margin. The image sits in the middle 60 % of the stage. */
   _frameDialog(plan) {
@@ -3165,6 +3395,33 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _frDown(e) {
+    const rs = e.target.closest && e.target.closest("#rbstage");
+    if (rs && this.s.dialog && this.s.dialog.type === "robot" && this.s.dialog.m) {
+      // 0.10: drag the robot's map over the plan.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const d = this.s.dialog;
+      const r = rs.getBoundingClientRect();
+      const draw = rs.querySelector("#rbdraw");
+      const data = this._rbData(d);
+      let lx = e.clientX;
+      let ly = e.clientY;
+      const move = (ev) => {
+        d.m[2] += ((ev.clientX - lx) / r.width) * 100;
+        d.m[5] += ((ev.clientY - ly) / r.height) * 100;
+        lx = ev.clientX;
+        ly = ev.clientY;
+        draw.innerHTML = this._rbDraw(d, data);
+      };
+      const up = () => {
+        this._frUp = Date.now();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
     const al = e.target.closest && e.target.closest("[data-alimg]");
     if (al && this.s.dialog && this.s.dialog.type === "align") {
       e.preventDefault();
@@ -3542,6 +3799,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     if (dlg.type === "frame") return this._frameHtml(dlg, wrap);
     if (dlg.type === "align") return this._alignHtml(dlg, wrap);
+    if (dlg.type === "robot") return this._robotHtml(dlg, wrap);
     if (dlg.type === "rename") {
       return wrap(`<h2>Rename</h2><label class="f">Name<input type="text" id="rname" value="${esc(dlg.name ?? p.name)}" maxlength="60"></label><div class="err" id="formerr"></div>
         <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="dorename">Save</button></div>`, 420);
@@ -3917,6 +4175,17 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
       return;
     }
+    if (t.id === "rbeid" && this.s.dialog && this.s.dialog.type === "robot") {
+      this.s.dialog = this._robotDialog(this._plan(), t.value);
+      return this._render();
+    }
+    if (t.id === "rbsrc" && this.s.dialog && this.s.dialog.type === "robot") {
+      const d = this.s.dialog;
+      d.source = t.value;
+      this._rbPic(d);
+      if (!d.m) this._rbAuto(d);
+      return this._render();
+    }
     if (t.id === "bondname" || t.id === "bondicon" || t.id === "phname" || t.id === "devlabel") return this._render();
     if (act === "phuse") {
       const ph = (this.work.phantoms || {})[t.dataset.ph];
@@ -4196,6 +4465,43 @@ class DeviceFloorplanPanel extends HTMLElement {
         }
         s.dialog = act === "alcentre" ? this._alignDialog(p) : null;
         if (act === "alsave") this._toast("Aligned: the card shows both floors in the same place", false);
+        this._render();
+        break;
+      }
+      case "robotdlg":
+        s.menu = null;
+        if (this._plan()) {
+          await this._flushSave();
+          if (!window.__dfcRobot) await import(`${STATIC}/device-floorplan-card.js?v=${VERSION}`).catch(() => {});
+          s.dialog = window.__dfcRobot ? this._robotDialog(this._plan()) : null;
+        }
+        this._render();
+        break;
+      case "rbauto":
+        if (s.dialog && s.dialog.type === "robot") this._rbAuto(s.dialog);
+        this._render();
+        break;
+      case "rbop":
+        if (s.dialog && s.dialog.type === "robot") this._rbOp(s.dialog, el.dataset.op, Number(el.dataset.v));
+        this._render();
+        break;
+      case "rbsave":
+      case "rbdel": {
+        const d = s.dialog;
+        const p = this._plan();
+        if (!d || !p || d.type !== "robot") break;
+        const robots = { ...(p.robots || {}) };
+        if (act === "rbdel") delete robots[d.eid];
+        else if (d.m) robots[d.eid] = { source: d.source, m: d.m.map((v) => +v.toPrecision(9)) };
+        try {
+          const res = await this._ws("plan/update", { plan_id: p.id, robots });
+          p.robots = res.robots;
+        } catch (err) {
+          this._saveError(err);
+          break;
+        }
+        s.dialog = null;
+        this._toast(act === "rbdel" ? "Robot removed from this plan" : "Saved: the card shows the robot live while it cleans", false);
         this._render();
         break;
       }

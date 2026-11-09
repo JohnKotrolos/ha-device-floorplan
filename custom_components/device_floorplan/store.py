@@ -249,6 +249,7 @@ class FloorplanData:
             "phantoms": plan.get("phantoms", {}),
             "anchors_centered": bool(plan.get("anchors_centered")),
             "shapes": plan.get("shapes", {}),
+            "robots": plan.get("robots", {}),
             "device_id": self.plan_device_id(plan_id),
             "image_entity": self.entity_id_for(plan_id, "image"),
             "sensor_entity": self.entity_id_for(plan_id, "sensor"),
@@ -423,6 +424,18 @@ class FloorplanData:
         if "frame" in changes:
             # 0.8.2: space around the plan (+) or trimmed margin (-), % of the image, per side.
             plan["frame"] = {k: round(min(60.0, max(-45.0, float(v))), 2) for k, v in (changes["frame"] or {}).items() if k in ("t", "r", "b", "l")}
+        if "robots" in changes:
+            # 0.10: robot vacuums on this plan: {vacuum entity: {source: map entity, m: robot units -> plan %}}.
+            robots = {}
+            for eid, r in (changes["robots"] or {}).items():
+                if not isinstance(r, dict) or not str(eid).startswith("vacuum."):
+                    continue
+                m = r.get("m")
+                entry: dict[str, Any] = {"source": str(r.get("source") or "")[:120]}
+                if isinstance(m, list) and len(m) == 6:
+                    entry["m"] = [float(v) for v in m]
+                robots[str(eid)] = entry
+            plan["robots"] = robots
         if "anchors_centered" in changes:
             plan["anchors_centered"] = bool(changes["anchors_centered"])
         if "sort" in changes:
