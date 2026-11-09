@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.10.0b8";
+const VERSION = "0.10.0b9";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -3168,7 +3168,11 @@ class DeviceFloorplanPanel extends HTMLElement {
   _rbSources(eid) {
     const obj = String(eid || "").split(".")[1] || "";
     const list = Object.values(this._hass.states).filter((st) => /^(camera|image|sensor|vacuum)\./.test(st.entity_id) && st.attributes && (st.attributes.vacuum_position || st.attributes.robot_position || st.attributes.calibration_points)).map((st) => st.entity_id);
-    return list.sort((a, b) => Number(b.includes(obj)) - Number(a.includes(obj)) || a.localeCompare(b));
+    // The robot's own device first (Valetudo's map sensor sits there), then by name.
+    const ents = this._hass.entities || {};
+    const dev = (e) => (ents[e] || {}).device_id;
+    const mine = (e) => Number(!!dev(eid) && dev(e) === dev(eid));
+    return list.sort((a, b) => mine(b) - mine(a) || Number(b.includes(obj)) - Number(a.includes(obj)) || a.localeCompare(b));
   }
 
   /** Opacity of the robot's map picture in the dialog (%), saved with the robot: map pictures can be full colour. */
