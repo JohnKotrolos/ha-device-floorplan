@@ -105,6 +105,11 @@ class FloorplanData:
         plan.setdefault("shapes", {})
 
     @callback
+    def touch(self) -> None:
+        """0.10: save data changed outside update_plan (rooms cleaned by a robot)."""
+        self._save()
+
+    @callback
     def _save(self) -> None:
         self._store.async_delay_save(
             lambda: {
@@ -250,6 +255,7 @@ class FloorplanData:
             "anchors_centered": bool(plan.get("anchors_centered")),
             "shapes": plan.get("shapes", {}),
             "robots": plan.get("robots", {}),
+            "cleaned": plan.get("cleaned", {}),
             "device_id": self.plan_device_id(plan_id),
             "image_entity": self.entity_id_for(plan_id, "image"),
             "sensor_entity": self.entity_id_for(plan_id, "sensor"),
@@ -434,6 +440,9 @@ class FloorplanData:
                 entry: dict[str, Any] = {"source": str(r.get("source") or "")[:120]}
                 if isinstance(m, list) and len(m) == 6:
                     entry["m"] = [float(v) for v in m]
+                mp = r.get("map")
+                if isinstance(mp, dict):
+                    entry["map"] = {"name": str(mp["name"])[:80] if mp.get("name") else None, "rooms": [str(x)[:40] for x in (mp.get("rooms") or [])][:60]}
                 robots[str(eid)] = entry
             plan["robots"] = robots
         if "anchors_centered" in changes:

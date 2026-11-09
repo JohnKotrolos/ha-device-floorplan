@@ -42,6 +42,7 @@ from .const import (
 from .devices import build_plan_payload
 from .http import FloorplanImageView, FloorplanUploadView
 from .new_devices import NewDeviceWatcher
+from .robots import RobotWatcher
 from .store import FloorplanData
 
 PLATFORMS = [Platform.SENSOR, Platform.IMAGE]
@@ -158,6 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             START_NOTIFICATION_ID,
         )
     NewDeviceWatcher(hass, entry, data).async_start()
+    RobotWatcher(hass, entry, data).async_start()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
 
     hass.data[DATA_DEFER_DEVICES] = fresh

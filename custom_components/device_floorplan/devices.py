@@ -1008,6 +1008,7 @@ def build_plan_payload(
         "aps": aps,
         "areas": areas,
         "robots": _robots(hass, plan),
+        "cleaned": plan.get("cleaned") or {},
     }
 
 

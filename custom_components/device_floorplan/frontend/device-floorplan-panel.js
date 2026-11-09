@@ -276,6 +276,18 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .rbdot { position:absolute; transform: translate(-50%,-50%); width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 .rbdot.dock { background:#fff; color:#f9a825; }
 .rbdot.bot { background:#2196f3; border:2px solid #fff; }
+.rbp { margin:0 0 8px; color: var(--df-sec); font-size:13px; }
+.rbempty { margin:16px 0; color: var(--df-sec); }
+.rbbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 12px; }
+.rbchip { display:flex; align-items:center; gap:8px; padding:6px 12px 6px 8px; border-radius:12px; border:1px solid var(--df-border, rgba(0,0,0,.15)); background:none; color:inherit; font:inherit; cursor:pointer; text-align:left; }
+.rbchip svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; }
+.rbchip small { display:block; font-size:11px; color: var(--df-sec); }
+.rbchip.on { border-color:#2196f3; background: rgba(33,150,243,.1); }
+.rbadd { padding:8px 10px; border-radius:12px; font:inherit; }
+.rbframe { position:absolute; border:1.5px dashed #2196f3; pointer-events:none; }
+.rbh { position:absolute; transform: translate(-50%,-50%); pointer-events:auto; background:#fff; border:2px solid #2196f3; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.rbh.c { width:12px; height:12px; border-radius:3px; }
+.rbh.e { width:10px; height:10px; border-radius:50%; }
 .rbrow { display:flex; gap:12px; flex-wrap:wrap; } .rbrow label.f { flex:1 1 220px; }
 .rbtools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 0; } .rbtools .btn { padding:6px 10px; } .rbgap { flex:1; }
 .alstage .alref { opacity:.45; filter: grayscale(.6); pointer-events:none; }
@@ -3167,11 +3179,16 @@ class DeviceFloorplanPanel extends HTMLElement {
     return window.__dfcRobot.read(this._hass, d.eid, { source: d.source });
   }
 
+  _rbName(e) {
+    return ((this._hass.states[e] || {}).attributes || {}).friendly_name || e;
+  }
+
+  /** The dialog for one robot on this plan (eid), or for choosing one (no eid: nothing is picked for the user). */
   _robotDialog(plan, eid) {
-    eid = eid || Object.keys(plan.robots || {})[0] || this._rbVacuums()[0];
-    if (!eid) return null;
-    const cfg = (plan.robots || {})[eid] || {};
-    const d = { type: "robot", plan: plan.id, eid, source: cfg.source || this._rbSources(eid)[0] || "", m: cfg.m ? [...cfg.m] : null, seg: null, msg: cfg.m ? "Drag the robot's map, or use the buttons, until its rooms sit on yours." : "Reading the robot…" };
+    eid = eid || Object.keys(plan.robots || {})[0] || null;
+    const cfg = (eid && (plan.robots || {})[eid]) || {};
+    const d = { type: "robot", plan: plan.id, eid, source: cfg.source || (eid ? this._rbSources(eid)[0] : "") || "", m: cfg.m ? [...cfg.m] : null, seg: null, msg: cfg.m ? "" : eid ? "Reading the robot…" : "" };
+    if (!eid) return d;
     this._rbPic(d);
     const done = () => {
       if (this.s.dialog !== d) return;
@@ -3225,12 +3242,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     return an ? { x: an.x, y: an.y } : null;
   }
 
-  /** Auto-align: the robot's rooms matched to this plan's rooms (HA's room mapping, else names), best fit. */
+  /** Auto-align: the robot's rooms matched to this plan's rooms (HA's room mapping, else names), best fit.
+   *  With 3+ rooms a plan drawn a bit squeezed is detected and allowed for. */
   _rbAuto(d) {
     const R = window.__dfcRobot;
     const data = this._rbData(d);
     const ratio = this._rbRatio();
-    const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\u03b1-\u03c9]/g, "");
+    const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9α-ω]/g, "");
     const nameOf = (a) => (this.areaById.get(a) || {}).name || a;
     const areas = [...new Set([...Object.keys((this.work || {}).anchors || {}), ...Object.keys((this.work || {}).shapes || {})])];
     const pairs = [];
@@ -3245,16 +3263,18 @@ class DeviceFloorplanPanel extends HTMLElement {
       used.add(area);
       pairs.push({ r: { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 }, p: pp, name: nameOf(area) });
     }
-    const m = R.fit(pairs, ratio);
-    if (m) {
-      d.m = m;
-      d.msg = `Matched ${pairs.length} rooms (${pairs.map((q) => q.name).join(", ")}). Check it, then fine-tune by eye.`;
+    const fit = R.fit2(pairs, ratio);
+    if (fit) {
+      d.m = fit.m;
+      const k = fit.sx / fit.sy;
+      const sq = Math.abs(k - 1) > 0.015 ? ` Your plan is drawn ${Math.round(Math.abs(1 - k) * 100)}% ${k < 1 ? "narrower" : "wider"} than the robot measures it: allowed for.` : "";
+      d.msg = `Matched ${pairs.length} rooms (${pairs.map((q) => q.name).join(", ")}).${sq} Check it, then fine-tune by hand if needed.`;
       return;
     }
     if (!d.m) d.m = this._rbBox(data, ratio);
     if (!d.m) d.msg = "No position or rooms from this map entity yet. Choose another map, or wait until the robot reports one.";
-    else if (!data.rooms.length) d.msg = "This map has no rooms: drag it into place and use the buttons to turn and size it.";
-    else d.msg = `Couldn't match enough rooms (${pairs.length} found, 2 needed). ${d.seg ? "" : "Map the robot's rooms to areas in its settings (Map vacuum segments to areas), or "}align it by eye: drag it and use the buttons.`;
+    else if (!data.rooms.length) d.msg = "This map has no rooms: drag it into place, then stretch and turn it.";
+    else d.msg = `Couldn't match enough rooms (${pairs.length} found, 2 needed). ${d.seg ? "" : "Map the robot's rooms to areas in its settings (Map vacuum segments to areas), or "}line it up by hand.`;
   }
 
   /** First guess without matches: everything the robot knows, fitted into the plan. */
@@ -3268,17 +3288,26 @@ class DeviceFloorplanPanel extends HTMLElement {
     return window.__dfcRobot.fit([{ r: { x: x0, y: y1 }, p: { x: 10, y: 10 } }, { r: { x: x1, y: y0 }, p: { x: 90, y: 90 } }], ratio);
   }
 
-  /** Turn / size / mirror the robot's map around its middle (in real proportions, not % of the image). */
+  /** The robot's map as drawn now: the box around it on the plan (in %), for the handles. */
+  _rbFrame(d, data) {
+    const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }]), data.dock, data.pos].filter(Boolean);
+    const all = pts.length ? pts : data.lines.flat();
+    if (!all.length || !d.m) return null;
+    const q = all.map((p) => window.__dfcRobot.apply(d.m, p));
+    const xs = q.map((p) => p.x);
+    const ys = q.map((p) => p.y);
+    return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+  }
+
+  /** Turn or mirror the robot's map around its middle (in real proportions, not % of the image). */
   _rbOp(d, op, val) {
     if (!d.m) return;
     const ratio = this._rbRatio();
-    const data = this._rbData(d);
-    const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y1 }]), data.dock, data.pos].filter(Boolean);
-    const mid = pts.length ? window.__dfcRobot.apply(d.m, { x: pts.reduce((t, p) => t + p.x, 0) / pts.length, y: pts.reduce((t, p) => t + p.y, 0) / pts.length }) : { x: 50, y: 50 };
-    const c = [mid.x * ratio, mid.y];
+    const f = this._rbFrame(d, this._rbData(d)) || { x0: 50, y0: 50, x1: 50, y1: 50 };
+    const c = [((f.x0 + f.x1) / 2) * ratio, (f.y0 + f.y1) / 2];
     const M = [d.m[0] * ratio, d.m[1] * ratio, d.m[2] * ratio, d.m[3], d.m[4], d.m[5]];
     const t = (val * Math.PI) / 180;
-    const L = op === "rot" ? [Math.cos(t), -Math.sin(t), Math.sin(t), Math.cos(t)] : op === "scale" ? [val, 0, 0, val] : [-1, 0, 0, 1];
+    const L = op === "rot" ? [Math.cos(t), -Math.sin(t), Math.sin(t), Math.cos(t)] : [-1, 0, 0, 1];
     const ap = (u, v) => [L[0] * u + L[1] * v, L[2] * u + L[3] * v];
     const [a0, a3] = ap(M[0], M[3]);
     const [a1, a4] = ap(M[1], M[4]);
@@ -3286,7 +3315,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     d.m = [a0 / ratio, a1 / ratio, (tx + c[0]) / ratio, a3, a4, ty + c[1]];
   }
 
-  /** Rooms, path, dock and robot of the map, drawn over the plan with the current fit. */
+  /** Rooms, path, dock and robot of the map, drawn over the plan with the current fit, plus the frame's handles. */
   _rbDraw(d, data) {
     if (!d.m) return "";
     const A = (p) => window.__dfcRobot.apply(d.m, p);
@@ -3340,28 +3369,45 @@ class DeviceFloorplanPanel extends HTMLElement {
       const q = A(data.pos);
       html += `<span class="rbdot bot" style="left:${f(q.x)}%;top:${f(q.y)}%" title="Robot"></span>`;
     }
+    const fr = this._rbFrame(d, data);
+    if (fr) {
+      const mx = (fr.x0 + fr.x1) / 2;
+      const my = (fr.y0 + fr.y1) / 2;
+      html += `<div class="rbframe" style="left:${f(fr.x0)}%;top:${f(fr.y0)}%;width:${f(fr.x1 - fr.x0)}%;height:${f(fr.y1 - fr.y0)}%"></div>`;
+      const hs = { nw: [fr.x0, fr.y0], n: [mx, fr.y0], ne: [fr.x1, fr.y0], e: [fr.x1, my], se: [fr.x1, fr.y1], s: [mx, fr.y1], sw: [fr.x0, fr.y1], w: [fr.x0, my] };
+      for (const [h, [x, y]] of Object.entries(hs)) html += `<i class="rbh ${h.length === 2 ? "c" : "e"}" data-h="${h}" style="left:${f(x)}%;top:${f(y)}%;cursor:${h}-resize" title="${h.length === 2 ? "Drag to resize" : "Drag to stretch or squeeze"}"></i>`;
+    }
     return `<svg class="rbsvg" viewBox="0 0 100 100" preserveAspectRatio="none">${img}${svg}</svg>${html}`;
   }
 
   _robotHtml(d, wrap) {
     const p = this._plan();
     if (!p) return "";
+    const robots = p.robots || {};
+    const onPlan = Object.keys(robots);
+    if (d.eid && !onPlan.includes(d.eid)) onPlan.push(d.eid);
+    const others = this._rbVacuums().filter((e) => !onPlan.includes(e));
+    const chips = onPlan.map((e) => `<button class="rbchip ${e === d.eid ? "on" : ""}" data-act="rbpick" data-eid="${esc(e)}">${SVG.robot}<span>${esc(this._rbName(e))}<small>${robots[e] && robots[e].m ? "Aligned" : "Not saved yet"}</small></span></button>`).join("");
+    const add = others.length ? `<select id="rbadd" class="rbadd"><option value="">+ Add a robot…</option>${others.map((e) => `<option value="${esc(e)}">${esc(this._rbName(e))}</option>`).join("")}</select>` : "";
+    const head = `<h2>Robot vacuums on ${esc(p.name)}</h2>
+      <p class="rbp">The card shows each robot where it really is while it cleans, with its path. This needs a map integration that reports the robot's position: Xiaomi Cloud Map Extractor, Dreame Vacuum, Roborock Custom Map, AnyVac…</p>
+      <div class="rbbar">${chips}${add}</div>`;
+    if (!d.eid) {
+      const none = this._rbVacuums().length ? "No robot on this plan yet. Add one to line its map up with your plan." : "There is no robot vacuum in Home Assistant.";
+      return wrap(`${head}<p class="rbempty">${onPlan.length ? "Choose a robot above." : none}</p><div class="acts"><button class="btn" data-act="closedlg">Close</button></div>`, 880);
+    }
     const data = this._rbData(d);
     const srcs = this._rbSources(d.eid);
     if (d.source && !srcs.includes(d.source)) srcs.unshift(d.source);
-    const name = (e) => ((this._hass.states[e] || {}).attributes || {}).friendly_name || e;
-    const opt = (e, cur) => `<option value="${esc(e)}" ${e === cur ? "selected" : ""}>${esc(name(e))}${(p.robots || {})[e] && e.startsWith("vacuum.") ? " ✓" : ""}</option>`;
     const btn = (op, v, label, title) => `<button class="btn" data-act="rbop" data-op="${op}" data-v="${v}" title="${title}" ${d.m ? "" : "disabled"}>${label}</button>`;
-    return wrap(`<h2>Robot vacuum on ${esc(p.name)}</h2>
-      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">The card shows the robot where it really is while it cleans, with its path. This needs a map integration that reports the robot's position: Xiaomi Cloud Map Extractor, Dreame Vacuum, Roborock Custom Map, AnyVac…</p>
-      <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">Line the robot's map (blue) up with your plan. <b>Auto-align</b> does it for you when the robot's rooms match yours. To do it by hand, drag the map into place, drag the sides of its frame to stretch or squeeze it, drag a corner to resize it, and use the buttons to turn or mirror it. <b>The robot's own map is not changed:</b> this only tells the card how to place the robot on your plan.</p>
-      <div class="rbrow"><label class="f">Robot<select id="rbeid">${this._rbVacuums().map((e) => opt(e, d.eid)).join("")}</select></label>
-        <label class="f">Map<select id="rbsrc">${srcs.length ? srcs.map((e) => opt(e, d.source)).join("") : `<option value="">No map entity found</option>`}</select></label></div>
+    return wrap(`${head}
+      <div class="rbrow"><label class="f">Map of ${esc(this._rbName(d.eid))}<select id="rbsrc">${srcs.length ? srcs.map((e) => `<option value="${esc(e)}" ${e === d.source ? "selected" : ""}>${esc(this._rbName(e))}</option>`).join("") : `<option value="">No map entity found</option>`}</select></label></div>
+      <p class="rbp">Line the robot's map (blue) up with your plan. <b>Auto-align</b> does it for you when the robot's rooms match yours. To do it by hand, drag the map into place, drag the sides of its frame to stretch or squeeze it, drag a corner to resize it, and use the buttons to turn or mirror it. <b>The robot's own map is not changed:</b> this only tells the card how to place the robot on your plan.</p>
       <div class="frstage rbstage" id="rbstage" style="aspect-ratio:${this._rbRatio()}"><img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:0;top:0;width:100%;height:100%" draggable="false"><div id="rbdraw">${this._rbDraw(d, data)}</div></div>
       <div class="frvals"><span>${esc(d.msg || "")}</span></div>
       <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button><span class="rbgap"></span>
-        ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("scale", 0.96, "−", "Smaller")}${btn("scale", 1 / 0.96, "+", "Bigger")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
-      <div class="acts">${(p.robots || {})[d.eid] ? `<button class="btn danger" data-act="rbdel" style="margin-right:auto">Remove from plan</button>` : ""}<button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="rbsave" ${d.m && d.source ? "" : "disabled"}>Save</button></div>`, 880);
+        ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
+      <div class="acts">${robots[d.eid] ? `<button class="btn danger" data-act="rbdel" style="margin-right:auto">Remove from plan</button>` : ""}<button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="rbsave" ${d.m && d.source ? "" : "disabled"}>Save</button></div>`, 880);
   }
 
   /** 0.8.2: "Frame the plan" (after a new image, or from the plan's ⋮ menu). Values are % of the image per side:
@@ -3398,20 +3444,35 @@ class DeviceFloorplanPanel extends HTMLElement {
   _frDown(e) {
     const rs = e.target.closest && e.target.closest("#rbstage");
     if (rs && this.s.dialog && this.s.dialog.type === "robot" && this.s.dialog.m) {
-      // 0.10: drag the robot's map over the plan.
+      // 0.10: drag the robot's map over the plan; its frame's sides stretch / squeeze, its corners resize.
       e.preventDefault();
       e.stopImmediatePropagation();
       const d = this.s.dialog;
       const r = rs.getBoundingClientRect();
       const draw = rs.querySelector("#rbdraw");
       const data = this._rbData(d);
-      let lx = e.clientX;
-      let ly = e.clientY;
+      const h = (e.target.dataset && e.target.dataset.h) || "";
+      const fr = this._rbFrame(d, data);
+      const m0 = [...d.m];
+      const [sx0, sy0] = [e.clientX, e.clientY];
       const move = (ev) => {
-        d.m[2] += ((ev.clientX - lx) / r.width) * 100;
-        d.m[5] += ((ev.clientY - ly) / r.height) * 100;
-        lx = ev.clientX;
-        ly = ev.clientY;
+        const dx = ((ev.clientX - sx0) / r.width) * 100;
+        const dy = ((ev.clientY - sy0) / r.height) * 100;
+        if (!h || !fr) {
+          d.m = [m0[0], m0[1], m0[2] + dx, m0[3], m0[4], m0[5] + dy];
+        } else {
+          let [ax, ay, fx, fy] = [0, 0, 1, 1];
+          const w = fr.x1 - fr.x0 || 1;
+          const hh = fr.y1 - fr.y0 || 1;
+          if (h.includes("e")) [ax, fx] = [fr.x0, (w + dx) / w];
+          if (h.includes("w")) [ax, fx] = [fr.x1, (w - dx) / w];
+          if (h.includes("s")) [ay, fy] = [fr.y0, (hh + dy) / hh];
+          if (h.includes("n")) [ay, fy] = [fr.y1, (hh - dy) / hh];
+          if (h.length === 2) fx = fy = Math.abs(fx - 1) > Math.abs(fy - 1) ? fx : fy;
+          fx = Math.max(0.05, fx);
+          fy = Math.max(0.05, fy);
+          d.m = [m0[0] * fx, m0[1] * fx, ax + (m0[2] - ax) * fx, m0[3] * fy, m0[4] * fy, ay + (m0[5] - ay) * fy];
+        }
         draw.innerHTML = this._rbDraw(d, data);
       };
       const up = () => {
@@ -4176,7 +4237,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
       return;
     }
-    if (t.id === "rbeid" && this.s.dialog && this.s.dialog.type === "robot") {
+    if (t.id === "rbadd" && t.value && this.s.dialog && this.s.dialog.type === "robot") {
       this.s.dialog = this._robotDialog(this._plan(), t.value);
       return this._render();
     }
@@ -4473,9 +4534,13 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.menu = null;
         if (this._plan()) {
           await this._flushSave();
-          if (!window.__dfcRobot) await import(`${STATIC}/device-floorplan-card.js?v=${VERSION}`).catch(() => {});
+          if (!window.__dfcRobot || !window.__dfcRobot.fit2) await import(`${STATIC}/device-floorplan-card.js?v=${VERSION}`).catch(() => {});
           s.dialog = window.__dfcRobot ? this._robotDialog(this._plan()) : null;
         }
+        this._render();
+        break;
+      case "rbpick":
+        if (s.dialog && s.dialog.type === "robot" && el.dataset.eid !== s.dialog.eid) s.dialog = this._robotDialog(this._plan(), el.dataset.eid);
         this._render();
         break;
       case "rbauto":
@@ -4490,10 +4555,10 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "rbdel": {
         const d = s.dialog;
         const p = this._plan();
-        if (!d || !p || d.type !== "robot") break;
+        if (!d || !p || d.type !== "robot" || !d.eid) break;
         const robots = { ...(p.robots || {}) };
         if (act === "rbdel") delete robots[d.eid];
-        else if (d.m) robots[d.eid] = { source: d.source, m: d.m.map((v) => +v.toPrecision(9)) };
+        else if (d.m) robots[d.eid] = { source: d.source, m: d.m.map((v) => +v.toPrecision(9)), map: window.__dfcRobot.sig(this._rbData(d)) };
         try {
           const res = await this._ws("plan/update", { plan_id: p.id, robots });
           p.robots = res.robots;
@@ -4501,7 +4566,7 @@ class DeviceFloorplanPanel extends HTMLElement {
           this._saveError(err);
           break;
         }
-        s.dialog = null;
+        s.dialog = act === "rbdel" ? this._robotDialog(p) : null;
         this._toast(act === "rbdel" ? "Robot removed from this plan" : "Saved: the card shows the robot live while it cleans", false);
         this._render();
         break;
