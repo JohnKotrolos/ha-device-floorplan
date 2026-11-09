@@ -13,8 +13,8 @@
 
 Put your Home Assistant devices on **your own floorplan** and see your home alive:
 lights glowing in their real colour and staying inside their room, the AC blowing,
-the TV glowing, the washer telling you it's done, people in their rooms, the
-Zigbee mesh drawn over your walls. No custom cards to combine, no templates, no YAML:
+the TV glowing, the washer telling you it's done, **your robot vacuum cleaning room
+by room**, people in their rooms, the Zigbee mesh drawn over your walls. No custom cards to combine, no templates, no YAML:
 upload your picture (or start from a sample plan), drag your rooms onto it, press
 **Auto-place** and fine-tune by dragging.
 
@@ -35,6 +35,9 @@ upload your picture (or start from a sample plan), drag your rooms onto it, pres
 - **Day & night**: at night the plan darkens and only what's on glows; by day daylight
   comes in through windows and shutters, and a room gets darker the more its shutters close.
 - **Doors, windows and shutters as bars** on the walls: open, closed, how far a shutter is down.
+- **Your robot vacuum, live**: it moves on your plan while it cleans and draws its path;
+  every room shows when it was last cleaned, turns amber when it's due again, and
+  **Clean now** sends the robot to just that room.
 - **Motion** makes a room pulse, **people** appear in the room they are in.
 
 ### Overlays: one plan, many views
@@ -42,9 +45,9 @@ upload your picture (or start from a sample plan), drag your rooms onto it, pres
 - **Live** (what's happening now), **Lights**, **Comfort** (a temperature and humidity
   **heatmap** that flows between open rooms), **Security**, **Network** and **Health**
   (batteries, offline devices), plus **your own overlays** with the device types you choose.
-- **Cleaning**: your robot vacuum live on the plan with its path (Valetudo, Xiaomi, Dreame,
-  Roborock and other map integrations), rooms coloured by when they were last cleaned and
-  when they are due, *Clean now* per room, and a `due` list for your automations.
+- **Cleaning**: works with Valetudo out of the box and with Xiaomi, Dreame, Roborock and
+  other map integrations; a room counts as cleaned only when the robot really did it, and a
+  `due` list on the plan sensor lets an automation clean what is due.
 - **Network map**: the Zigbee mesh (ZHA) with roles, links and link quality, Wi-Fi and LAN
   from your router, and the devices on other floors as faint markers.
 - **One marker per device per overlay**, and you decide what it shows: the leading value,
