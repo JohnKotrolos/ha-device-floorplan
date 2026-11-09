@@ -91,6 +91,8 @@ class RobotWatcher:
         self.data = data
         self._unsub: CALLBACK_TYPE | None = None
         self._watched: tuple[str, ...] = ()
+        # The room each robot is in right now, per plan: {(plan, vacuum): {"area", "start", "last"}}.
+        self._visit: dict[tuple[str, str], dict[str, Any]] = {}
 
     @callback
     def async_start(self) -> None:
@@ -135,6 +137,7 @@ class RobotWatcher:
     def _stamp(self, plan_id: str, plan: dict[str, Any], vac: str, r: dict[str, Any]) -> None:
         vs = self.hass.states.get(vac)
         if not vs or vs.state != "cleaning":
+            self._close(plan_id, plan, vac)
             return
         ms = self.hass.states.get(r["source"]) if r.get("source") else None
         attrs = {**vs.attributes, **(ms.attributes if ms else {})}
@@ -156,8 +159,14 @@ class RobotWatcher:
             area = next((a for a, poly in (plan.get("shapes") or {}).items() if a not in hidden and len(poly) >= 3 and _inside(x, y, poly)), None)
         if not area:
             return
-        cleaned = plan.setdefault("cleaned", {})
         now = datetime.now(timezone.utc)
+        v = self._visit.get((plan_id, vac))
+        if v and v["area"] == area:
+            v["last"] = now
+        else:
+            self._close(plan_id, plan, vac)
+            self._visit[(plan_id, vac)] = {"area": area, "start": now, "last": now}
+        cleaned = plan.setdefault("cleaned", {})
         prev = cleaned.get(area) or {}
         try:
             age = (now - datetime.fromisoformat(prev["t"])).total_seconds() if prev.get("t") else None
@@ -166,5 +175,20 @@ class RobotWatcher:
         if prev.get("by") == vac and age is not None and age < REFRESH:
             return
         cleaned[area] = {"t": now.isoformat(timespec="seconds"), "by": vac}
+        self.data.touch()
+        async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+
+    @callback
+    def _close(self, plan_id: str, plan: dict[str, Any], vac: str) -> None:
+        """The robot left a room (or stopped): log the visit, so the card can tell how often and how long."""
+        v = self._visit.pop((plan_id, vac), None)
+        if not v:
+            return
+        secs = (v["last"] - v["start"]).total_seconds()
+        if secs < 20:
+            return
+        log = plan.setdefault("clean_log", {}).setdefault(v["area"], [])
+        log.append({"s": v["start"].isoformat(timespec="seconds"), "e": v["last"].isoformat(timespec="seconds"), "by": vac})
+        del log[:-12]
         self.data.touch()
         async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)

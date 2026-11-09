@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.10.0b5";
+const VERSION = "0.10.0b6";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -289,7 +289,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .rbh.c { width:12px; height:12px; border-radius:3px; }
 .rbh.e { width:10px; height:10px; border-radius:50%; }
 .rbrow { display:flex; gap:12px; flex-wrap:wrap; } .rbrow label.f { flex:1 1 220px; }
-.rbtools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 0; } .rbtools .btn { padding:6px 10px; } .rbgap { flex:1; }
+.rbtools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 0; } .rbtools .btn { padding:6px 10px; } .rbpic { display:flex; align-items:center; gap:8px; font-size:13px; color: var(--df-sec); margin-left:8px; } .rbpic input { width:110px; } .rbgap { flex:1; }
 .alstage .alref { opacity:.45; filter: grayscale(.6); pointer-events:none; }
 .alstage .alimg { opacity:.72; cursor:move; outline: 2px solid var(--df-primary); pointer-events:auto; }
 .frvals { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
@@ -3170,6 +3170,18 @@ class DeviceFloorplanPanel extends HTMLElement {
     return list.sort((a, b) => Number(b.includes(obj)) - Number(a.includes(obj)) || a.localeCompare(b));
   }
 
+  /** Opacity of the robot's map picture in the dialog (%), remembered in this browser: map pictures can be full colour. */
+  _rbPicOp() {
+    let v = 40;
+    try {
+      const x = localStorage.getItem("device_floorplan_robot_pic");
+      if (x !== null && Number.isFinite(Number(x))) v = Number(x);
+    } catch (_e) {
+      /* no storage */
+    }
+    return Math.max(0, Math.min(100, v));
+  }
+
   _rbRatio() {
     const p = this._plan();
     return p && p.width && p.height ? p.width / p.height : 1.6;
@@ -3336,7 +3348,7 @@ class DeviceFloorplanPanel extends HTMLElement {
           const i5 = -(i3 * c2 + i4 * c5);
           const m = d.m;
           const T = [m[0] * i0 + m[1] * i3, m[0] * i1 + m[1] * i4, m[0] * i2 + m[1] * i5 + m[2], m[3] * i0 + m[4] * i3, m[3] * i1 + m[4] * i4, m[3] * i2 + m[4] * i5 + m[5]];
-          img = `<image href="${esc(data.pic)}" width="${d.picW}" height="${d.picH}" preserveAspectRatio="none" opacity=".45" transform="matrix(${T[0]} ${T[3]} ${T[1]} ${T[4]} ${T[2]} ${T[5]})"></image>`;
+          img = `<image href="${esc(data.pic)}" width="${d.picW}" height="${d.picH}" preserveAspectRatio="none" opacity="${this._rbPicOp() / 100}" transform="matrix(${T[0]} ${T[3]} ${T[1]} ${T[4]} ${T[2]} ${T[5]})"></image>`;
         }
       }
     }
@@ -3396,7 +3408,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <p class="rbp">Line the robot's map (blue) up with your plan. <b>Auto-align</b> does it for you when the robot's rooms match yours. To do it by hand, drag the map into place, drag the sides of its frame to stretch or squeeze it, drag a corner to resize it, and use the buttons to turn or mirror it. <b>The robot's own map is not changed:</b> this only tells the card how to place the robot on your plan.</p>
       <div class="frstage rbstage" id="rbstage" style="--ar:${this._rbRatio()}"><img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:0;top:0;width:100%;height:100%" draggable="false"><div id="rbdraw">${this._rbDraw(d, data)}</div></div>
       <div class="frvals"><span>${esc(d.msg || "")}</span></div>
-      <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button><span class="rbgap"></span>
+      <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button>${data.pic && data.calib.length >= 3 ? `<label class="rbpic" title="The robot's own map picture under the blue rooms">Map picture<input type="range" id="rbpicop" min="0" max="100" step="5" value="${this._rbPicOp()}"></label>` : ""}<span class="rbgap"></span>
         ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
       <div class="acts">${robots[d.eid] ? `<button class="btn danger" data-act="rbdel" style="margin-right:auto">Remove from plan</button>` : ""}<button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="rbsave" ${d.m && d.source ? "" : "disabled"}>Save</button></div>`, 880);
   }
@@ -4173,6 +4185,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _onInput(e) {
     const t = e.target;
+    if (t.id === "rbpicop") return this._onChange(e);
     if (t.id === "q") {
       this.s.q = t.value;
       this._fresh = null;
@@ -4231,6 +4244,16 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (t.id === "rbadd" && t.value && this.s.dialog && this.s.dialog.type === "robot") {
       this.s.dialog = this._robotDialog(this._plan(), t.value);
       return this._render();
+    }
+    if (t.id === "rbpicop" && this.s.dialog && this.s.dialog.type === "robot") {
+      try {
+        localStorage.setItem("device_floorplan_robot_pic", String(t.value));
+      } catch (_e) {
+        /* no storage */
+      }
+      const draw = this.shadowRoot.getElementById("rbdraw");
+      if (draw) draw.innerHTML = this._rbDraw(this.s.dialog, this._rbData(this.s.dialog));
+      return;
     }
     if (t.id === "rbsrc" && this.s.dialog && this.s.dialog.type === "robot") {
       const d = this.s.dialog;

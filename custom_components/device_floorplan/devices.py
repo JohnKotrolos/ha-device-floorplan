@@ -1008,7 +1008,9 @@ def build_plan_payload(
         "aps": aps,
         "areas": areas,
         "robots": _robots(hass, plan),
-        "cleaned": plan.get("cleaned") or {},
+        # A copy: the plan's dict changes in place, and HA only writes a state whose attributes changed.
+        "cleaned": {k: dict(v) for k, v in (plan.get("cleaned") or {}).items()},
+        "clean_log": {k: [dict(x) for x in v] for k, v in (plan.get("clean_log") or {}).items()},
     }
 
 

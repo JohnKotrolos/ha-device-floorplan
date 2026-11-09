@@ -256,6 +256,7 @@ class FloorplanData:
             "shapes": plan.get("shapes", {}),
             "robots": plan.get("robots", {}),
             "cleaned": plan.get("cleaned", {}),
+            "clean_log": plan.get("clean_log", {}),
             "device_id": self.plan_device_id(plan_id),
             "image_entity": self.entity_id_for(plan_id, "image"),
             "sensor_entity": self.entity_id_for(plan_id, "sensor"),

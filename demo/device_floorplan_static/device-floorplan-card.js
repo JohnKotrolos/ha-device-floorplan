@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.10.0b5";
+const CARD_VERSION = "0.10.0b6";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -913,6 +913,10 @@ svg.fresh polygon { pointer-events: visiblePainted; cursor:pointer; stroke:none;
 .rbpop .rbc.low b { color:#e65100; }
 .rbcmds { display:flex; gap:8px; margin:14px 0 4px; flex-wrap:wrap; }
 .rbcmds button { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:18px; border:1px solid var(--divider-color, rgba(0,0,0,.15)); background:none; color:inherit; font:inherit; cursor:pointer; --mdc-icon-size:18px; }
+.bar.oacts button { position:relative; }
+.bar.oacts .odot { position:absolute; top:4px; right:6px; width:8px; height:8px; border-radius:50%; }
+.bar.oacts .obadge { margin-left:6px; font-style:normal; font-size:11px; font-weight:600; line-height:1.5; padding:0 6px; border-radius:8px; background: var(--primary-color, #03a9f4); color:#fff; }
+.room.ctap { pointer-events:auto; cursor:pointer; }
 .rbhint { margin-top:8px; font-size:12px; color: var(--secondary-text-color); }
 .rdock { position:absolute; transform: translate(-50%,-50%); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); color: var(--secondary-text-color); box-shadow: 0 1px 3px rgba(0,0,0,.3); --mdc-icon-size:14px; pointer-events:none; }
 .m.robot { z-index:3; }
@@ -2555,6 +2559,13 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _barHold(t) {
+    if (t.dataset.oact != null) {
+      const x = this._ovActs()[Number(t.dataset.oact)];
+      if (!x) return;
+      if (x.hold_action) this._barRun(x.hold_action, this._ovActEnt(x));
+      else if (this._ovActEnt(x)) this._moreInfo(this._ovActEnt(x));
+      return;
+    }
     const b = this._buttons();
     if (t.dataset.ov) {
       const act = (b.actions[t.dataset.ov] || {}).hold_action;
@@ -2892,12 +2903,27 @@ class DeviceFloorplanCard extends HTMLElement {
     const c = (a.cleaned || {})[p.area];
     const by = c && this._hass.states[c.by] ? this._hass.states[c.by].attributes.friendly_name : "";
     const when = c && c.t ? `Cleaned ${this._ageTxt(c.t)} ago${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    // Visits of the last runs (the integration logs when a robot enters and leaves a room); one run = one clean.
+    const runs = [];
+    for (const v of ((a.clean_log || {})[p.area] || []).slice().sort((x, y) => (x.s < y.s ? -1 : 1))) {
+      const s0 = new Date(v.s).getTime();
+      const e0 = new Date(v.e).getTime();
+      const last = runs[runs.length - 1];
+      if (last && s0 - last.e < 45 * 60000) {
+        last.e = e0;
+        last.d += e0 - s0;
+      } else runs.push({ s: s0, e: e0, d: e0 - s0 });
+    }
+    const week = runs.filter((r) => Date.now() - r.s < 7 * 86400000).length;
+    const ds = runs.slice(-10).map((r) => r.d).sort((x, y) => x - y);
+    const usual = ds.length ? Math.max(1, Math.round(ds[Math.floor(ds.length / 2)] / 60000)) : 0;
+    const stats = runs.length ? `<div class="kv"><span>Last 7 days</span><span>${week ? `${week}×` : "not cleaned"}</span>${usual ? `<span>Usually takes</span><span>${usual} min</span>` : ""}</div>` : "";
     const robots = Object.entries(a.robots || {}).filter(([e]) => this._hass.states[e]);
     const can = robots.filter(([e]) => Number(this._hass.states[e].attributes.supported_features || 0) & CLEAN_AREA);
-    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean with ${cesc(this._hass.states[e].attributes.friendly_name || e)}</button>`).join("");
+    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean now${can.length > 1 ? ` with ${cesc(this._hass.states[e].attributes.friendly_name || e)}` : ""}</button>`).join("");
     const hint = btns ? "" : can.length ? `Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.` : robots.length ? "Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+)." : "";
     const close = `<button data-close="1" aria-label="Close">×</button>`;
-    return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
+    return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${stats}${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
   }
 
   /** Does this item show up in this overlay at all (ignoring its current state)? Used by the editor (#52). */
@@ -3733,6 +3759,7 @@ class DeviceFloorplanCard extends HTMLElement {
       for (const item of this._items(a)) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") watch.add(e);
     }
     if (this._peopleShown()) for (const pp of this._people()) for (const e of [pp.entity, pp.room, pp.room2]) if (e) watch.add(e);
+    for (const x of this._ovActs()) if ((x.overlay || "cleaning") === ov) for (const e of barEnts(this._hass, x.status || {})) watch.add(e);
     if (["live", "cleaning", "health"].includes(ov)) {
       const ents = this._hass.entities || {};
       for (const [eid, r] of Object.entries(a.robots || {})) {
@@ -3806,7 +3833,7 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._freshHtml(a)}${this._robotHtml()}<svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
@@ -4215,7 +4242,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const cls = r.style === "label" ? "label" : "pill";
       const c = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true) && ((a.cleaned || {})[id] || {}).t;
       const age = c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
-      return `<div class="room ${cls}" style="left:${room.x}%;top:${room.y}%;font-size:${size}px">${icon}${cesc(name)}${age}</div>`;
+      const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
+      return `<div class="room ${cls}${tap ? " ctap" : ""}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px">${icon}${cesc(name)}${age}</div>`;
     }).join("");
   }
 
@@ -4297,8 +4325,9 @@ class DeviceFloorplanCard extends HTMLElement {
     };
     const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
     const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
-    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", "Cleaning path") : "";
-    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "When rooms were cleaned") : "";
+    const running = (this._rb || []).some((r) => r.active);
+    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? "Path of the last run" : "Cleaning path") : "";
+    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "Last cleaned") : "";
     const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
     return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
@@ -4388,6 +4417,42 @@ ${reset}
       b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}</button>`);
     });
     return `<div class="bar" role="toolbar" aria-label="Light scenes">${b.join("")}</div>`;
+  }
+
+  /** 0.10: Overlay actions: your own buttons under the plan, per overlay and per floor (any HA action, a popup…);
+   *  in Cleaning first the robots' own Start / Pause / Dock. */
+  _ovActs() {
+    return Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
+  }
+
+  _ovActsHtml(ov) {
+    const a = this._a || {};
+    const b = [];
+    if (ov === "cleaning" && (this._config.cleaning || {}).robot_buttons !== false) {
+      const robots = Object.keys(a.robots || {}).filter((e) => this._hass.states[e]);
+      for (const eid of robots) {
+        const st = this._hass.states[eid];
+        const pre = robots.length > 1 ? `${st.attributes.friendly_name || eid}: ` : "";
+        const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${cesc(pre + label)}</button>`;
+        b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") : cmd("start", "mdi:play", st.state === "paused" ? "Continue" : "Start"));
+        if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+      }
+    }
+    this._ovActs().forEach((x, i) => {
+      if ((x.overlay || "cleaning") !== ov) return;
+      if (Array.isArray(x.plans) && x.plans.length && !x.plans.includes(a.plan_id)) return;
+      const st = x.status ? barStatus(this._hass, x.status) : null;
+      const s0 = st || {};
+      const col = s0.color && s0.badge == null ? ` style="color:${cesc(s0.color)}"` : "";
+      const mark = s0.badge != null ? `<i class="obadge"${s0.color ? ` style="background:${cesc(s0.color)}"` : ""}>${cesc(s0.badge)}</i>` : s0.dot ? `<i class="odot" style="background:${cesc(s0.dot)}"></i>` : "";
+      b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || "Action")}${mark}</button>`);
+    });
+    return b.length ? `<div class="bar oacts" role="toolbar" aria-label="Actions">${b.join("")}</div>` : "";
+  }
+
+  _ovActEnt(x) {
+    const e = (x.status || {}).entity;
+    return (Array.isArray(e) ? e[0] : e) || undefined;
   }
 
   _lightEnts(specs) {
@@ -4775,6 +4840,17 @@ ${reset}
     }
     const pp = this._pick && t.closest("[data-person]");
     if (pp) return this._pick(`person:${pp.dataset.person}`);
+    const oa = t.closest("[data-oact]");
+    if (oa) {
+      if (this._held) {
+        this._held = false;
+        return;
+      }
+      const x = this._ovActs()[Number(oa.dataset.oact)];
+      if (x && x.tap_action) this._barRun(x.tap_action, this._ovActEnt(x));
+      else if (x && this._ovActEnt(x)) this._moreInfo(this._ovActEnt(x));
+      return;
+    }
     const ov = t.closest("[data-ov]");
     const scb = t.closest("[data-sc]");
     if ((ov || scb) && this._held) {
@@ -6046,7 +6122,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
         <div id="fopts"></div>
         <div data-form="general"></div>
-        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div>`)}
+        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions</h5><p>Your own buttons under the plan, shown in one overlay and on the floors you pick: run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
         ${sec("mdi:layers-outline", "Overlays", "What each overlay shows.", `<div data-form="overlaysA"></div>
           <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><p>Buttons in the Lights overlay. Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
           <div data-form="overlaysB"></div>
@@ -6129,7 +6205,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     this._refreshForms(key);
     if (key === "buttons" || key === "general") {
       this._renderRooms();
-      if (key === "buttons") this._renderBar();
+      if (key === "buttons") {
+        this._renderBar();
+        this._renderActs();
+      }
     }
   }
 
@@ -6180,6 +6259,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     this._refreshForms();
     this._renderCustom();
     this._renderBar();
+    this._renderActs();
     this._renderScenes();
     this._renderRooms();
     this._renderPeople();
@@ -6427,6 +6507,93 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (rules.length) st.rules = rules.map((r) => ({ ...(r.when ? { when: r.when } : {}), ...(r.color ? { color: r.color } : {}) }));
     }
     return st;
+  }
+
+  /** 0.10: Overlay actions (buttons under the plan), per overlay and per floor. */
+  _renderActs() {
+    const box = this.querySelector("#oacts");
+    if (!box) return;
+    const list = Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
+    const plans = planSensors(this._hass).map((x) => ({ value: x.attributes.plan_id, label: x.attributes.plan_name || x.attributes.plan_id }));
+    const ovName = (o) => (this._ovOptions().find((x) => x.value === o) || {}).label || o;
+    const save = (next, redraw = true) => {
+      const c = { ...this._config, overlay_actions: next };
+      if (!next.length) delete c.overlay_actions;
+      this._config = this._prune(c);
+      this._emit();
+      if (redraw) this._renderActs();
+    };
+    const rb = (this._config.cleaning || {}).robot_buttons !== false;
+    box.innerHTML = `<div class="oaopt"></div>` + list.map((x, i) => `<div class="row" data-i="${i}"><button class="hd" data-aopen="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || `Action ${i + 1}`)}<small style="margin-left:auto">${cesc(ovName(x.overlay || "cleaning"))} · ${cesc(Array.isArray(x.plans) && x.plans.length ? x.plans.map((id) => (plans.find((q) => q.value === id) || {}).label || id).join(", ") : "every floor")}</small></button>${this._aopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-aadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add action</button>`;
+    box.querySelector(".oaopt").appendChild(this._form([{ name: "rb", selector: { boolean: {} } }], { rb }, { rb: "Cleaning: the robot's Start / Pause / Dock under the plan" }, (v) => {
+      const c = { ...(this._config.cleaning || {}) };
+      if (v.rb) delete c.robot_buttons;
+      else c.robot_buttons = false;
+      const nc = { ...this._config, cleaning: c };
+      if (!Object.keys(c).length) delete nc.cleaning;
+      this._config = this._prune(nc);
+      this._emit();
+    }));
+    box.querySelector("[data-aadd]").addEventListener("click", () => {
+      this._aopen = list.length;
+      save([...list, { name: "Action", icon: "mdi:gesture-tap", overlay: "cleaning" }]);
+    });
+    for (const el of box.querySelectorAll("[data-aopen]")) el.addEventListener("click", () => {
+      const i = Number(el.dataset.aopen);
+      this._aopen = this._aopen === i ? null : i;
+      this._renderActs();
+    });
+    const body = this._aopen != null && box.querySelector(`.row[data-i="${this._aopen}"] .body`);
+    if (!body) return;
+    const i = this._aopen;
+    const x = list[i] || {};
+    const tk = (x.tap_action || {}).action;
+    const bm = tk === "fire-dom-event" && x.tap_action.browser_mod && x.tap_action.browser_mod.service === "browser_mod.popup" ? x.tap_action.browser_mod.data || {} : null;
+    const data = {
+      name: x.name || "", icon: x.icon || "", overlay: x.overlay || "cleaning", plans: Array.isArray(x.plans) ? x.plans : [],
+      tap_kind: bm ? "popup" : x.tap_action ? "action" : "details",
+      tap_action: !bm && tk ? x.tap_action : undefined,
+      popup_title: bm ? bm.title || "" : "", popup_card: bm ? bm.content : undefined,
+      hold_kind: x.hold_action ? "action" : "details",
+      hold_action: x.hold_action || undefined,
+      ...this._statusData(x.status || {}, false),
+    };
+    const LBL = { name: "Name", icon: "Icon", overlay: "Shown in", plans: "Floors (none ticked = every floor)", tap_kind: "Tap", tap_action: "Tap action", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)", hold_kind: "Hold", hold_action: "Hold action", st_mode: "Status on the button", st_entity: "Entities", st_show: "Shows", st_when_1: "When (states like cleaning, on, or a number test like >50; empty = on / open / armed / unlocked)", st_color_1: "Colour (e.g. green, #E5534B)", st_when_2: "Else when", st_color_2: "Colour", st_when_3: "Else when", st_color_3: "Colour" };
+    const schema = [
+      { name: "name", selector: { text: {} } },
+      { name: "icon", selector: { icon: {} } },
+      { name: "overlay", selector: { select: { options: this._ovOptions(), mode: "dropdown" } } },
+      { name: "plans", selector: { select: { options: plans, multiple: true, mode: "list" } } },
+      { name: "tap_kind", selector: { select: { options: [{ value: "details", label: "Details of the status entity" }, { value: "action", label: "A Home Assistant action (script, scene, service, page…)" }, { value: "popup", label: "Popup on this browser only (browser_mod)" }], mode: "dropdown" } } },
+      ...(data.tap_kind === "action" ? [{ name: "tap_action", selector: { ui_action: {} } }] : []),
+      ...(data.tap_kind === "popup" ? [{ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } }] : []),
+      { name: "hold_kind", selector: { select: { options: [{ value: "details", label: "Details of the status entity" }, { value: "action", label: "A Home Assistant action" }], mode: "dropdown" } } },
+      ...(data.hold_kind === "action" ? [{ name: "hold_action", selector: { ui_action: {} } }] : []),
+      ...this._statusSchema(x.status || {}, false),
+    ];
+    body.appendChild(this._form(schema, data, LBL, (v) => {
+      const nx = { name: v.name || "", icon: v.icon || "", overlay: v.overlay || "cleaning" };
+      if (Array.isArray(v.plans) && v.plans.length) nx.plans = v.plans;
+      if (v.tap_kind === "action") nx.tap_action = v.tap_action && v.tap_action.action ? v.tap_action : { action: "perform-action" };
+      else if (v.tap_kind === "popup") nx.tap_action = { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(v.popup_title ? { title: v.popup_title } : {}), content: v.popup_card || { type: "markdown", content: "Pick a card" } } } };
+      if (v.hold_kind === "action") nx.hold_action = v.hold_action && v.hold_action.action ? v.hold_action : { action: "perform-action" };
+      const st = this._statusFrom(v, false);
+      if (st) nx.status = st;
+      const redraw = v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || (v.st_show === "count" || v.st_show === "value") !== (data.st_show === "count" || data.st_show === "value");
+      save(list.map((y, j) => (j === i ? nx : y)), redraw);
+    }));
+    body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-amv="-1" ${i === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-amv="1" ${i === list.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-adel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
+    for (const el of body.querySelectorAll("[data-amv]")) el.addEventListener("click", () => {
+      const j = i + Number(el.dataset.amv);
+      const next = [...list];
+      [next[i], next[j]] = [next[j], next[i]];
+      this._aopen = j;
+      save(next);
+    });
+    body.querySelector("[data-adel]").addEventListener("click", () => {
+      this._aopen = null;
+      save(list.filter((_y, j) => j !== i));
+    });
   }
 
   _renderBar() {
