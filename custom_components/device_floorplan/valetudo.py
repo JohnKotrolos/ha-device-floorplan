@@ -66,20 +66,22 @@ def _png(w: int, h: int, rows: list[bytearray], palette: list[tuple[int, int, in
 def map_picture(vm: dict[str, Any], px: float) -> dict[str, Any] | None:
     """Valetudo has no map picture in HA (its camera shows a placeholder): draw floor, rooms and walls,
     with calibration points (picture px ↔ mm) so the Editor can show it under the robot's map."""
-    layers = [l for l in vm.get("layers") or [] if l.get("type") in COLOURS and (l.get("dimensions") or {}).get("x")]
-    if not layers:
+    layers = [(l["type"], list(_runs(l))) for l in vm.get("layers") or [] if l.get("type") in COLOURS]
+    runs = [r for _t, rs in layers for r in rs]
+    if not runs:
         return None
-    x0 = min(l["dimensions"]["x"]["min"] for l in layers)
-    x1 = max(l["dimensions"]["x"]["max"] for l in layers) + 1
-    y0 = min(l["dimensions"]["y"]["min"] for l in layers)
-    y1 = max(l["dimensions"]["y"]["max"] for l in layers) + 1
+    # The pixels themselves give the size (layer dimensions can be missing or narrower).
+    x0 = min(r[0] for r in runs)
+    x1 = max(r[0] + r[2] for r in runs)
+    y0 = min(r[1] for r in runs)
+    y1 = max(r[1] for r in runs) + 1
     k = max(1, -(-max(x1 - x0, y1 - y0) // MAX_PIC))
     w, h = -(-(x1 - x0) // k), -(-(y1 - y0) // k)
     rows = [bytearray(w) for _ in range(h)]
     order = {"floor": 1, "segment": 1, "wall": 2}
-    for layer in sorted(layers, key=lambda l: order[l["type"]]):
-        v = order[layer["type"]]
-        for x, y, n in _runs(layer):
+    for kind, rs in sorted(layers, key=lambda l: order[l[0]]):
+        v = order[kind]
+        for x, y, n in rs:
             row = rows[(y - y0) // k]
             for i in range((x - x0) // k, (x + n - 1 - x0) // k + 1):
                 row[i] = v
@@ -158,7 +160,11 @@ def map_attrs(vm: dict[str, Any]) -> dict[str, Any]:
         step = -(-total // MAX_PATH)
         paths = [[v for k in range(0, len(p) - 1, 2 * step) for v in (p[k], p[k + 1])] for p in paths]
     out["path"] = paths
-    pic = map_picture(vm, px)
+    try:
+        pic = map_picture(vm, px)
+    except (TypeError, ValueError, IndexError, KeyError):  # never lose the map over its picture
+        _LOGGER.debug("Valetudo map picture failed", exc_info=True)
+        pic = None
     if pic:
         out.update(pic)
     return out
@@ -196,11 +202,15 @@ def async_setup_valetudo(hass: HomeAssistant, entry: ConfigEntry, add: AddEntiti
         finally:
             busy = False
 
+    @callback
+    def started(_e: Any = None) -> None:
+        hass.async_create_task(scan())
+
     entry.async_on_unload(async_track_time_interval(hass, scan, SCAN))
     if hass.is_running:
-        hass.async_create_task(scan())
+        started()
     else:
-        entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, lambda _e: hass.async_create_task(scan())))
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, started)
 
 
 class ValetudoMapSensor(SensorEntity):

@@ -169,7 +169,7 @@ class RobotWatcher:
         if self.hass.is_running:
             self._resubscribe()
         else:
-            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, lambda _e: self._resubscribe())
+            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._resubscribe)
 
     @callback
     def _stop(self) -> None:
