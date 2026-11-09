@@ -1684,6 +1684,8 @@ class DeviceFloorplanCard extends HTMLElement {
   /** Room names: shown by default in the overlays chosen in the editor (Live, when not set: where Plan was). */
   _roomsDefault(ov) {
     const si = (this._config.rooms || {}).show_in;
+    // 0.10: Cleaning shows room names by default: they carry when each room was cleaned.
+    if (ov === "cleaning") return true;
     if (!Array.isArray(si)) return ov === "live";
     return si.includes(ov) || (ov === "live" && si.includes("plan"));
   }

@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.9.1).
+ * Device Floorplan – dashboard card (v0.10.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.9.1";
+const CARD_VERSION = "0.10.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -29,6 +29,7 @@ const OVERLAYS = {
   security: { label: "Security", icon: "mdi:shield-home-outline" },
   network: { label: "Network", icon: "mdi:access-point-network" },
   health: { label: "Health", icon: "mdi:battery-heart-variant" },
+  cleaning: { label: "Cleaning", icon: "mdi:robot-vacuum" },
   people: { label: "People", icon: "mdi:account-group-outline" },
 };
 const OVERLAY_ORDER = ["live", "lights", "comfort", "security", "network", "health"];
@@ -126,8 +127,11 @@ const TAP_OPTIONS = [
   { value: "toggle", label: "Switch on / off" },
   { value: "more-info", label: "Open details / controls (more-info)" },
   { value: "readings", label: "Readings popup with history" },
+  { value: "navigate", label: "Open a dashboard" },
+  { value: "popup", label: "Popup with a card (browser_mod)" },
   { value: "none", label: "Nothing" },
 ];
+const CLEAN_AREA = 16384; // VacuumEntityFeature.CLEAN_AREA (HA 2026.3)
 
 // Network (#49)
 const CONNS = {
@@ -264,6 +268,145 @@ function setShadow(el, html) {
 const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
+
+// ---- 0.10: robot vacuums. A map integration (Xiaomi Cloud Map Extractor, Dreame, Roborock Custom Map, AnyVac…)
+// gives the robot, dock, path and rooms in its own units; m turns them into % of the plan image.
+const RB_ACTIVE = ["cleaning", "returning", "paused", "error"];
+const RB_COL = { cleaning: "33,150,243", returning: "0,172,193", paused: "251,140,0", error: "229,57,53", docked: "120,144,156", idle: "120,144,156" };
+function rbPt(v) {
+  if (Array.isArray(v) && v.length >= 2 && v.length <= 3 && num(v[0]) && num(v[1])) return { x: +v[0], y: +v[1], a: num(v[2]) ? +v[2] : null };
+  if (v && typeof v === "object" && !Array.isArray(v) && num(v.x) && num(v.y)) return { x: +v.x, y: +v.y, a: num(v.a) ? +v.a : num(v.angle) ? +v.angle : null };
+  return null;
+}
+/** Every polyline inside a path attribute, whatever its nesting ({x,y} lists, [x,y] lists, flat numbers). */
+function rbLines(v, out = [], d = 0) {
+  if (!v || d > 6 || typeof v !== "object") return out;
+  if (Array.isArray(v)) {
+    const pts = v.map(rbPt);
+    if (v.length > 1 && pts.every(Boolean)) out.push(pts);
+    else if (v.length > 3 && v.length % 2 === 0 && v.every((n) => typeof n === "number")) {
+      const p = [];
+      for (let i = 0; i < v.length; i += 2) p.push({ x: v[i], y: v[i + 1] });
+      out.push(p);
+    } else for (const w of v) rbLines(w, out, d + 1);
+  } else for (const w of Object.values(v)) rbLines(w, out, d + 1);
+  return out;
+}
+function rbRooms(v) {
+  const list = Array.isArray(v) ? v.map((r, i) => [String((r && (r.id ?? r.segment_id ?? r.room_id)) ?? i), r]) : v && typeof v === "object" ? Object.entries(v) : [];
+  return list.map(([k, r]) => {
+    if (!r || typeof r !== "object") return null;
+    const b = Array.isArray(r.box) ? r.box : [r.x0, r.y0, r.x1, r.y1];
+    if (!b.every(num)) return null;
+    const id = String(r.room_id ?? r.segment_id ?? r.id ?? k);
+    return { id, name: String(r.name || r.room_name || ""), x0: Math.min(b[0], b[2]), y0: Math.min(b[1], b[3]), x1: Math.max(b[0], b[2]), y1: Math.max(b[1], b[3]) };
+  }).filter(Boolean);
+}
+/** What a robot reports now: its vacuum entity's state plus the map entity's attributes. */
+function rbRead(hass, eid, cfg) {
+  const vs = hass.states[eid];
+  const ms = cfg && cfg.source ? hass.states[cfg.source] : null;
+  const A = { ...((vs && vs.attributes) || {}), ...((ms && ms.attributes) || {}) };
+  const lines = rbLines(A.path || A.vacuum_path || A.cleaned_path);
+  const calib = Array.isArray(A.calibration_points) ? A.calibration_points.map((c) => ({ r: rbPt(c && c.vacuum), p: rbPt(c && c.map) })).filter((c) => c.r && c.p) : [];
+  const room = A.vacuum_room ?? A.current_segment ?? A.current_room ?? null;
+  const rooms = rbRooms(A.rooms || A.segments);
+  const mapName = ["map_name", "selected_map", "current_map", "active_map", "map_id"].map((k) => A[k]).find((v) => v != null && v !== "" && typeof v !== "object");
+  return {
+    state: vs ? vs.state : "unavailable",
+    pos: rbPt(A.vacuum_position || A.robot_position || A.position),
+    dock: rbPt(A.charger || A.charger_position || A.dock_position),
+    lines,
+    rooms,
+    mapName: mapName != null ? String(mapName) : null,
+    room: room != null && typeof room !== "object" ? String(room) : null,
+    calib,
+    pic: ms && ms.attributes.entity_picture,
+    attrs: A,
+  };
+}
+/** Robots that do several floors: is it on the map this plan was aligned with? (Same rule as robots.py.) */
+function rbOnMap(saved, d) {
+  if (!saved) return true;
+  if (saved.name && d.mapName) return saved.name === d.mapName;
+  const want = new Set(saved.rooms || []);
+  const have = d.rooms.map((r) => r.id);
+  if (!want.size || !have.length) return true;
+  return have.filter((id) => want.has(id)).length * 2 >= want.size;
+}
+const rbSig = (d) => ({ name: d.mapName, rooms: d.rooms.map((r) => r.id) });
+const rbApply = (m, p) => ({ x: m[0] * p.x + m[1] * p.y + m[2], y: m[3] * p.x + m[4] * p.y + m[5] });
+/** Best fit robot → plan (scale, turn, move; mirrored or not) from pairs {r:{x,y}, p:{x,y} in %}. */
+function rbFit(pairs, ratio) {
+  if (pairs.length < 2) return null;
+  let best = null;
+  for (const fy of [-1, 1]) {
+    const R = pairs.map((q) => [q.r.x, fy * q.r.y]);
+    const P = pairs.map((q) => [q.p.x * ratio, q.p.y]);
+    const n = R.length;
+    const rc = [R.reduce((t, q) => t + q[0], 0) / n, R.reduce((t, q) => t + q[1], 0) / n];
+    const pc = [P.reduce((t, q) => t + q[0], 0) / n, P.reduce((t, q) => t + q[1], 0) / n];
+    let ar = 0;
+    let ai = 0;
+    let sr = 0;
+    for (let i = 0; i < n; i++) {
+      const [rx, ry] = [R[i][0] - rc[0], R[i][1] - rc[1]];
+      const [px, py] = [P[i][0] - pc[0], P[i][1] - pc[1]];
+      ar += px * rx + py * ry;
+      ai += py * rx - px * ry;
+      sr += rx * rx + ry * ry;
+    }
+    if (!sr) continue;
+    ar /= sr;
+    ai /= sr;
+    const tu = pc[0] - (ar * rc[0] - ai * rc[1]);
+    const tv = pc[1] - (ai * rc[0] + ar * rc[1]);
+    let err = 0;
+    for (let i = 0; i < n; i++) err += (ar * R[i][0] - ai * R[i][1] + tu - P[i][0]) ** 2 + (ai * R[i][0] + ar * R[i][1] + tv - P[i][1]) ** 2;
+    // Two rooms fit both ways: robot maps usually count y upwards, so mirrored wins a tie.
+    if (!best || err < best.err - 1e-6) best = { err, m: [ar / ratio, (-ai * fy) / ratio, tu / ratio, ai, ar * fy, tv] };
+  }
+  return best && best.m;
+}
+/** Like rbFit, but a plan drawn a bit squeezed is allowed: turn (+ mirror), then a scale per plan axis.
+ *  Used only with 3+ rooms and only when clearly better, so a few misplaced room names can't distort a good plan. */
+function rbFit2(pairs, ratio) {
+  const sim = rbFit(pairs, ratio);
+  if (!sim) return null;
+  const P = pairs.map((q) => [q.p.x * ratio, q.p.y]);
+  const err = (m) => pairs.reduce((t, q, i) => { const a = rbApply(m, q.r); return t + (a.x * ratio - P[i][0]) ** 2 + (a.y - P[i][1]) ** 2; }, 0);
+  const out = { m: sim, sx: 1, sy: 1, err: err(sim) };
+  if (pairs.length < 3) return out;
+  const fy = sim[0] * sim[4] - sim[1] * sim[3] < 0 ? -1 : 1;
+  const th0 = Math.atan2(sim[3], sim[0] * ratio);
+  const solve = (th) => {
+    const c = Math.cos(th);
+    const sn = Math.sin(th);
+    const R = pairs.map((q) => [c * q.r.x - sn * fy * q.r.y, sn * q.r.x + c * fy * q.r.y]);
+    const line = (k) => {
+      const n = R.length;
+      const mx = R.reduce((t, r) => t + r[k], 0) / n;
+      const my = P.reduce((t, p) => t + p[k], 0) / n;
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < n; i++) { num += (R[i][k] - mx) * (P[i][k] - my); den += (R[i][k] - mx) ** 2; }
+      const sc = den ? num / den : 0;
+      return [sc, my - sc * mx];
+    };
+    const [sx, tx] = line(0);
+    const [sy, ty] = line(1);
+    if (!(sx > 0 && sy > 0)) return null;
+    const m = [(sx * c) / ratio, (-sx * sn * fy) / ratio, tx / ratio, sy * sn, sy * c * fy, ty];
+    return { m, sx, sy, err: err(m) };
+  };
+  let best = null;
+  for (let k = -32; k <= 32; k++) { const r = solve(th0 + (k * 0.25 * Math.PI) / 180); if (r && (!best || r.err < best.err)) best = r; }
+  if (best) for (let k = -10; k <= 10; k++) { const r = solve(Math.atan2(best.m[3], best.m[0] * ratio) + (k * 0.025 * Math.PI) / 180); if (r && r.err < best.err) best = r; }
+  if (!best) return out;
+  const k = best.sx / best.sy;
+  return best.err < out.err * 0.6 && Math.abs(k - 1) > 0.015 && k > 0.75 && k < 1.33 ? best : out;
+}
+if (!window.__dfcRobot) window.__dfcRobot = { read: rbRead, apply: rbApply, fit: rbFit, fit2: rbFit2, sig: rbSig, onMap: rbOnMap, active: RB_ACTIVE, col: RB_COL };
 
 // ---- Night look and light pools (#74): pure CSS over the one plan image.
 const NIGHT_DEFAULT = { mode: "sun", start: "20:00", end: "07:00", strength: 70, style: "moon", overlays: ["live", "lights"], dim_quiet: true, shutters: true, warm_dusk: false };
@@ -746,6 +889,36 @@ ha-card.dock-right { flex-direction: row; }
 .prow .av { width:26px; height:26px; border-radius:50%; background: var(--dfc-accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; overflow:hidden; }
 .prow .av img { width:100%; height:100%; object-fit:cover; }
 .box img.plan { position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:block; user-select:none; -webkit-user-drag:none; }
+svg.rpath { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+svg.rpath polyline { fill:none; stroke: rgb(33,150,243); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; opacity:.55; vector-effect: non-scaling-stroke; }
+svg.fresh { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+svg.fresh polygon { pointer-events: visiblePainted; cursor:pointer; stroke:none; transition: fill .3s; }
+.room small.rage { display:block; font-size:.78em; opacity:.75; font-weight:400; text-align:center; }
+.rdock.chg { color:#43a047; }
+.rdock .rdw { position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:#ffa000; border:1.5px solid var(--card-background-color, #fff); }
+.m.robot .rbg { position:absolute; left:50%; top:100%; transform: translate(-50%, 2px); font-size:10px; font-weight:600; line-height:1.5; padding:0 5px; border-radius:8px; background: var(--card-background-color, #fff); color: var(--dfc-c); box-shadow: 0 1px 3px rgba(0,0,0,.25); white-space:nowrap; pointer-events:none; }
+.m.robot .rbg.warn { background:#ffa000; color:#fff; }
+.m.robot .rbg.err { background:#e53935; color:#fff; }
+.rbpop .rbst { display:flex; align-items:center; gap:8px; margin:0 0 10px; color: var(--secondary-text-color); }
+.rbpop .rbst::before { content:""; width:10px; height:10px; border-radius:50%; background: var(--c); flex:none; }
+.rbpop h4 { margin:12px 0 6px; font-size:13px; font-weight:600; }
+.rbpop .rbc { display:grid; grid-template-columns: 1fr 90px 52px; align-items:center; gap:8px; width:100%; padding:4px 0; background:none; border:0; color:inherit; font:inherit; font-size:13px; text-align:left; cursor:pointer; }
+.rbpop .rbc i { height:6px; border-radius:3px; background: linear-gradient(90deg, #43a047 var(--p), rgba(127,127,127,.2) var(--p)); }
+.rbpop .rbc.low i { background: linear-gradient(90deg, #ffa000 var(--p, 100%), rgba(127,127,127,.2) var(--p, 100%)); }
+.rbpop .rbc i.n { background:none; }
+.rbpop .rbc b { text-align:right; font-weight:500; }
+.rbpop .rbc.low b { color:#e65100; }
+.rbcmds { display:flex; gap:8px; margin:14px 0 4px; flex-wrap:wrap; }
+.rbcmds button { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:18px; border:1px solid var(--divider-color, rgba(0,0,0,.15)); background:none; color:inherit; font:inherit; cursor:pointer; --mdc-icon-size:18px; }
+.rbhint { margin-top:8px; font-size:12px; color: var(--secondary-text-color); }
+.rdock { position:absolute; transform: translate(-50%,-50%); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); color: var(--secondary-text-color); box-shadow: 0 1px 3px rgba(0,0,0,.3); --mdc-icon-size:14px; pointer-events:none; }
+.m.robot { z-index:3; }
+.m.robot .ic { background: color-mix(in srgb, var(--dfc-c) 18%, var(--card-background-color, #fff)); color: var(--dfc-c); }
+.m.robot .rhd { position:absolute; inset:-7px; pointer-events:none; }
+.m.robot .rhd::before { content:""; position:absolute; left:50%; top:0; transform: translateX(-50%); border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:7px solid var(--dfc-c); }
+.m.robot.error .ic, .m.robot.paused .ic { animation: dfcrb 1.6s ease-in-out infinite; }
+.m.robot .ic { position:relative; }
+@keyframes dfcrb { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--dfc-c) 30%, transparent), 0 1px 6px rgba(0,0,0,.35); } }
 svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 svg.lines line { stroke-linecap: round; }
 svg.lines line.lead { stroke: var(--secondary-text-color); stroke-width:1; opacity:.55; }
@@ -1485,7 +1658,9 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _overlays() {
-    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...this._custom().map((c) => c.id)];
+    // 0.10: Cleaning joins the default list once a robot is set up on this plan (or when chosen in the card editor).
+    const robots = Object.keys((this._a && this._a.robots) || {}).length ? ["cleaning"] : [];
+    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...robots, ...this._custom().map((c) => c.id)];
     return list.filter((o) => o !== "plan" && this._ovDef(o));
   }
 
@@ -1509,6 +1684,8 @@ class DeviceFloorplanCard extends HTMLElement {
   /** Room names: shown by default in the overlays chosen in the editor (Live, when not set: where Plan was). */
   _roomsDefault(ov) {
     const si = (this._config.rooms || {}).show_in;
+    // 0.10: Cleaning shows room names by default: they carry when each room was cleaned.
+    if (ov === "cleaning") return true;
     if (!Array.isArray(si)) return ov === "live";
     return si.includes(ov) || (ov === "live" && si.includes("plan"));
   }
@@ -2334,7 +2511,15 @@ class DeviceFloorplanCard extends HTMLElement {
         else if (k === "battery" && live(st) && num(st.state) && Number(st.state) <= low) health = true;
       }
     }
+    let clean = null;
+    for (const [eid, cfg] of Object.entries(a.robots || {})) {
+      if (!h.states[eid]) continue;
+      const inf = this._rbInfo(eid, rbRead(h, eid, cfg));
+      if (inf.err) clean = { dot: "var(--error-color, #db4437)" };
+      else if (inf.attn && !clean) clean = { dot: "#ffa000" };
+    }
     return {
+      cleaning: clean,
       lights: lights ? { badge: lights, color: "#F2B84B" } : null,
       security: sec ? { dot: "var(--error-color, #db4437)" } : null,
       health: health ? { dot: "#ffa000" } : null,
@@ -2499,7 +2684,217 @@ class DeviceFloorplanCard extends HTMLElement {
       if (isSel && !sp.length && !((ov === "live" || ov === "lights") && this._applOf(item))) sp = this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, on: true, dim: false, cls: "" }));
       out.push(...sp);
     }
+    return this._robotSpecs(a, ov, out);
+  }
+
+  /** 0.10: robots. Live: a robot out cleaning is one marker at its live position instead of its usual one.
+   *  Cleaning: every robot, live or at its dock. Health: a robot not placed by hand sits at its dock with its battery.
+   *  A robot that does several floors shows only on the plan whose map it is using. Path and dock: _robotHtml. */
+  _robotSpecs(a, ov, out) {
+    this._rb = [];
+    if (!["live", "cleaning", "health"].includes(ov)) return out;
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    let items = null;
+    for (const [eid, cfg] of Object.entries(a.robots || {})) {
+      const st = this._hass.states[eid];
+      if (!cfg || !Array.isArray(cfg.m) || !st) continue;
+      const d = rbRead(this._hass, eid, cfg);
+      if (!rbOnMap(cfg.map, d)) continue;
+      const active = RB_ACTIVE.includes(d.state);
+      items = items || this._items(a);
+      const placed = items.find((it) => !it.phantom && [it.main_entity, ...(it.entities || []), ...(it.allEntities || [])].includes(eid));
+      const item = placed || { id: `robot:${eid}`, name: st.attributes.friendly_name || eid, main_entity: eid, entities: [eid] };
+      if (placed && this._hidden(placed, ov)) continue;
+      const info = this._rbInfo(eid, d);
+      let at = null;
+      if (ov === "live") {
+        if (!active || !d.pos) continue;
+        at = d.pos;
+      } else if (ov === "health") {
+        if (placed) continue; // placed by hand: Health shows it there, like any device
+        at = d.dock || d.pos;
+      } else at = active && d.pos ? d.pos : d.dock || d.pos;
+      if (!at && !placed) continue;
+      const p = at ? rbApply(cfg.m, at) : { x: placed.x, y: placed.y };
+      let head = null;
+      if (at === d.pos && active && d.pos.a != null) {
+        const r = (d.pos.a * Math.PI) / 180;
+        const q = rbApply(cfg.m, { x: d.pos.x + Math.cos(r), y: d.pos.y + Math.sin(r) });
+        head = (Math.atan2(q.y - p.y, (q.x - p.x) * ratio) * 180) / Math.PI + 90;
+      }
+      const low = Number((this._config.health || {}).low ?? 20);
+      let col = RB_COL[d.state] || RB_COL.idle;
+      let badge = "";
+      if (ov === "health") {
+        col = info.err ? RB_COL.error : info.battery != null && info.battery <= low ? "255,160,0" : info.charging ? "67,160,71" : RB_COL.docked;
+        badge = info.battery != null ? `${info.charging ? "⚡" : ""}${Math.round(info.battery)}%` : "";
+      } else if (ov === "cleaning" && (info.err || info.attn)) badge = "!";
+      const tone = info.err ? "err" : info.attn ? "warn" : "";
+      this._rb.push({ eid, cfg, d, info, active });
+      out = out.filter((x) => x.item.id !== item.id);
+      const dev = placed ? this._dev(placed.id) : {};
+      out.push({ type: "robot", kind: "appliance", key: `robot:${eid}`, item, eid, ents: [eid], name: dev.name || item.name, x: +p.x.toFixed(3), y: +p.y.toFixed(3), on: true, color: `rgb(${col})`, head, state: d.state, icon: (placed && this._per(placed, ov).icon) || dev.icon || st.attributes.icon || "mdi:robot-vacuum", badge, tone: ov === "health" ? "" : tone, tip: this._rbTip(st, d, info, a, cfg) });
+    }
     return out;
+  }
+
+  /** Everything the robot's device tells (HA's entity list): battery, consumables, dock, last run, error. Generic: names and units. */
+  _rbInfo(eid, d) {
+    const h = this._hass;
+    const vs = h.states[eid];
+    const devId = h.entities && h.entities[eid] && h.entities[eid].device_id;
+    const ents = devId ? Object.values(h.entities).filter((e) => e.device_id === devId).map((e) => e.entity_id) : [eid];
+    const name = (e) => {
+      const fn = String((h.states[e] && h.states[e].attributes.friendly_name) || e);
+      const dn = String((vs && vs.attributes.friendly_name) || "");
+      return fn.startsWith(dn + " ") ? fn.slice(dn.length + 1) : fn;
+    };
+    let battery = vs && num(vs.attributes.battery_level) ? Number(vs.attributes.battery_level) : null;
+    let charging = false;
+    const parts = {};
+    const station = [];
+    const last = {};
+    let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "Error" : "";
+    const OK = /^(ok|normal|none|no_error|no error|idle|off|installed|not_full|0|false|unknown|unavailable|completed|clean|good)$/i;
+    for (const e of ents) {
+      const st = h.states[e];
+      if (!st || e === eid) continue;
+      const dc = st.attributes.device_class;
+      const unit = st.attributes.unit_of_measurement;
+      const id = e.split(".")[1];
+      if (domainOf(e) === "sensor" && dc === "battery" && num(st.state)) battery = Number(st.state);
+      else if (domainOf(e) === "binary_sensor" && dc === "battery_charging") charging = st.state === "on";
+      else if (/charging_status|charge_state|charging_state/.test(id) && /^(charging)$/i.test(st.state)) charging = true;
+      else if (domainOf(e) === "sensor" && /(brush|filter|sensor_dirty|dirty_sensor|mop_pad|_mop|pad|blade|squeegee|consumable|detergent|dust_bag)/.test(id) && /(left|remaining|life|time_left|wear)/.test(id) && num(st.state) && ["%", "h", "min", "s"].includes(unit)) {
+        const key = id.replace(/_(time_left|time_remaining|left|remaining|life_level|life|wear)$/, "");
+        const v = Number(st.state);
+        const hrs = unit === "h" ? v : unit === "min" ? v / 60 : unit === "s" ? v / 3600 : null;
+        const prev = parts[key];
+        if (prev && prev.pct != null && unit !== "%") continue;
+        parts[key] = { e, name: name(e).replace(/\s*(time left|left|remaining|life|level)$/i, ""), pct: unit === "%" ? v : null, txt: unit === "%" ? `${Math.round(v)}%` : `${Math.round(hrs)} h`, low: unit === "%" ? v <= 10 : hrs <= 10 };
+      } else if (/(last_clean|last_cleaning)_?(end|start|begin|time)?$|last_clean_(end|start|begin)/.test(id) && dc === "timestamp") last.t = last.t && last.t > st.state ? last.t : st.state;
+      else if (/(cleaning_time|clean_time|cleaning_duration|last_clean_duration)/.test(id) && num(st.state)) last.dur = this._fmt(e);
+      else if (/(cleaned_area|cleaning_area|clean_area|last_clean_area)/.test(id) && num(st.state)) last.area = this._fmt(e);
+      else if (/(dust_bag|dustbin|bin_full|water_tank|clean_water|dirty_water|water_box|station|dock|self_clean|drainage|detergent|mop_pad_status|mop_status)/.test(id) && ((domainOf(e) === "binary_sensor" && dc === "problem" && st.state === "on") || (domainOf(e) === "sensor" && !num(st.state) && /(full|empty|lack|missing|not_installed|dirty|low|shortage|no_water|error)/i.test(st.state) && !OK.test(st.state)))) station.push({ e, name: name(e), txt: this._fmt(e) });
+      else if (/(^|_)error$|_error_|fault/.test(id) && domainOf(e) === "sensor" && !OK.test(st.state) && d.state === "error") err = this._fmt(e);
+    }
+    if (d.state === "docked" && battery != null && battery < 100 && !charging) charging = true;
+    const cons = Object.values(parts);
+    return { battery, charging, cons, station, last, err, attn: cons.some((c) => c.low) || station.length > 0 };
+  }
+
+  /** Hover line: state, room and battery, or the robot's own error text. */
+  _rbTip(st, d, info, a, cfg) {
+    const word = { cleaning: "Cleaning", returning: "Returning", paused: "Paused", error: "Error", docked: info.charging ? "Charging" : "Docked", idle: "Idle" }[d.state] || this._fmt(st.entity_id);
+    if (info.err) return info.err === "Error" ? word : `${word}: ${info.err}`;
+    const room = this._rbRoom(a, cfg, d);
+    return [word, room, info.battery != null ? `${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
+  }
+
+  /** The room the robot is in: where it is on the plan's room shapes. */
+  _rbRoom(a, cfg, d) {
+    if (!d.pos || !RB_ACTIVE.includes(d.state)) return "";
+    const p = rbApply(cfg.m, d.pos);
+    const hit = Object.entries(a.areas || {}).find(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3 && inPoly(p.x, p.y, r.shape));
+    return hit ? (this._rooms().names || {})[hit[0]] || hit[1].name : "";
+  }
+
+  _ageTxt(t) {
+    const ms = Date.now() - new Date(t).getTime();
+    if (!t || !(ms >= 0)) return "";
+    const m = Math.round(ms / 60000);
+    if (m < 60) return m < 2 ? "now" : `${m} min`;
+    const hrs = Math.round(m / 60);
+    return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
+  }
+
+  /** 0.10: rooms tinted by how long ago a robot cleaned them (a layer of Cleaning; tap a room to clean it). */
+  _freshHtml(a) {
+    if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true)) return "";
+    const over = Number((this._config.cleaning || {}).overdue) || 7;
+    const polys = Object.entries(a.areas || {}).filter(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3).map(([id, r]) => {
+      const c = (a.cleaned || {})[id];
+      const hrs = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 3600000 : null;
+      const fill = hrs == null ? "rgba(0,0,0,0)" : hrs < 24 ? "rgba(67,160,71,.30)" : hrs < 72 ? "rgba(67,160,71,.14)" : hrs >= over * 24 ? "rgba(255,160,0,.22)" : "rgba(0,0,0,0)";
+      return `<polygon data-croom="${cesc(id)}" points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:${fill}"></polygon>`;
+    }).join("");
+    return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>`;
+  }
+
+  /** 0.10: the cleaning path (a layer, always blue) and the dock of each robot; the dock is green while charging. */
+  _robotHtml() {
+    if (!(this._rb || []).length || this._overlay === "health") return "";
+    const path = this._layerOn(this._overlay, "rpath", true);
+    let svg = "";
+    let html = "";
+    for (const r of this._rb) {
+      if (path && (r.active || this._overlay === "cleaning")) {
+        for (const line of r.d.lines) {
+          const step = Math.max(1, Math.ceil(line.length / 1500));
+          const pts = line.filter((_p, i) => i % step === 0 || i === line.length - 1).map((p0) => rbApply(r.cfg.m, p0)).map((p0) => `${p0.x.toFixed(2)},${p0.y.toFixed(2)}`).join(" ");
+          svg += `<polyline points="${pts}"></polyline>`;
+        }
+      }
+      if (r.d.dock) {
+        const p = rbApply(r.cfg.m, r.d.dock);
+        const chg = r.info.charging && r.d.state === "docked";
+        const warn = this._overlay === "cleaning" && r.info.station.length ? `<i class="rdw" title="${cesc(r.info.station.map((x) => `${x.name}: ${x.txt}`).join(", "))}"></i>` : "";
+        html += `<div class="rdock ${chg ? "chg" : ""}" style="left:${p.x.toFixed(3)}%;top:${p.y.toFixed(3)}%"><ha-icon icon="mdi:home-lightning-bolt-outline"></ha-icon>${warn}</div>`;
+      }
+    }
+    return `${svg ? `<svg class="rpath" viewBox="0 0 100 100" preserveAspectRatio="none">${svg}</svg>` : ""}${html}`;
+  }
+
+  _robotMarker(s) {
+    const pulse = ["error", "paused"].includes(s.state) && this._overlay !== "health" ? s.state : "";
+    const badge = s.badge ? `<span class="rbg ${s.tone}">${cesc(s.badge)}</span>` : "";
+    return `<button class="m robot on ${pulse} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name} · ${s.tip}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${s.head != null ? `<i class="rhd" style="transform:rotate(${s.head.toFixed(1)}deg)"></i>` : ""}</span>${badge}<span class="tip">${cesc(s.name)}<span class="tst"> · ${cesc(s.tip)}</span></span></button>`;
+  }
+
+  /** 0.10: the robot panel (tap on a robot): state, last run, consumables, dock, and start / pause / dock. */
+  _robotPop(p) {
+    const a = this._a || {};
+    const eid = p.eid;
+    const st = this._hass.states[eid];
+    if (!st) return "";
+    const cfg = (a.robots || {})[eid] || {};
+    const d = rbRead(this._hass, eid, cfg);
+    const info = this._rbInfo(eid, d);
+    const name = st.attributes.friendly_name || eid;
+    const col = RB_COL[d.state] || RB_COL.idle;
+    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const mine = Object.values(a.cleaned || {}).filter((c) => c.by === eid).map((c) => c.t).sort().pop();
+    const lastT = info.last.t || mine;
+    const rows = [];
+    if (lastT) rows.push(["Last cleaning", `${this._ageTxt(lastT)} ago`]);
+    if (info.last.dur) rows.push(["Took", info.last.dur]);
+    if (info.last.area) rows.push(["Area", info.last.area]);
+    if (info.battery != null) rows.push(["Battery", `${Math.round(info.battery)}%${info.charging ? " · charging" : ""}`]);
+    const cons = info.cons.length ? `<h4>Consumables</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
+    const dock = info.station.length ? `<h4>Dock</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
+    const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
+    const btns = d.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") + cmd("return_to_base", "mdi:home-import-outline", "Dock") : cmd("start", "mdi:play", d.state === "paused" ? "Continue" : "Start") + (d.state === "docked" ? "" : cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+    return `<div class="pop"><div class="popin rbpop" role="dialog" aria-label="${cesc(name)}"><h3><ha-icon icon="${cesc(st.attributes.icon || "mdi:robot-vacuum")}" style="color:rgb(${col})"></ha-icon>${cesc(name)}${close}</h3>
+      <div class="rbst" style="--c:rgb(${col})">${cesc(this._rbTip(st, d, info, a, cfg))}</div>
+      ${rows.length ? `<div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : ""}${cons}${dock}
+      <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">Details ›</button></div></div>`;
+  }
+
+  /** 0.10: tap a room in Cleaning: when it was cleaned, and "Clean this room" (vacuum.clean_area, HA 2026.3). */
+  _roomPop(p) {
+    const a = this._a || {};
+    const room = (a.areas || {})[p.area];
+    if (!room) return "";
+    const name = (this._rooms().names || {})[p.area] || room.name;
+    const c = (a.cleaned || {})[p.area];
+    const by = c && this._hass.states[c.by] ? this._hass.states[c.by].attributes.friendly_name : "";
+    const when = c && c.t ? `Cleaned ${this._ageTxt(c.t)} ago${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    const robots = Object.entries(a.robots || {}).filter(([e]) => this._hass.states[e]);
+    const can = robots.filter(([e]) => Number(this._hass.states[e].attributes.supported_features || 0) & CLEAN_AREA);
+    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean with ${cesc(this._hass.states[e].attributes.friendly_name || e)}</button>`).join("");
+    const hint = btns ? "" : can.length ? `Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.` : robots.length ? "Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+)." : "";
+    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
   }
 
   /** Does this item show up in this overlay at all (ignoring its current state)? Used by the editor (#52). */
@@ -2629,6 +3024,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _specsFor(item, ov, q) {
     const hass = this._hass;
     const name = this._dev(item.id).name || item.name;
+    if (ov === "cleaning") return []; // 0.10: only robots (and rooms) in Cleaning: _robotSpecs
     if (item.phantom) return this._phantomSpecs(item, name, ov, q);
     // Split device (#91): Network and Health show the device at its hardware spot only.
     if (item.of && (ov === "network" || ov === "health")) return [];
@@ -3334,6 +3730,15 @@ class DeviceFloorplanCard extends HTMLElement {
       for (const item of this._items(a)) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") watch.add(e);
     }
     if (this._peopleShown()) for (const pp of this._people()) for (const e of [pp.entity, pp.room, pp.room2]) if (e) watch.add(e);
+    if (["live", "cleaning", "health"].includes(ov)) {
+      const ents = this._hass.entities || {};
+      for (const [eid, r] of Object.entries(a.robots || {})) {
+        for (const e of [eid, r && r.source]) if (e) watch.add(e);
+        // The robot's own device (battery, consumables, dock) for Cleaning and Health.
+        const dev = ov !== "live" && ents[eid] && ents[eid].device_id;
+        if (dev) for (const x of Object.values(ents)) if (x.device_id === dev) watch.add(x.entity_id);
+      }
+    }
     this._watch = [...watch].sort();
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     const nNew = Number((this._hass.states["sensor.device_floorplan_new_devices"] || {}).state) || 0;
@@ -3395,8 +3800,8 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
           ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
-          <svg class="lines"></svg>
-          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
+          ${this._freshHtml(a)}${this._robotHtml()}<svg class="lines"></svg>
+          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
         ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
@@ -3805,7 +4210,9 @@ class DeviceFloorplanCard extends HTMLElement {
       const name = (r.names && r.names[id]) || room.name;
       const icon = r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
-      return `<div class="room ${cls}" style="left:${room.x}%;top:${room.y}%;font-size:${size}px">${icon}${cesc(name)}</div>`;
+      const c = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true) && ((a.cleaned || {})[id] || {}).t;
+      const age = c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
+      return `<div class="room ${cls}" style="left:${room.x}%;top:${room.y}%;font-size:${size}px">${icon}${cesc(name)}${age}</div>`;
     }).join("");
   }
 
@@ -3887,7 +4294,9 @@ class DeviceFloorplanCard extends HTMLElement {
     };
     const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
     const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
-    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}`;
+    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", "Cleaning path") : "";
+    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "When rooms were cleaned") : "";
+    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
     return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
       <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
@@ -4300,6 +4709,8 @@ ${reset}
     const pt = this._per(s.item, this._overlay).tap;
     if (pt) return pt;
     if (o.tap) return o.tap;
+    // 0.10: a robot opens its panel (the setting above can change that).
+    if (s.type === "robot" || (s.ents || []).some((e) => domainOf(e) === "vacuum") || domainOf(s.item.main_entity || "") === "vacuum") return "robot";
     if (s.item.bond && s.item.tap === "more") return "more-info";
     const taps = { ...TAP_DEFAULT, ...(this._config.tap || {}) };
     const k = s.type === "chip" && s.kind === "reading" ? "reading" : tapKind(s.kind);
@@ -4335,6 +4746,25 @@ ${reset}
     if (t.closest("[data-pen]")) {
       e.stopPropagation();
       return this._openPen();
+    }
+    // 0.10: robot panel buttons, "Clean this room", tap on a room in Cleaning.
+    const rc = t.closest("[data-rbcmd]");
+    if (rc) {
+      this._hass.callService("vacuum", rc.dataset.rbcmd, { entity_id: rc.dataset.rb });
+      this._popup = null;
+      return this._update(true);
+    }
+    const cr = t.closest("[data-cleanroom]");
+    if (cr) {
+      this._hass.callService("vacuum", "clean_area", { entity_id: cr.dataset.rb, cleaning_area_id: [cr.dataset.cleanroom] });
+      this._popup = null;
+      this._toast("Cleaning started");
+      return this._update(true);
+    }
+    const rm = !this._pick && !this._popup && t.closest("[data-croom]");
+    if (rm) {
+      this._popup = { type: "room", area: rm.dataset.croom };
+      return this._update(true);
     }
     if (t.closest("[data-xb]") && this._pick) {
       e.stopPropagation();
@@ -4560,6 +4990,21 @@ ${reset}
   _runAction(s) {
     const act = this._tapAction(s);
     if (act === "none") return;
+    if (act === "robot") {
+      const eid = s.type === "robot" ? s.eid : [s.eid, ...(s.ents || []), s.item.main_entity].find((e) => e && domainOf(e) === "vacuum");
+      if (eid) {
+        this._popup = { type: "robot", key: s.key, eid };
+        return this._update(true);
+      }
+    }
+    // 0.10: open a dashboard / a browser_mod popup (set per device in Edit markers).
+    if (act === "navigate" || act === "popup") {
+      const o = { ...this._dev(s.item.id), ...this._per(s.item, this._overlay) };
+      const cfg = act === "navigate" ? (o.nav ? { action: "navigate", navigation_path: o.nav } : null) : o.popup_card ? { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(o.popup_title ? { title: o.popup_title } : {}), content: o.popup_card } } } : null;
+      if (cfg) this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: s.ents[0], tap_action: cfg }, action: "tap" }, bubbles: true, composed: true }));
+      else this._moreInfo(s.ents[0]);
+      return;
+    }
     if (act === "network") {
       this._popup = { type: "net", key: s.key };
       return this._update(true);
@@ -4959,6 +5404,8 @@ ${reset}
       return `<div class="pop"><div class="popin" role="dialog" aria-label="All off"><h3>Turn all lights off?${close}</h3><div>${p.n ? `${p.n} light${p.n > 1 ? "s are" : " is"} on.` : "No light is on right now."}</div><div class="acts"><button data-close="1">Cancel</button><button class="pri" data-confirm="1">All off</button></div></div></div>`;
     }
     if (p.type === "info") return this._infoHtml(p);
+    if (p.type === "robot") return this._robotPop(p);
+    if (p.type === "room") return this._roomPop(p);
     if (p.type === "appl") {
       const list = (this._appls || []).filter((o) => p.keys.includes(o.ap.item.id));
       if (!list.length) return "";
@@ -5384,7 +5831,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   _ovOptions() {
-    return [...OVERLAY_ORDER.map((o) => ({ value: o, label: OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
+    return [...[...OVERLAY_ORDER, "cleaning"].map((o) => ({ value: o, label: OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
   }
 
   /** The editor's settings forms, in display order (#70). */
@@ -6452,12 +6899,23 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         sec.appendChild(bs);
       }
       // Icon and tap in this overlay.
-      body.appendChild(this._form([
-        { name: "icon", selector: { icon: {} } },
-        { name: "tap", selector: { select: { options: [{ value: "default", label: "Default for its kind" }, ...TAP_OPTIONS], mode: "dropdown" } } },
-      ], { icon: p0.icon || dev().icon || "", tap: p0.tap || dev().tap || "default" }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: item.bond || item.phantom ? `Tap in ${ovLabel} (bonds and phantoms open their info card)` : `Tap in ${ovLabel}` }, (v) => {
-        this._savePer(id, ov, { icon: v.icon, tap: v.tap === "default" ? "" : v.tap });
-        saved();
+      // 0.10: a robot's tap is one setting for every overlay (its panel by default); a dashboard or a popup for any device.
+      const robot = [item.main_entity, ...(item.entities || [])].some((e) => e && domainOf(e) === "vacuum");
+      const tsrc = robot ? dev() : { ...dev(), ...p0 };
+      const tcur = (robot ? dev().tap : p0.tap || dev().tap) || "default";
+      const topts = robot ? [{ value: "default", label: "Robot panel" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "Default for its kind" }, ...TAP_OPTIONS];
+      const tschema = [{ name: "icon", selector: { icon: {} } }, { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
+      if (tcur === "navigate") tschema.push({ name: "nav", selector: { navigation: {} } });
+      if (tcur === "popup") tschema.push({ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } });
+      body.appendChild(this._form(tschema, { icon: p0.icon || dev().icon || "", tap: tcur, nav: tsrc.nav || "", popup_title: tsrc.popup_title || "", popup_card: tsrc.popup_card }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: robot ? "Tap (on every overlay)" : item.bond || item.phantom ? `Tap in ${ovLabel} (bonds and phantoms open their info card)` : `Tap in ${ovLabel}`, nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
+        const tap = v.tap === "default" ? "" : v.tap;
+        const extra = { nav: tap === "navigate" ? v.nav || "" : "", popup_title: tap === "popup" ? v.popup_title || "" : "", popup_card: tap === "popup" ? v.popup_card || null : null };
+        if (robot) {
+          this._savePer(id, ov, { icon: v.icon });
+          this._saveDev(id, { tap, ...extra });
+        } else this._savePer(id, ov, { icon: v.icon, tap, ...extra });
+        if ((v.tap || "default") !== tcur) rerender();
+        else saved();
       }));
       // 0.7.5: an appliance's status pill in Live.
       if (ov === "live" && eng._applOf(item)) {
