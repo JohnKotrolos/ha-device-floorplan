@@ -2838,6 +2838,13 @@ class DeviceFloorplanCard extends HTMLElement {
     return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
   }
 
+  /** A robot's name on the card: from Edit markers (placed or not), else its HA name. */
+  _rbLabel(a, eid) {
+    const placed = this._items(a).find((it) => !it.phantom && [it.main_entity, ...(it.entities || [])].includes(eid));
+    const st = this._hass.states[eid];
+    return this._dev(placed ? placed.id : `robot:${eid}`).name || (st && st.attributes.friendly_name) || eid;
+  }
+
   /** Days between cleanings of a room (plan setting per room, else the plan's default; 0 = never due). */
   _pace(a, id) {
     const v = (a.pace || {})[id] ?? a.pace_default ?? (this._config.cleaning || {}).overdue ?? 7;
@@ -4275,6 +4282,13 @@ class DeviceFloorplanCard extends HTMLElement {
     const ages = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true);
     if (!names && !ages) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
+    // A marker (or a robot's dock) right on a room name: the name steps aside, up or down, away from it.
+    const pts = [...(this._specs ? this._specs.values() : [])].map((sp) => ({ x: +sp.x, y: +sp.y }));
+    for (const rb of this._rb || []) if (rb.d.dock && Array.isArray(rb.cfg.m)) pts.push(rbApply(rb.cfg.m, rb.d.dock));
+    const nudge = (room) => {
+      const hit = pts.find((q) => Math.abs(q.x - room.x) < 4 && Math.abs(q.y - room.y) < 3.5);
+      return hit ? `transform:translate(-50%, calc(-50% ${hit.y >= room.y ? "-" : "+"} ${Math.round(size * 1.6)}px));` : "";
+    };
     return Object.entries(a.areas || {}).filter(([id]) => !(r.hidden || []).includes(id)).map(([id, room]) => {
       const c = ages && ((a.cleaned || {})[id] || {}).t;
       if (!names && !c) return "";
@@ -4283,7 +4297,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const cls = r.style === "label" ? "label" : "pill";
       const age = c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
+      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
     }).join("");
   }
 
@@ -4474,7 +4488,7 @@ ${reset}
       const robots = Object.keys(a.robots || {}).filter((e) => this._hass.states[e]);
       for (const eid of robots) {
         const st = this._hass.states[eid];
-        const pre = robots.length > 1 ? `${st.attributes.friendly_name || eid}: ` : "";
+        const pre = robots.length > 1 ? `${this._rbLabel(a, eid)}: ` : "";
         const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${cesc(pre + label)}</button>`;
         b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") : cmd("start", "mdi:play", st.state === "paused" ? "Continue" : "Start"));
         if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", "Dock"));
