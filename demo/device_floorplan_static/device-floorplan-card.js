@@ -369,7 +369,7 @@ function rbFit(pairs, ratio) {
   return best && best.m;
 }
 /** Like rbFit, but a plan drawn a bit squeezed is allowed: turn (+ mirror), then a scale per plan axis.
- *  Used only with 3+ rooms and only when clearly better, so a few misplaced room names can't distort a good plan. */
+ *  Used only with 4+ rooms and only when clearly better, so a few misplaced room names can't distort a good plan. */
 function rbFit2(pairs, ratio) {
   const sim = rbFit(pairs, ratio);
   if (!sim) return null;
@@ -403,8 +403,11 @@ function rbFit2(pairs, ratio) {
   for (let k = -32; k <= 32; k++) { const r = solve(th0 + (k * 0.25 * Math.PI) / 180); if (r && (!best || r.err < best.err)) best = r; }
   if (best) for (let k = -10; k <= 10; k++) { const r = solve(Math.atan2(best.m[3], best.m[0] * ratio) + (k * 0.025 * Math.PI) / 180); if (r && r.err < best.err) best = r; }
   if (!best) return out;
+  // Keep it only when clearly better than the plain fit (F-test, one extra parameter, ~95 %).
   const k = best.sx / best.sy;
-  return best.err < out.err * 0.6 && Math.abs(k - 1) > 0.015 && k > 0.75 && k < 1.33 ? best : out;
+  const dof = 2 * pairs.length - 5;
+  const F = best.err > 1e-9 ? ((out.err - best.err) / best.err) * dof : Infinity;
+  return pairs.length >= 4 && F > 3.84 + 25 / dof ** 1.3 && Math.abs(k - 1) > 0.015 && k > 0.75 && k < 1.33 ? best : out;
 }
 if (!window.__dfcRobot) window.__dfcRobot = { read: rbRead, apply: rbApply, fit: rbFit, fit2: rbFit2, sig: rbSig, onMap: rbOnMap, active: RB_ACTIVE, col: RB_COL };
 

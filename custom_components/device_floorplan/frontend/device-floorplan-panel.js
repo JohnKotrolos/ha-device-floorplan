@@ -260,7 +260,7 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .sidecol > .side { flex: none; overflow: visible; }
 .imgtip { font-size:12px; line-height:1.4; color: var(--df-sec); padding:8px 10px; border-radius:8px; background: var(--primary-background-color); }
 .imgtip.warn { background: color-mix(in srgb, var(--df-warn) 12%, var(--df-card)); color: var(--primary-text-color); }
-.frstage { position:relative; width:100%; max-height:60vh; background: repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius:10px; overflow:hidden; user-select:none; touch-action:none; }
+.frstage { position:relative; width: min(100%, calc(60vh * var(--ar, 1.6))); aspect-ratio: var(--ar, 1.6); margin: 0 auto; background: repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius:10px; overflow:hidden; user-select:none; touch-action:none; }
 .frstage img { position:absolute; object-fit:fill; pointer-events:none; }
 .frstage .frbox { position:absolute; outline: 2px solid var(--df-primary); box-shadow: 0 0 0 9999px rgba(0,0,0,.18); pointer-events:none; }
 .frstage .frl { position:absolute; z-index:2; }
@@ -3150,7 +3150,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const rect = (x, y, w, h) => `left:${((x - d.o.x1) / W) * 100}%;top:${((y - d.o.y1) / H) * 100}%;width:${(w / W) * 100}%;height:${(h / H) * 100}%`;
     return wrap(`<h2>Align ${esc(p.name)} with ${esc(ref.name)}</h2>
       <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">${esc(ref.name)} is shown faintly underneath. Drag ${esc(p.name)} until the stairs or the outer walls sit on top of each other. ${this._measuredPlan(p) && this._measuredPlan(ref) ? "Both floors are measured, so one metre is equally long on both." : "Measure both floors to match their scale exactly."}</p>
-      <div class="frstage alstage" id="alstage" style="aspect-ratio:${d.aspect}">
+      <div class="frstage alstage" id="alstage" style="--ar:${d.aspect}">
         <img class="alref" src="${esc(this._imgSrc(ref) || "")}" alt="" style="${rect(0, 0, 100, 100)}" draggable="false">
         <img class="alimg" data-alimg="1" src="${esc(this._imgSrc(p) || "")}" alt="" style="${rect(d.x, d.y, d.w, d.h)}" draggable="false">
       </div>
@@ -3221,29 +3221,20 @@ class DeviceFloorplanPanel extends HTMLElement {
     im.src = data.pic;
   }
 
-  /** Where a room is on this plan: the middle of its shape, else its name. */
+  /** Where a room is on this plan: the middle of the box around its shape (robots report rooms as boxes too), else its name. */
   _rbPlanPt(area) {
     const sh = ((this.work || {}).shapes || {})[area];
     if (sh && sh.length >= 3) {
-      let A = 0;
-      let cx = 0;
-      let cy = 0;
-      for (let i = 0; i < sh.length; i++) {
-        const [x0, y0] = sh[i];
-        const [x1, y1] = sh[(i + 1) % sh.length];
-        const k = x0 * y1 - x1 * y0;
-        A += k;
-        cx += (x0 + x1) * k;
-        cy += (y0 + y1) * k;
-      }
-      if (Math.abs(A) > 1e-9) return { x: cx / (3 * A), y: cy / (3 * A) };
+      const xs = sh.map((q) => q[0]);
+      const ys = sh.map((q) => q[1]);
+      return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
     }
     const an = ((this.work || {}).anchors || {})[area];
     return an ? { x: an.x, y: an.y } : null;
   }
 
   /** Auto-align: the robot's rooms matched to this plan's rooms (HA's room mapping, else names), best fit.
-   *  With 3+ rooms a plan drawn a bit squeezed is detected and allowed for. */
+   *  With 4+ rooms a plan drawn a bit squeezed is detected and allowed for. */
   _rbAuto(d) {
     const R = window.__dfcRobot;
     const data = this._rbData(d);
@@ -3403,7 +3394,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     return wrap(`${head}
       <div class="rbrow"><label class="f">Map of ${esc(this._rbName(d.eid))}<select id="rbsrc">${srcs.length ? srcs.map((e) => `<option value="${esc(e)}" ${e === d.source ? "selected" : ""}>${esc(this._rbName(e))}</option>`).join("") : `<option value="">No map entity found</option>`}</select></label></div>
       <p class="rbp">Line the robot's map (blue) up with your plan. <b>Auto-align</b> does it for you when the robot's rooms match yours. To do it by hand, drag the map into place, drag the sides of its frame to stretch or squeeze it, drag a corner to resize it, and use the buttons to turn or mirror it. <b>The robot's own map is not changed:</b> this only tells the card how to place the robot on your plan.</p>
-      <div class="frstage rbstage" id="rbstage" style="aspect-ratio:${this._rbRatio()}"><img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:0;top:0;width:100%;height:100%" draggable="false"><div id="rbdraw">${this._rbDraw(d, data)}</div></div>
+      <div class="frstage rbstage" id="rbstage" style="--ar:${this._rbRatio()}"><img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:0;top:0;width:100%;height:100%" draggable="false"><div id="rbdraw">${this._rbDraw(d, data)}</div></div>
       <div class="frvals"><span>${esc(d.msg || "")}</span></div>
       <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button><span class="rbgap"></span>
         ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
@@ -3430,7 +3421,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const val = (k) => `${d[k] > 0 ? "+" : ""}${Math.round(d[k])} %`;
     return wrap(`<h2>Frame the plan</h2>
       <p style="margin:0 0 8px;color:var(--df-sec);font-size:13px">Drag the dashed lines: <b>outwards</b> adds space around the plan (room for labels and buttons), <b>inwards</b> trims empty margin. Markers and Rooms never move. Every dashboard card uses this frame unless it sets its own.</p>
-      <div class="frstage" id="frstage" style="aspect-ratio:${ratio}">
+      <div class="frstage" id="frstage" style="--ar:${ratio}">
         <img src="${esc(this._imgSrc(p) || "")}" alt="" style="left:20%;top:20%;width:60%;height:60%" draggable="false">
         <div class="frbox" style="left:${g.x1}%;top:${g.y1}%;width:${g.x2 - g.x1}%;height:${g.y2 - g.y1}%"></div>
         <div class="frl v" data-frl="l" style="left:${g.x1}%" title="Left"></div><div class="frl v" data-frl="r" style="left:${g.x2}%" title="Right"></div>
