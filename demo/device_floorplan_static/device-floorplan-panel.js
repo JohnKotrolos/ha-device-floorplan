@@ -3233,6 +3233,9 @@ class DeviceFloorplanPanel extends HTMLElement {
     im.onload = () => {
       d.picW = im.naturalWidth;
       d.picH = im.naturalHeight;
+      // A first guess without rooms: fit the whole map (picture included) into the plan.
+      if (d.guess && !this._rbData(d).rooms.length) this._rbFit(d);
+      d.guess = false;
       const draw = this.s.dialog === d && this.shadowRoot.getElementById("rbdraw");
       if (draw) draw.innerHTML = this._rbDraw(d, this._rbData(d));
     };
@@ -3280,27 +3283,74 @@ class DeviceFloorplanPanel extends HTMLElement {
       d.msg = `Matched ${pairs.length} rooms (${pairs.map((q) => q.name).join(", ")}).${sq} Check it, then fine-tune by hand if needed.`;
       return;
     }
-    if (!d.m) d.m = this._rbBox(data, ratio);
+    if (!d.m) {
+      d.m = this._rbBox(data, ratio);
+      d.guess = !d.picW;
+      if (d.m && d.picW && !data.rooms.length) this._rbFit(d);
+    }
     if (!d.m) d.msg = "No position or rooms from this map entity yet. Choose another map, or wait until the robot reports one.";
     else if (!data.rooms.length) d.msg = "This map has no rooms: drag it into place, then stretch and turn it.";
     else d.msg = `Couldn't match enough rooms (${pairs.length} found, 2 needed). ${d.seg ? "" : "Map the robot's rooms to areas in its settings (Map vacuum segments to areas), or "}line it up by hand.`;
   }
 
   /** First guess without matches: everything the robot knows, fitted into the plan. */
+  /** Everything of the robot's map, in robot units: rooms, path, dock, robot and the map picture's corners. */
+  _rbPts(d, data) {
+    return [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }]), data.dock, data.pos, ...data.lines.flat(), ...this._rbPicPts(d, data)].filter(Boolean);
+  }
+
+  /** The map picture's corners in robot units (calibration points: robot units → picture px, inverted). */
+  _rbPicPts(d, data) {
+    if (!d || !d.picW || data.calib.length < 3) return [];
+    const [q1, q2, q3] = data.calib;
+    const det = (q2.r.x - q1.r.x) * (q3.r.y - q1.r.y) - (q3.r.x - q1.r.x) * (q2.r.y - q1.r.y);
+    if (Math.abs(det) < 1e-9) return [];
+    const solve = (k) => {
+      const b2 = q2.p[k] - q1.p[k];
+      const b3 = q3.p[k] - q1.p[k];
+      const a = (b2 * (q3.r.y - q1.r.y) - b3 * (q2.r.y - q1.r.y)) / det;
+      const b = ((q2.r.x - q1.r.x) * b3 - (q3.r.x - q1.r.x) * b2) / det;
+      return [a, b, q1.p[k] - a * q1.r.x - b * q1.r.y];
+    };
+    const [a, b, c] = solve("x");
+    const [e, f, g] = solve("y");
+    const id = a * f - b * e;
+    if (Math.abs(id) < 1e-12) return [];
+    const inv = (u, v) => ({ x: (f * (u - c) - b * (v - g)) / id, y: (a * (v - g) - e * (u - c)) / id });
+    return [inv(0, 0), inv(d.picW, 0), inv(d.picW, d.picH), inv(0, d.picH)];
+  }
+
+  /** Fit the robot's map into the plan as it is turned now (uniform size, centred): when it is far too big or small. */
+  _rbFit(d) {
+    const f = this._rbFrame(d, this._rbData(d));
+    if (!f || !d.m) return;
+    const w = f.x1 - f.x0;
+    const h = f.y1 - f.y0;
+    if (!(w > 0 || h > 0)) return;
+    const k = Math.min(w > 0 ? 90 / w : Infinity, h > 0 ? 90 / h : Infinity);
+    const cx = (f.x0 + f.x1) / 2;
+    const cy = (f.y0 + f.y1) / 2;
+    const m = d.m;
+    d.m = [m[0] * k, m[1] * k, (m[2] - cx) * k + 50, m[3] * k, m[4] * k, (m[5] - cy) * k + 50];
+  }
+
   _rbBox(data, ratio) {
     const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y1 }]), data.dock, data.pos, ...data.lines.flat()].filter(Boolean);
     if (!pts.length) return null;
     const xs = pts.map((p) => p.x);
     const ys = pts.map((p) => p.y);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    if (x1 - x0 < 1e-6 && y1 - y0 < 1e-6) return [0.01, 0, 50 - 0.01 * x0, 0, -0.01 * ratio, 50 + 0.01 * ratio * y0];
-    return window.__dfcRobot.fit([{ r: { x: x0, y: y1 }, p: { x: 10, y: 10 } }, { r: { x: x1, y: y0 }, p: { x: 90, y: 90 } }], ratio);
+    // Not turned; y counts upwards on most robot maps, unless its picture says otherwise (Valetudo: downwards).
+    const c = data.calib;
+    const fy = c.length >= 2 && Math.abs(c[1].r.y - c[0].r.y) + Math.abs(c[2] ? c[2].r.y - c[0].r.y : 0) > 0 ? (Math.sign(((c[2] || c[1]).p.y - c[0].p.y) * ((c[2] || c[1]).r.y - c[0].r.y)) || -1) : -1;
+    const k = x1 - x0 < 1e-6 && y1 - y0 < 1e-6 ? 0.01 : Math.min(x1 - x0 > 1e-6 ? 80 / (x1 - x0) : Infinity, y1 - y0 > 1e-6 ? 80 / ((y1 - y0) * ratio) : Infinity);
+    const ky = fy * k * ratio;
+    return [k, 0, 50 - (k * (x0 + x1)) / 2, 0, ky, 50 - (ky * (y0 + y1)) / 2];
   }
 
   /** The robot's map as drawn now: the box around it on the plan (in %), for the handles. */
   _rbFrame(d, data) {
-    const pts = [...data.rooms.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }]), data.dock, data.pos].filter(Boolean);
-    const all = pts.length ? pts : data.lines.flat();
+    const all = this._rbPts(d, data);
     if (!all.length || !d.m) return null;
     const q = all.map((p) => window.__dfcRobot.apply(d.m, p));
     const xs = q.map((p) => p.x);
@@ -3311,6 +3361,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   /** Turn or mirror the robot's map around its middle (in real proportions, not % of the image). */
   _rbOp(d, op, val) {
     if (!d.m) return;
+    if (op === "fit") return this._rbFit(d);
     const ratio = this._rbRatio();
     const f = this._rbFrame(d, this._rbData(d)) || { x0: 50, y0: 50, x1: 50, y1: 50 };
     const c = [((f.x0 + f.x1) / 2) * ratio, (f.y0 + f.y1) / 2];
@@ -3418,7 +3469,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div class="frvals"><span>${esc(d.msg || "")}</span></div>
       ${!d.source ? `<p class="rbp">No map: the robot can still be saved. Place it on the plan in the Editor; the card shows it there, and its rooms count as cleaned when you start them from the card (vacuum.clean_area).</p>` : !data.dock ? `<p class="rbp">The map shows no dock: place the robot on the plan in the Editor, and that spot is its dock.</p>` : ""}
       <div class="rbtools"><button class="btn" data-act="rbauto" ${data.rooms.length ? "" : "disabled"}>Auto-align from rooms</button>${data.pic && data.calib.length >= 3 ? `<label class="rbpic" title="The robot's own map picture under the blue rooms">Map picture<input type="range" id="rbpicop" min="0" max="100" step="5" value="${this._rbPicOp(d)}"></label>` : ""}<span class="rbgap"></span>
-        ${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
+        ${btn("fit", 0, "⤢ Fit to plan", "Make the whole map fit inside your plan")}${btn("rot", -90, "⟲ 90°", "Turn left")}${btn("rot", -1, "⟲ 1°", "Turn a little left")}${btn("rot", 1, "⟳ 1°", "Turn a little right")}${btn("rot", 90, "⟳ 90°", "Turn right")}${btn("flip", 0, "⇋ Mirror", "Mirror")}</div>
       ${this._rbPaceHtml(d)}
       <div class="acts">${robots[d.eid] ? `<button class="btn danger" data-act="rbdel" style="margin-right:auto">Remove from plan</button>` : ""}<button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="rbsave">Save</button></div>`, 880);
   }

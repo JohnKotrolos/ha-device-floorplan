@@ -5,6 +5,7 @@ vacuum_position, charger_position, path and rooms, in mm.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import struct
@@ -30,6 +31,68 @@ KEY = b"ValetudoMap\0"
 POLL = timedelta(seconds=3)
 SCAN = timedelta(seconds=60)
 MAX_PATH = 4000  # points kept of the robot's path
+MAX_PIC = 480  # widest side of the map picture, in pixels
+# Picture colours by layer type: floor, segment (rooms), wall.
+COLOURS = {"floor": (110, 160, 220), "segment": (110, 160, 220), "wall": (40, 48, 66)}
+
+
+def _runs(layer: dict[str, Any]):
+    """(x, y, count) runs of a layer, compressed or not."""
+    c = layer.get("compressedPixels")
+    if c:
+        for i in range(0, len(c) - 2, 3):
+            yield c[i], c[i + 1], c[i + 2]
+        return
+    p = layer.get("pixels") or []
+    for i in range(0, len(p) - 1, 2):
+        yield p[i], p[i + 1], 1
+
+
+def _png(w: int, h: int, rows: list[bytearray], palette: list[tuple[int, int, int]]) -> bytes:
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    raw = b"".join(b"\0" + bytes(r) for r in rows)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 3, 0, 0, 0))
+        + chunk(b"PLTE", b"".join(bytes(c) for c in palette))
+        + chunk(b"tRNS", b"\0")
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def map_picture(vm: dict[str, Any], px: float) -> dict[str, Any] | None:
+    """Valetudo has no map picture in HA (its camera shows a placeholder): draw floor, rooms and walls,
+    with calibration points (picture px ↔ mm) so the Editor can show it under the robot's map."""
+    layers = [l for l in vm.get("layers") or [] if l.get("type") in COLOURS and (l.get("dimensions") or {}).get("x")]
+    if not layers:
+        return None
+    x0 = min(l["dimensions"]["x"]["min"] for l in layers)
+    x1 = max(l["dimensions"]["x"]["max"] for l in layers) + 1
+    y0 = min(l["dimensions"]["y"]["min"] for l in layers)
+    y1 = max(l["dimensions"]["y"]["max"] for l in layers) + 1
+    k = max(1, -(-max(x1 - x0, y1 - y0) // MAX_PIC))
+    w, h = -(-(x1 - x0) // k), -(-(y1 - y0) // k)
+    rows = [bytearray(w) for _ in range(h)]
+    order = {"floor": 1, "segment": 1, "wall": 2}
+    for layer in sorted(layers, key=lambda l: order[l["type"]]):
+        v = order[layer["type"]]
+        for x, y, n in _runs(layer):
+            row = rows[(y - y0) // k]
+            for i in range((x - x0) // k, (x + n - 1 - x0) // k + 1):
+                row[i] = v
+    png = _png(w, h, rows, [(0, 0, 0), COLOURS["floor"], COLOURS["wall"]])
+    mm = lambda a, b: {"x": round(a * px), "y": round(b * px)}  # noqa: E731
+    return {
+        "entity_picture": "data:image/png;base64," + base64.b64encode(png).decode(),
+        "calibration_points": [
+            {"vacuum": mm(x0, y0), "map": {"x": 0, "y": 0}},
+            {"vacuum": mm(x0 + w * k, y0), "map": {"x": w, "y": 0}},
+            {"vacuum": mm(x0, y0 + h * k), "map": {"x": 0, "y": h}},
+        ],
+    }
 
 
 def map_json(png: bytes) -> dict[str, Any] | None:
@@ -95,6 +158,9 @@ def map_attrs(vm: dict[str, Any]) -> dict[str, Any]:
         step = -(-total // MAX_PATH)
         paths = [[v for k in range(0, len(p) - 1, 2 * step) for v in (p[k], p[k + 1])] for p in paths]
     out["path"] = paths
+    pic = map_picture(vm, px)
+    if pic:
+        out.update(pic)
     return out
 
 
@@ -143,7 +209,7 @@ class ValetudoMapSensor(SensorEntity):
     _attr_should_poll = False
     _attr_icon = "mdi:map"
     _attr_has_entity_name = False
-    _unrecorded_attributes = frozenset({"vacuum_position", "charger_position", "path", "rooms", "map_source", "camera"})
+    _unrecorded_attributes = frozenset({"vacuum_position", "charger_position", "path", "rooms", "map_source", "camera", "entity_picture", "calibration_points"})
 
     def __init__(self, hass: HomeAssistant, cam: er.RegistryEntry) -> None:
         self._cam = cam.entity_id
