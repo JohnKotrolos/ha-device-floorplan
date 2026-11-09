@@ -42,6 +42,9 @@ upload your picture (or start from a sample plan), drag your rooms onto it, pres
 - **Live** (what's happening now), **Lights**, **Comfort** (a temperature and humidity
   **heatmap** that flows between open rooms), **Security**, **Network** and **Health**
   (batteries, offline devices), plus **your own overlays** with the device types you choose.
+- **Cleaning**: your robot vacuum live on the plan with its path (Valetudo, Xiaomi, Dreame,
+  Roborock and other map integrations), rooms coloured by when they were last cleaned and
+  when they are due, *Clean now* per room, and a `due` list for your automations.
 - **Network map**: the Zigbee mesh (ZHA) with roles, links and link quality, Wi-Fi and LAN
   from your router, and the devices on other floors as faint markers.
 - **One marker per device per overlay**, and you decide what it shows: the leading value,

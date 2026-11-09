@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0 · Cleaning the house
+
+**Robot vacuums on the plan: live, with their path, and every room's last cleaning.**
+
+- **Cleaning overlay**: your robot vacuum at its live position and direction, its dock (green while charging) and the **path of the last run**. Works with map integrations that report the robot's position (Xiaomi Cloud Map Extractor, Dreame Vacuum, Roborock Custom Map, AnyVac…).
+- **Valetudo** out of the box: Device Floorplan finds Valetudo's map camera (MQTT) and makes a map sensor on the robot's device, with rooms, robot, dock, path and a map picture.
+- **Robot vacuum… in the Floorplan Editor** (the plan's ⋮ menu): line the robot's map up with your plan. **Auto-align** from the rooms (by name or Home Assistant's room mapping, also when your plan is drawn a bit narrower than the robot measures it), or by hand: drag, stretch, squeeze, turn, mirror, **Fit to plan**, with the robot's own map picture underneath. The robot's map is never changed. Several robots per plan, and robots that do several floors.
+- **Last cleaned**: rooms turn green after cleaning and fade, turn **amber when due** (how often per room: every day … every 30 days, or never), and blue with *cleaning · 40%* while a robot is in them. A legend with a strength slider under the plan.
+- **A room counts as cleaned at the end of the run, when the robot did at least 60% of it**: from the robot's cleaned-area sensor or its path, against the robot's own room size (Valetudo) or what it usually cleans there. A quick pass keeps the last real cleaning.
+- **Tap a room**: when and by which robot, m² and %, how often in the last 7 days, how long it usually takes, when it is due, and **Clean now** (`vacuum.clean_area`, Home Assistant 2026.3+). Rooms started from the card count as cleaned even for robots that don't say where they are.
+- **Tap the robot**: battery, last cleaning, suction / water / mode, consumables (low ones highlighted), dock and station problems, Start / Pause / Dock.
+- **Two or more robots on a floor**: each has its own colour (marker, path, buttons).
+- **Robots in Live and Health**: the robot moves in Live while it cleans; Health shows its battery at the dock. Without a map it stays where you place it.
+- **`due` on the plan sensor**: the rooms due for cleaning, for an automation that cleans them ([example](/reference/automations#clean-what-is-due)). Also `cleaned`, `now`, `clean_log`, `robots`, `pace`.
+- **Overlay actions**: your own buttons under the plan in any overlay (tap, hold, status), per floor or for every floor.
+- **Floor menu in the card editor**: everything that differs per floor is at the top, now also **Buttons on this floor** (overlay actions and light scenes for that floor); settings for every floor stay below.
+- **Room names** follow the Layers menu in every overlay, and step aside when a marker sits on them.
+- **Robots in Edit markers**: name and icon also for a robot that isn't placed.
+
 ## 0.9.1
 
 - **Contrast background for the Overlay Bar and Side Rail**: dark on a light theme, light on a dark theme, switching with Home Assistant's light / dark mode. The Side Rail's default; *Dark* stays available.

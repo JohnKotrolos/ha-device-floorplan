@@ -31,6 +31,13 @@ The attributes are kept out of the history database, so large plans don't fill y
 | `phantoms` | Phantoms: `{phantom_id: {name, icon?, x, y, px, py, members, entities, value, one?}}`; `entities` = all entities of its devices, `value` = `average`, `min`, `max` or `one` |
 | `zigbee_devices` | `{ieee: {x, y, name}}`, the format of the Zigbee Floorplan Card |
 | `areas` | Room pins: `{area_id: {name, icon, aliases?, x, y, px, py}}` |
+| `robots` | Robot vacuums on the plan: `{vacuum_entity: {source, m?, map?, op?, seg?}}`; `source` = the map entity, `m` = robot units → plan % (6 numbers), `seg` = Home Assistant's room mapping `{segment: area_id}` |
+| `cleaned` | When each room was last cleaned: `{area_id: {t, by, m2?, pct?}}`; `t` = time, `by` = the robot, `m2` / `pct` = how much of the room |
+| `now` | Rooms a robot is cleaning right now, with progress (same fields as `cleaned`) |
+| `clean_log` | The last visits per room: `{area_id: [{s, e, by}]}` (start, end, robot) |
+| `room_area` | What the robot usually cleans per room: `{area_id: {a, n}}` (m², runs) |
+| `pace`, `pace_default` | Days between cleanings per room (0 = never due), and for the other rooms |
+| `due` | Rooms that are due for cleaning (a list of area ids); this one is recorded |
 
 ### Devices and their entities
 
@@ -61,3 +68,7 @@ All entities of a device share its position. The card (or your own template) pic
 ## New devices sensor
 
 `sensor.device_floorplan_new_devices`: how many devices were added since setup and are still waiting to be placed or skipped. The `devices` attribute lists their names.
+
+## Valetudo map sensor
+
+For every Valetudo robot (map over MQTT) Device Floorplan adds `sensor.<map camera>_floorplan` on the robot's device. State: number of rooms. Attributes, in mm: `vacuum_position` (with `a`, the direction), `charger_position`, `path`, `rooms` (`{segment: {name, x0, y0, x1, y1, area}}`, area in m²), and a map picture with `calibration_points`. Kept out of the history database.

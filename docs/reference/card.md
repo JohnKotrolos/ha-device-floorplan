@@ -174,7 +174,11 @@ Bonds list the entities of all their members (*All lights together*, *Average te
 
 ### Light scenes
 
-Under **Light scenes**, **Add scene**: a name, an icon, the lights, and a brightness (0 = off). Or set the lights the way you want them and press **Save the lights' current state**: on / off, brightness and colour of each light are kept. You can also run a Home Assistant scene or script instead. The scene buttons appear in the Lights overlay; the active one is highlighted. Scenes are stored in the card only.
+Under **Light scenes**, **Add scene**: a name, an icon, the lights, and a brightness (0 = off). Or set the lights the way you want them and press **Save the lights' current state**: on / off, brightness and colour of each light are kept. You can also run a Home Assistant scene or script instead. The scene buttons appear in the Lights overlay; the active one is highlighted. Scenes are stored in the card only. Scenes for one floor are in the floor menu at the top (**Buttons on this floor**), scenes for every floor under *Card settings*.
+
+### Overlay actions
+
+Your own buttons under the plan, shown in one overlay: a name, an icon, what a tap and a hold do (any Home Assistant action, a page, a popup on this browser with browser_mod) and a status on the button (a dot, a colour, a count or a value). Buttons for one floor are in the floor menu at the top (**Buttons on this floor**); buttons for every floor under *Card settings → Overlay Bar*. In **Cleaning** the robot's own Start / Pause / Dock come first (option: off). See [Robot vacuums](/using/robots).
 
 ### Rooms
 

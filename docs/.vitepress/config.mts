@@ -39,6 +39,7 @@ export default defineConfig({
           { text: "Doors, windows and shutters", link: "/using/openings" },
           { text: "Editor layers", link: "/using/layers" },
           { text: "Floors and plans", link: "/using/floors" },
+          { text: "Robot vacuums", link: "/using/robots" },
           { text: "New and removed devices", link: "/using/new-devices" },
           { text: "I'm ready: put it on a dashboard", link: "/using/ready" },
           { text: "Export and import", link: "/using/export" },

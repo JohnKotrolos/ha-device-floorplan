@@ -62,6 +62,25 @@ actions:
       message: "New device {{ trigger.event.data.name }} – place it on the floorplan"
 ```
 
+## Clean what is due
+
+The plan's sensor lists the rooms that are due in its `due` attribute (each room's pace is set in the robot dialog, see [Robot vacuums](/using/robots)). With Home Assistant's room mapping (2026.3+) a robot cleans them in one go:
+
+```yaml
+triggers:
+  - trigger: time
+    at: "10:00"
+conditions:
+  - condition: template
+    value_template: "{{ state_attr('sensor.device_floorplan_ground_floor', 'due') | length > 0 }}"
+actions:
+  - action: vacuum.clean_area
+    target:
+      entity_id: vacuum.robot
+    data:
+      cleaning_area_id: "{{ state_attr('sensor.device_floorplan_ground_floor', 'due') }}"
+```
+
 ## Blueprint
 
 The repository includes `blueprints/automation/device_floorplan/notify_new_device.yaml`: **Notify my phone when a new device needs placing**. Import it in **Settings → Automations & scenes → Blueprints**.
