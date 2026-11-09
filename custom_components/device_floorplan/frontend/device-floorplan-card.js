@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.10.0b4";
+const CARD_VERSION = "0.10.0b5";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {

@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.10.0";
+const VERSION = "0.10.0b5";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -260,14 +260,14 @@ main { flex:1; min-height:0; display:flex; gap:12px; padding:12px 0 12px 16px; o
 .sidecol > .side { flex: none; overflow: visible; }
 .imgtip { font-size:12px; line-height:1.4; color: var(--df-sec); padding:8px 10px; border-radius:8px; background: var(--primary-background-color); }
 .imgtip.warn { background: color-mix(in srgb, var(--df-warn) 12%, var(--df-card)); color: var(--primary-text-color); }
-.frstage { position:relative; width: min(100%, calc(60vh * var(--ar, 1.6))); aspect-ratio: var(--ar, 1.6); margin: 0 auto; background: repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius:10px; overflow:hidden; user-select:none; touch-action:none; }
+.frstage { position:relative; flex: none; width: min(100%, calc(var(--sh, 60vh) * var(--ar, 1.6))); aspect-ratio: var(--ar, 1.6); margin: 0 auto; background: repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius:10px; overflow:hidden; user-select:none; touch-action:none; }
 .frstage img { position:absolute; object-fit:fill; pointer-events:none; }
 .frstage .frbox { position:absolute; outline: 2px solid var(--df-primary); box-shadow: 0 0 0 9999px rgba(0,0,0,.18); pointer-events:none; }
 .frstage .frl { position:absolute; z-index:2; }
 .frstage .frl.v { top:0; bottom:0; width:16px; margin-left:-8px; cursor:ew-resize; background: linear-gradient(90deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
 .frstage .frl.h { left:0; right:0; height:16px; margin-top:-8px; cursor:ns-resize; background: linear-gradient(0deg, transparent 7px, var(--df-primary) 7px, var(--df-primary) 9px, transparent 9px); }
 .alstage img { position:absolute; object-fit:fill; }
-.rbstage { cursor: move; }
+.rbstage { cursor: move; --sh: 46vh; }
 .rbstage #rbdraw { position:absolute; inset:0; pointer-events:none; }
 .rbsvg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .rbsvg polygon { fill: rgba(33,150,243,.14); stroke:#2196f3; stroke-width:1.5; vector-effect: non-scaling-stroke; }
