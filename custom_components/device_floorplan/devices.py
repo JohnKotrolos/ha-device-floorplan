@@ -1013,6 +1013,8 @@ def build_plan_payload(
         "cleaned": {k: dict(v) for k, v in (plan.get("cleaned") or {}).items()},
         "clean_log": {k: [dict(x) for x in v] for k, v in (plan.get("clean_log") or {}).items()},
         "room_area": {k: dict(v) for k, v in (plan.get("room_area") or {}).items()},
+        # Rooms a robot is cleaning right now, with progress (they count as cleaned when the run ends).
+        "now": {k: dict(v) for k, v in (plan.get("now") or {}).items()},
         "pace": dict(plan.get("pace") or {}),
         "pace_default": plan.get("pace_default", PACE),
         # Rooms due for cleaning, for automations ("clean what is due").

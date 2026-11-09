@@ -272,6 +272,12 @@ const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(
 // ---- 0.10: robot vacuums. A map integration (Xiaomi Cloud Map Extractor, Dreame, Roborock Custom Map, AnyVac…)
 // gives the robot, dock, path and rooms in its own units; m turns them into % of the plan image.
 const RB_ACTIVE = ["cleaning", "returning", "paused", "error"];
+/** 0.10: two or more robots on a floor: each its own colour (marker and path), in the order they were added. */
+const RB_OWN = ["33,150,243", "142,36,170", "0,150,136", "255,112,67", "121,85,72", "233,30,99"];
+const rbOwn = (a, eid) => {
+  const list = Object.keys((a && a.robots) || {});
+  return list.length > 1 ? RB_OWN[Math.max(0, list.indexOf(eid)) % RB_OWN.length] : null;
+};
 const RB_COL = { cleaning: "33,150,243", returning: "0,172,193", paused: "251,140,0", error: "229,57,53", docked: "120,144,156", idle: "120,144,156" };
 function rbPt(v) {
   if (Array.isArray(v) && v.length >= 2 && v.length <= 3 && num(v[0]) && num(v[1])) return { x: +v[0], y: +v[1], a: num(v[2]) ? +v[2] : null };
@@ -898,6 +904,7 @@ svg.fresh { position:absolute; inset:0; width:100%; height:100%; pointer-events:
 svg.fresh polygon { pointer-events: visiblePainted; cursor:pointer; stroke:none; transition: fill .3s; }
 .room.solo { padding: 1px 7px; }
 .room.solo small.rage { opacity: 1; font-size: .9em; font-weight: 600; }
+.room small.rage.now { color: rgb(33,150,243); opacity: 1; font-weight: 600; }
 .room small.rage { display:block; font-size:.78em; opacity:.75; font-weight:400; text-align:center; }
 .rdock.chg { color:#43a047; }
 .rdock .rdw { position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:#ffa000; border:1.5px solid var(--card-background-color, #fff); }
@@ -2744,7 +2751,10 @@ class DeviceFloorplanCard extends HTMLElement {
       if (ov === "health") {
         col = info.err ? RB_COL.error : info.battery != null && info.battery <= low ? "255,160,0" : info.charging ? "67,160,71" : RB_COL.docked;
         badge = info.battery != null ? `${info.charging ? "⚡" : ""}${Math.round(info.battery)}%` : "";
-      } else if (ov === "cleaning" && (info.err || info.attn)) badge = "!";
+      } else {
+        if (rbOwn(a, eid)) col = rbOwn(a, eid); // which robot is which (state: tooltip, pulse and badge)
+        if (ov === "cleaning" && (info.err || info.attn)) badge = "!";
+      }
       const tone = info.err ? "err" : info.attn ? "warn" : "";
       this._rb.push({ eid, cfg, d, info, active });
       out = out.filter((x) => x.item.id !== item.id);
@@ -2838,6 +2848,13 @@ class DeviceFloorplanCard extends HTMLElement {
     return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
   }
 
+  /** A robot's name on the card: from Edit markers (placed or not), else its HA name. */
+  _rbLabel(a, eid) {
+    const placed = this._items(a).find((it) => !it.phantom && [it.main_entity, ...(it.entities || [])].includes(eid));
+    const st = this._hass.states[eid];
+    return this._dev(placed ? placed.id : `robot:${eid}`).name || (st && st.attributes.friendly_name) || eid;
+  }
+
   /** Days between cleanings of a room (plan setting per room, else the plan's default; 0 = never due). */
   _pace(a, id) {
     const v = (a.pace || {})[id] ?? a.pace_default ?? (this._config.cleaning || {}).overdue ?? 7;
@@ -2853,7 +2870,8 @@ class DeviceFloorplanCard extends HTMLElement {
       // Smooth: fresh green fades out by 60% of the room's pace, amber grows once it is due.
       const pace = this._pace(a, id);
       const f = days == null ? null : pace ? days / pace : days / 7;
-      const fill = f == null ? "rgba(0,0,0,0)" : f < 0.6 ? `rgba(102,187,106,${(0.3 * (1 - f / 0.6)).toFixed(3)})` : pace && f >= 1 ? `rgba(255,160,0,${Math.min(0.28, 0.12 + 0.16 * (f - 1)).toFixed(3)})` : "rgba(0,0,0,0)";
+      const nw = (a.now || {})[id];
+      const fill = nw ? "rgba(33,150,243,.16)" : f == null ? "rgba(0,0,0,0)" : f < 0.6 ? `rgba(102,187,106,${(0.3 * (1 - f / 0.6)).toFixed(3)})` : pace && f >= 1 ? `rgba(255,160,0,${Math.min(0.28, 0.12 + 0.16 * (f - 1)).toFixed(3)})` : "rgba(0,0,0,0)";
       return `<polygon data-croom="${cesc(id)}" points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:${fill}"></polygon>`;
     }).join("");
     return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>`;
@@ -2870,7 +2888,8 @@ class DeviceFloorplanCard extends HTMLElement {
         for (const line of r.d.lines) {
           const step = Math.max(1, Math.ceil(line.length / 1500));
           const pts = line.filter((_p, i) => i % step === 0 || i === line.length - 1).map((p0) => rbApply(r.cfg.m, p0)).map((p0) => `${p0.x.toFixed(2)},${p0.y.toFixed(2)}`).join(" ");
-          svg += `<polyline points="${pts}"></polyline>`;
+          const own = rbOwn(this._a, r.eid);
+          svg += `<polyline points="${pts}"${own ? ` style="stroke:rgb(${own});opacity:.7"` : ""}></polyline>`;
         }
       }
       if (r.d.dock) {
@@ -2948,6 +2967,8 @@ class DeviceFloorplanCard extends HTMLElement {
     const ds = runs.slice(-10).map((r) => r.d).sort((x, y) => x - y);
     const usual = ds.length ? Math.max(1, Math.round(ds[Math.floor(ds.length / 2)] / 60000)) : 0;
     const kv = [];
+    const nw = (a.now || {})[p.area];
+    if (nw) kv.push(["Cleaning now", nw.m2 != null ? `${nw.m2} m²${nw.pct != null ? ` (${nw.pct}%)` : ""}` : "yes"]);
     if (cov) kv.push(["Cleaned last time", cov]);
     if (runs.length) kv.push(["Last 7 days", week ? `${week}×` : "not cleaned"]);
     if (usual) kv.push(["Usually takes", `${usual} min`]);
@@ -4275,15 +4296,24 @@ class DeviceFloorplanCard extends HTMLElement {
     const ages = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true);
     if (!names && !ages) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
+    // A marker (or a robot's dock) right on a room name: the name steps aside, up or down, away from it.
+    const pts = [...(this._specs ? this._specs.values() : [])].map((sp) => ({ x: +sp.x, y: +sp.y }));
+    for (const rb of this._rb || []) if (rb.d.dock && Array.isArray(rb.cfg.m)) pts.push(rbApply(rb.cfg.m, rb.d.dock));
+    const nudge = (room) => {
+      const hit = pts.find((q) => Math.abs(q.x - room.x) < 4 && Math.abs(q.y - room.y) < 3.5);
+      return hit ? `transform:translate(-50%, calc(-50% ${hit.y >= room.y ? "-" : "+"} ${Math.round(size * 1.6)}px));` : "";
+    };
     return Object.entries(a.areas || {}).filter(([id]) => !(r.hidden || []).includes(id)).map(([id, room]) => {
+      const nw = ages && (a.now || {})[id];
       const c = ages && ((a.cleaned || {})[id] || {}).t;
-      if (!names && !c) return "";
+      if (!names && !c && !nw) return "";
       const name = (r.names && r.names[id]) || room.name;
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
-      const age = c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
+      // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
+      const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `cleaning · ${nw.pct}%` : "cleaning")}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
+      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
     }).join("");
   }
 
@@ -4474,8 +4504,9 @@ ${reset}
       const robots = Object.keys(a.robots || {}).filter((e) => this._hass.states[e]);
       for (const eid of robots) {
         const st = this._hass.states[eid];
-        const pre = robots.length > 1 ? `${st.attributes.friendly_name || eid}: ` : "";
-        const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${cesc(pre + label)}</button>`;
+        const pre = robots.length > 1 ? `${this._rbLabel(a, eid)}: ` : "";
+        const own = rbOwn(a, eid);
+        const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"${own ? ` style="color:rgb(${own})"` : ""}></ha-icon>${cesc(pre + label)}</button>`;
         b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") : cmd("start", "mdi:play", st.state === "paused" ? "Continue" : "Start"));
         if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", "Dock"));
       }
