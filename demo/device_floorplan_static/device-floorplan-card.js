@@ -1146,6 +1146,7 @@ ha-card.srail .dockrow.rail-dark .lslot button.layers { box-shadow:none; }
 .alist .mini { border:1px solid var(--divider-color); background:transparent; color:inherit; border-radius:8px; padding:4px 8px; cursor:pointer; font:inherit; font-size:12px; }
 canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
 .heatleg { display:flex; align-items:center; gap:16px; padding: 8px 12px 2px; font-size:12px; color: var(--secondary-text-color); }
+.cleanleg .cl { display:flex; align-items:center; gap:5px; white-space:nowrap; } .cleanleg .cl i { width:12px; height:12px; border-radius:3px; display:inline-block; }
 .heatleg .ht { text-transform:uppercase; letter-spacing:1.2px; font-weight:600; color: var(--primary-text-color); white-space:nowrap; }
 .heatleg .hb { flex:1; min-width:120px; }
 .heatleg .bar { height:10px; border-radius:6px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
@@ -2871,10 +2872,11 @@ class DeviceFloorplanCard extends HTMLElement {
       const pace = this._pace(a, id);
       const f = days == null ? null : pace ? days / pace : days / 7;
       const nw = (a.now || {})[id];
-      const fill = nw ? "rgba(33,150,243,.16)" : f == null ? "rgba(0,0,0,0)" : f < 0.6 ? `rgba(102,187,106,${(0.3 * (1 - f / 0.6)).toFixed(3)})` : pace && f >= 1 ? `rgba(255,160,0,${Math.min(0.28, 0.12 + 0.16 * (f - 1)).toFixed(3)})` : "rgba(0,0,0,0)";
+      // Full strength here; the slider (or the card setting) sets how strongly the whole layer shows.
+      const fill = nw ? "rgba(33,150,243,.55)" : f == null ? "rgba(0,0,0,0)" : f < 0.6 ? `rgba(76,175,80,${(0.85 * (1 - f / 0.6)).toFixed(3)})` : pace && f >= 1 ? `rgba(255,152,0,${Math.min(0.85, 0.45 + 0.4 * (f - 1)).toFixed(3)})` : "rgba(0,0,0,0)";
       return `<polygon data-croom="${cesc(id)}" points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:${fill}"></polygon>`;
     }).join("");
-    return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>`;
+    return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none" style="opacity:${this._cleanOp() / 100}">${polys}</svg>`;
   }
 
   /** 0.10: the cleaning path (a layer, always blue) and the dock of each robot; the dock is green while charging. */
@@ -3890,7 +3892,7 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._freshHtml(a)}${this._robotHtml()}<svg class="lines"></svg>
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
@@ -4275,6 +4277,20 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   /** Heatmap strength in % (viewer's slider, else the card's setting, else 52). */
+  /** Strength of the Last cleaned colours: this browser's slider, else the card setting. */
+  _cleanOp() {
+    const v = (this._lay.cleaning || {}).op;
+    const d = Number((this._config.cleaning || {}).opacity);
+    return Number.isFinite(v) ? v : Number.isFinite(d) && d > 0 ? d : 60;
+  }
+
+  /** Under the plan in Cleaning: what the colours mean, and how strong they are. */
+  _cleanLegendHtml() {
+    if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true) || !Object.keys((this._a || {}).robots || {}).length) return "";
+    const sw = (c, t) => `<span class="cl"><i style="background:${c}"></i>${t}</span>`;
+    return `<div class="heatleg cleanleg"><span class="ht">Last cleaned</span>${sw("rgba(33,150,243,.55)", "Now")}${sw("rgba(76,175,80,.85)", "Fresh")}${sw("rgba(255,152,0,.7)", "Due")}<span class="hb"></span><label class="hop" title="Colour strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="Colour strength"></label></div>`;
+  }
+
   _heatOp() {
     const v = (this._lay.comfort || {}).heatOp;
     const d = Number(this._ov("comfort").heatmap_opacity);
@@ -5181,6 +5197,13 @@ ${reset}
       this._covT = setTimeout(() => this._hass.callService("cover", "set_cover_position", { entity_id: t.dataset.covpos, position: Number(t.value) }), 350);
       return;
     }
+    if (t && t.dataset && t.dataset.cleanop) {
+      this._lay = { ...this._lay, cleaning: { ...(this._lay.cleaning || {}), op: Number(t.value) } };
+      lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
+      const svg = this.shadowRoot.querySelector("svg.fresh");
+      if (svg) svg.style.opacity = String(Number(t.value) / 100);
+      return;
+    }
     if (t && t.dataset && t.dataset.heatop) {
       this._lay = { ...this._lay, comfort: { ...(this._lay.comfort || {}), heatOp: Number(t.value) } };
       lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
@@ -6066,6 +6089,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           ],
         },
         { type: "expandable", name: "health", title: "Health", icon: OVERLAYS.health.icon, schema: [{ name: "low", selector: { number: { min: 5, max: 60, step: 5, mode: "slider", unit_of_measurement: "%" } } }, { name: "only_problems", selector: { boolean: {} } }] },
+        { type: "expandable", name: "cleaning", title: "Cleaning", icon: OVERLAYS.cleaning.icon, schema: [{ name: "opacity", selector: { number: { min: 15, max: 100, step: 5, mode: "slider", unit_of_measurement: "%" } } }] },
       ],
       look: [
         {
@@ -6089,7 +6113,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
-      heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
+      heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
       show_quiet: "Also show closed / idle (not only alerts)", cameras: "Show cameras",
       connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", wifi_links: "Draw Wi-Fi / LAN links to the router / access point (needs router device tracking)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
@@ -6134,6 +6158,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       security: { show_quiet: true, quiet_small: true, cameras: true, ...(c.security || {}) },
       network: { connections: ["all"], layers: true, links: true, min_lqi: 0, hub_links: true, wifi_links: true, legend: true, labels: false, only_weak: false, ...(c.network || {}) },
       health: { low: 20, only_problems: false, ...(c.health || {}) },
+      cleaning: { opacity: 60, ...(c.cleaning || {}) },
       tap: { ...TAP_DEFAULT, ...(c.tap || {}) },
       look: { size: 34, chips: "dark", names: c.names || "hover", markers: look.markers || (look.values === false || c.show_states === false ? "icon" : "icon_text"), ...look, show_title: look.title !== false },
       overlay_names: { ...(c.overlay_names || {}) },
@@ -6161,7 +6186,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     }
     if (Array.isArray(out.people) && !out.people.length) delete out.people;
     if (Array.isArray(out.people_in) && !out.people_in.length) delete out.people_in;
-    for (const k of ["live", "lights", "comfort", "security", "network", "health", "tap", "look", "overlay_names", "rooms", "buttons", "night"]) {
+    for (const k of ["live", "lights", "comfort", "security", "network", "health", "cleaning", "tap", "look", "overlay_names", "rooms", "buttons", "night"]) {
       if (!out[k]) continue;
       const v = {};
       const d0 = k === "rooms" ? { show_in: ["live"], style: "label", size: "m" } : k === "buttons" ? { position: "bottom", style: "labels" } : defaults[k] || {};
