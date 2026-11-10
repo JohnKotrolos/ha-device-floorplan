@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+Maintenance release: validation without exceptions, README updates. No changes to the integration.
+
 ## 0.10.0 · Cleaning the house
 
 **Robot vacuums on the plan: live, with their path, and every room's last cleaning.**

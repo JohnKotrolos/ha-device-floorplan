@@ -16,7 +16,7 @@ export class DemoHome {
  formatState(s){if(!s)return'';let st=s.state,dc=s.attributes.device_class;if(st==='unavailable')return'Unavailable';if(st==='unknown')return'Unknown';if(st==='on'||st==='off'){if(['window','door','opening'].includes(dc))return st==='on'?'Open':'Closed';if(['motion','occupancy','presence'].includes(dc))return st==='on'?'Detected':'Clear';if(dc==='moisture')return st==='on'?'Wet':'Dry';return st==='on'?'On':'Off'}return String(st)+(s.attributes.unit_of_measurement?' '+s.attributes.unit_of_measurement:'')}
  async callWS(m){let result,changed=false;const db=this.db;const getPlan=()=>{let p=db.plans.find(p=>p.id===m.plan_id);if(!p)throw Error('Plan not found');return p};
  switch(m.type){
- case 'device_floorplan/state':return clone({plans:db.plans,skipped:db.skipped,seen:db.seen,main_entity:db.main_entity,device_opts:db.device_opts,setup_done:db.setup_done,version:'0.10.0'});
+ case 'device_floorplan/state':return clone({plans:db.plans,skipped:db.skipped,seen:db.seen,main_entity:db.main_entity,device_opts:db.device_opts,setup_done:db.setup_done,version:'0.10.1'});
  case 'device_floorplan/devices':return clone({devices:db.devices,areas:Object.entries(AREA_NAMES).map(([area_id,name])=>({area_id,name,floor_id:'demo_floor'})),floors:[{floor_id:'demo_floor',name:'Demo apartment',level:0}],loose:[],merged_into:{},part_of:{}});
  case 'device_floorplan/payload':return clone(buildPayload(getPlan(),db));
  case 'device_floorplan/plan/update':{let p=getPlan();for(const[k,v]of Object.entries(m))if(!['id','type','plan_id'].includes(k))p[k]=clone(v);result=p;changed=true;break;}

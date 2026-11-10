@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.10.0).
+ * Device Floorplan – dashboard card (v0.10.1).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.10.0";
+const CARD_VERSION = "0.10.1";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
