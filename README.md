@@ -2,7 +2,7 @@
 
 # Device Floorplan
 
-[![Release](https://img.shields.io/github/v/release/JohnKotrolos/ha-device-floorplan?color=4CAF50)](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
+[![Release](https://img.shields.io/github/manifest-json/v/JohnKotrolos/ha-device-floorplan?filename=custom_components%2Fdevice_floorplan%2Fmanifest.json&label=release&color=4CAF50)](https://github.com/JohnKotrolos/ha-device-floorplan/releases)
 [![Marketplace custom](https://img.shields.io/badge/Marketplace-custom-41BDF5)](#install)
 [![Docs](https://img.shields.io/badge/docs-guide-blue)](https://johnkotrolos.github.io/ha-device-floorplan/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
