@@ -10,14 +10,16 @@ The notification is dismissed once every device in it was placed or skipped.
 
 from __future__ import annotations
 
-from math import cos, sin
 import logging
+from math import cos, sin
 from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
-from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_call_later
 
@@ -107,7 +109,7 @@ class NewDeviceWatcher:
             if device.via_device_id and not entities:
                 continue
             integrations = _integrations(self.hass, device)
-            conns, virtual = _connections(device, integrations)
+            _conns, virtual = _connections(device, integrations)
             if virtual or VIRTUAL_INTEGRATIONS.intersection(integrations[:1]):
                 continue
             area = area_reg.async_get_area(device.area_id) if device.area_id else None
@@ -136,9 +138,8 @@ class NewDeviceWatcher:
             return None
         best = None
         for plan in self.data.plans.values():
-            if device.area_id in plan.get("anchors", {}):
-                if best is None or plan.get("kind") == "floor":
-                    best = plan
+            if device.area_id in plan.get("anchors", {}) and (best is None or plan.get("kind") == "floor"):
+                best = plan
         if best is None:
             return None
         anchor = best["anchors"][device.area_id]

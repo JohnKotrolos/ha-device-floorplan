@@ -10,7 +10,11 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import (
     area_registry as ar,
+)
+from homeassistant.helpers import (
     device_registry as dr,
+)
+from homeassistant.helpers import (
     entity_registry as er,
 )
 
@@ -233,8 +237,7 @@ def find_parts(
         parent_of[device.id] = parent.id
     # Resolve chains to the top-most parent.
     roots: dict[str, str] = {}
-    for child in parent_of:
-        root = parent_of[child]
+    for child, root in parent_of.items():
         seen = {child}
         while root in parent_of and root not in seen:
             seen.add(root)
@@ -364,7 +367,7 @@ def migrate_replaced(hass: HomeAssistant, data: FloorplanData) -> None:
                 pos_all[f"entity:{new}"] = pos_all.pop(key)
                 changed = True
     if changed:
-        data._save()  # noqa: SLF001
+        data._save()
 
 
 def default_main_entity(hass: HomeAssistant, data: FloorplanData, device_id: str) -> str | None:
@@ -571,7 +574,7 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
             integrations = _integrations(hass, device)
             conns, virtual = _connections(device, integrations, {e.domain for e in entities})
             group = _group(entities, integrations)
-        except Exception:  # noqa: BLE001 - never let one odd device break the editor
+        except Exception:
             _LOGGER.debug("Could not classify device %s", device.id, exc_info=True)
             entities, integrations, conns, virtual, group = [], [], [], False, "other"
         area = area_reg.async_get_area(device.area_id) if device.area_id else None
@@ -851,8 +854,8 @@ def build_plan_payload(
             # Entities placed elsewhere never shape the device itself (#106).
             try:
                 group = _group([e for e in entities if e.entity_id not in gone], integrations)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:
+                _LOGGER.debug("Could not group the entities of %s", device.id, exc_info=True)
         item: dict[str, Any] = {
             "name": pos.get("label") or name,  # 0.8.0: the name given on the plan wins
             "area_id": device.area_id,

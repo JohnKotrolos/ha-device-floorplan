@@ -18,7 +18,8 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -86,7 +87,7 @@ def map_picture(vm: dict[str, Any], px: float) -> dict[str, Any] | None:
             for i in range((x - x0) // k, (x + n - 1 - x0) // k + 1):
                 row[i] = v
     png = _png(w, h, rows, [(0, 0, 0), COLOURS["floor"], COLOURS["wall"]])
-    mm = lambda a, b: {"x": round(a * px), "y": round(b * px)}  # noqa: E731
+    mm = lambda a, b: {"x": round(a * px), "y": round(b * px)}
     return {
         "entity_picture": "data:image/png;base64," + base64.b64encode(png).decode(),
         "calibration_points": [
@@ -194,6 +195,7 @@ def async_setup_valetudo(hass: HomeAssistant, entry: ConfigEntry, add: AddEntiti
                 try:
                     img = await async_get_image(hass, ent.entity_id, timeout=5)
                 except Exception:  # noqa: BLE001 - no picture yet: try again next scan
+                    _LOGGER.debug("No map image yet from %s", ent.entity_id)
                     continue
                 if map_json(img.content) is None:
                     continue

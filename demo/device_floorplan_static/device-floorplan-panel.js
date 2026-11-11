@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.10.1";
+const VERSION = "0.10.2";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -67,6 +67,8 @@ const STATUSES = [
   ["skipped", "Skipped"],
 ];
 
+/** 0.10.2: readable text for any error HA hands back ({code, message}, a number, a string). */
+const errText = (e) => (e && (e.message || e.code)) || (typeof e === "string" || typeof e === "number" ? String(e) : "Connection to Home Assistant was lost.");
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -542,14 +544,14 @@ header h1 .logo { width:28px; height:28px; }
 .ohd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #26c6da; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .details .lsec.opn { border-color: color-mix(in srgb, #26c6da 45%, transparent); background: color-mix(in srgb, #26c6da 8%, var(--df-card)); }
 .details .lsec.air { border-color: color-mix(in srgb, #4fa3ff 45%, transparent); background: color-mix(in srgb, #4fa3ff 8%, var(--df-card)); }
-.details .lcol { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--df-sec); }
-.details .lcol button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:12px; padding:2px 10px; font: inherit; cursor:pointer; }
-.details .lcol button.on { border-color:#f59e0b; color: var(--primary-text-color); }
-.details .lcol input[type=range] { flex:1; min-width:80px; height:6px; -webkit-appearance:none; appearance:none; border-radius:3px; background: linear-gradient(90deg, rgb(255,160,70), rgb(255,240,225), rgb(200,220,255)); outline:none; opacity:.55; }
-.details .lcol input[type=range].on { opacity:1; }
-.details .lcol input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid #f59e0b; cursor:pointer; }
-.details .lcol input[type=color] { width:28px; height:24px; padding:0; border:1px solid var(--df-div); border-radius:6px; background:none; cursor:pointer; opacity:.6; }
-.details .lcol input[type=color].on { opacity:1; border-color:#f59e0b; }
+.details .lclr { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--df-sec); }
+.details .lclr button { border:1px solid var(--df-div); background: var(--df-card); color: inherit; border-radius:12px; padding:2px 10px; font: inherit; cursor:pointer; }
+.details .lclr button.on { border-color:#f59e0b; color: var(--primary-text-color); }
+.details .lclr input[type=range] { flex:1; min-width:80px; height:6px; -webkit-appearance:none; appearance:none; border-radius:3px; background: linear-gradient(90deg, rgb(255,160,70), rgb(255,240,225), rgb(200,220,255)); outline:none; opacity:.55; }
+.details .lclr input[type=range].on { opacity:1; }
+.details .lclr input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid #f59e0b; cursor:pointer; }
+.details .lclr input[type=color] { width:28px; height:24px; padding:0; border:1px solid var(--df-div); border-radius:6px; background:none; cursor:pointer; opacity:.6; }
+.details .lclr input[type=color].on { opacity:1; border-color:#f59e0b; }
 .details .note.split .srow { display:flex; align-items:center; gap:6px; margin-top:6px; }
 .details .note.split .snm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
 .details .note { font-size:12px; line-height:1.4; border-radius:8px; padding:7px 9px; background: var(--primary-background-color); }
@@ -889,8 +891,11 @@ class DeviceFloorplanPanel extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
-    if (first) this._init();
-    else this._hydrateSoon();
+    if (first) {
+      this._init();
+      // 0.10.2: when HA's connection comes back, a failed load retries by itself.
+      if (hass.connection) hass.connection.addEventListener("ready", () => { if (this.s.error) this._reload(); });
+    } else this._hydrateSoon();
   }
   get hass() {
     return this._hass;
@@ -909,6 +914,13 @@ class DeviceFloorplanPanel extends HTMLElement {
     window.removeEventListener("keydown", this._onKey);
     if (this._ro) this._ro.disconnect();
     this._flushSave();
+  }
+
+  _reload() {
+    this.s.error = null;
+    this.s.loading = true;
+    this._render();
+    this._init();
   }
 
   _ws(type, extra = {}) {
@@ -932,7 +944,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       const params = new URLSearchParams(window.location.search);
       if (params.get("new")) this.s.status = ["new"];
     } catch (err) {
-      this.s.error = err.message || String(err);
+      this.s.error = errText(err);
     }
     this.s.loading = false;
     this._render();
@@ -1323,7 +1335,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _saveError(err) {
     this.s.save = "err";
-    this.s.saveErr = err.message || String(err);
+    this.s.saveErr = errText(err);
     this._renderSave();
   }
 
@@ -2540,7 +2552,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     });
     arr.sort((a, b) => (a.k === "__loose") - (b.k === "__loose") || (a.k === "__none") - (b.k === "__none") || b.todo - a.todo || a.name.localeCompare(b.name));
     return arr
-      .map((g, i) => {
+      .map((g) => {
         const key = `${s.groupBy}:${g.k}`;
         // 0.8.2: groups start collapsed; open while searching, when there is only one group, or when opened by you.
         const open = s.q.trim() || arr.length === 1 ? true : s.collapsed[key] === false;
@@ -2679,43 +2691,6 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (kids.length) bits.push(`${kids.length} device${kids.length > 1 ? "s connect" : " connects"} through it: ${kids.slice(0, 6).map((k) => esc(k.name)).join(", ")}${kids.length > 6 ? ` +${kids.length - 6}` : ""}`);
       if (bits.length) conn = `<div style="font-size:12px;color:var(--df-sec)">${bits.join(" · ")}</div>`;
     }
-    // What the marker shows (#34, #43): every entity of the device, grouped; "linked" only for
-    // an entity from outside the device, and only while it is the chosen one.
-    const cur = this.mainEntity[d.id] || d.main_entity;
-    const own = d.entities.filter((e) => !e.other);
-    const cands = own.slice();
-    if (cur && !own.some((e) => e.entity_id === cur)) {
-      cands.unshift({ entity_id: cur, name: entName(this._hass, cur), domain: cur.split(".")[0], other: true });
-    }
-    const picking = s.otherEnt === d.id;
-    let entIds = [];
-    if (picking && this._hass) entIds = Object.keys(this._hass.states).sort();
-    const cat = (e) => {
-      if (e.other) return "Linked";
-      if (["light", "switch", "fan", "cover", "climate", "lock", "media_player", "valve", "vacuum", "humidifier", "water_heater", "siren", "camera"].includes(e.domain)) return "Lights, switches & controls";
-      if (e.domain === "binary_sensor" && ["motion", "occupancy", "presence", "moving"].includes(e.dc)) return "Presence & motion";
-      if (e.domain === "binary_sensor" || e.domain === "sensor" || e.domain === "event") return "Sensors";
-      return "Other";
-    };
-    const q = (s.entFilter || "").toLowerCase();
-    const shownCands = q ? cands.filter((e) => e.entity_id === cur || `${e.name} ${e.entity_id}`.toLowerCase().includes(q)) : cands;
-    const order = ["Linked", "Lights, switches & controls", "Presence & motion", "Sensors", "Other"];
-    const groups = order.map((g) => [g, shownCands.filter((e) => cat(e) === g)]).filter((x) => x[1].length);
-    const nm = (e) => {
-      // Entities named after their device have no own name: use HA's friendly name.
-      if (e.name && e.name !== e.entity_id) return e.name;
-      const st = this._hass && this._hass.states[e.entity_id];
-      return entName(this._hass, e.entity_id);
-    };
-    const opt = (e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === cur && !picking ? "selected" : ""}>${esc(nm(e))} (${esc(e.domain)})${e.other ? " · linked" : ""}</option>`;
-    const optsHtml = groups.length > 1 ? groups.map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(opt).join("")}</optgroup>`).join("") : shownCands.map(opt).join("");
-    const so = cur && this._hass ? this._hass.states[cur] : null;
-    const now = so ? (this._hass.formatEntityState ? this._hass.formatEntityState(so) : so.state) : "";
-    const filterBox = cands.length > 15 ? `<input class="ent" id="entfilter" placeholder="Filter ${cands.length} entities… (e.g. count)" value="${esc(s.entFilter || "")}" autocomplete="off">` : "";
-    const mainSel = `<label style="font-size:12px;color:var(--df-sec);display:flex;flex-direction:column;gap:4px">The marker shows (icon, state, tap)${filterBox}<select data-act="mainent">${optsHtml}<option value="__other" ${picking ? "selected" : ""}>Other entity…</option></select></label>
-      ${now ? `<div style="font-size:12px;color:var(--df-sec);margin-top:-6px">Now: <b style="color:var(--primary-text-color);font-weight:500">${esc(now)}</b> · numbers and states show on the card</div>` : ""}
-      ${picking ? `<label style="font-size:12px;color:var(--df-sec);display:flex;flex-direction:column;gap:4px">Any entity, also a helper: type its name or id<input class="ent" id="otherent" list="entlist" placeholder="binary_sensor.dryer_running" autocomplete="off"><datalist id="entlist">${entIds.map((x) => `<option value="${esc(x)}">${esc((this._hass.states[x].attributes || {}).friendly_name || "")}</option>`).join("")}</datalist></label>` : ""}
-      <label class="chk"><input type="checkbox" data-act="onlymain" ${this.deviceOpts[d.id] && this.deviceOpts[d.id].only_main ? "checked" : ""}> The card uses only this entity</label>`;
     // Split device (#91): the device sits at its hardware; switchable entities can sit where they act.
     let box = "";
     if (onPlan) {
@@ -3667,7 +3642,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const col = s.color || "auto";
     const k = col.startsWith("k:") ? Number(col.slice(2)) : 3000;
     const hex = col.startsWith("#") ? col : "#ffd27f";
-    return `<div class="lcol"><span>Colour</span><button class="${col === "auto" ? "on" : ""}" data-act="lightauto" title="Use the real colour of smart lights. Plain lights glow warm white.">Auto</button>
+    return `<div class="lclr"><span>Colour</span><button class="${col === "auto" ? "on" : ""}" data-act="lightauto" title="Use the real colour of smart lights. Plain lights glow warm white.">Auto</button>
       <input type="range" id="lightk" min="2200" max="6500" step="100" value="${k}" class="${col.startsWith("k:") ? "on" : ""}" aria-label="Warm to cool white" title="Pick a white: warm ↔ cool">
       <input type="color" id="lighthex" value="${hex}" class="${col.startsWith("#") ? "on" : ""}" aria-label="Custom colour" title="Pick any colour"></div>`;
   }
@@ -3848,14 +3823,11 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _bondCardHtml(b) {
-    const s = this.s;
     const ids = b[1].filter((m) => this.work.positions[m]);
     const meta = this._bondMeta(b[0]);
     const names = ids.map((m) => (this.byId.get(m) || {}).name || m);
     const short = this._shortNames(names);
     const lead = this.byId.get(ids[0]);
-    const more = !!s.more;
-    const moreBox = ""; // tap and "2 of 3" moved to the card (Edit markers)
     return `<div class="details bondcard"><div class="top"><span class="ico" style="width:36px;height:36px">${meta.icon ? `<ha-icon icon="${esc(meta.icon)}"></ha-icon>` : lead ? this._iconHtml(lead) : SVG.link}</span>
       <div style="flex:1;min-width:0"><input class="nmin" id="bondname" data-bond="${esc(b[0])}" value="${esc(this._bondName(b))}" aria-label="Bond name" maxlength="60"><div class="sub bh"><span class="bcount">×${ids.length}</span>Bonded · one device ${this._tip("bond")}</div></div>
       <button class="small" data-act="desel" aria-label="Close">${SVG.close}</button></div>
@@ -3863,7 +3835,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div class="mems">${ids.map((m, i) => this._memberRow(m, "bout", short[i])).join("")}</div>
       <div style="font-size:12px;color:var(--df-sec)">Add more: drag a device onto this marker.</div>
       ${this._lightSectionHtml(this.byId.get(ids[0]) || { id: ids[0] })}
-      <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button>${this._wallSpot(this.s.sel) ? `<button class="btn" data-act="snapwall" title="Move it onto the nearest edge of its Room">${SVG.magnet}Snap to wall</button>` : ""}<button class="btn danger" data-act="remove">Remove from plan</button></div>${moreBox}</div>`;
+      <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button>${this._wallSpot(this.s.sel) ? `<button class="btn" data-act="snapwall" title="Move it onto the nearest edge of its Room">${SVG.magnet}Snap to wall</button>` : ""}<button class="btn danger" data-act="remove">Remove from plan</button></div></div>`;
   }
 
   /** #103: which entities of a member count (default: all its readings). */
@@ -4259,12 +4231,6 @@ class DeviceFloorplanPanel extends HTMLElement {
       this.s.lenInput = t.value;
     } else if (t.id === "reflen") {
       this.s.refLen = t.value;
-    } else if (t.id === "entfilter") {
-      this.s.entFilter = t.value;
-      this._render();
-    } else if (t.id === "otherent") {
-      const v = t.value.trim();
-      if (this._hass && this._hass.states[v] && this.s.sel) this._setMain(this.s.sel, v, true);
     } else if (t.id === "devlabel") {
       const pos = this.work.positions[this.s.sel];
       const d = this.byId.get(this.s.sel);
@@ -4483,21 +4449,6 @@ class DeviceFloorplanPanel extends HTMLElement {
       this.s.guide = t.checked;
       lsSet("guide", t.checked);
       this._render();
-    } else if (act === "mainent") {
-      if (t.value === "__other") {
-        this.s.otherEnt = this.s.sel;
-        this._render();
-        setTimeout(() => {
-          const i = this.shadowRoot.getElementById("otherent");
-          if (i) i.focus({ preventScroll: true });
-        }, 50);
-        return;
-      }
-      this._setMain(this.s.sel, t.value);
-    } else if (act === "onlymain") {
-      const id = this.s.sel;
-      this.deviceOpts[id] = { ...(this.deviceOpts[id] || {}), only_main: t.checked };
-      this._ws("devices/options", { device_id: id, only_main: t.checked }).catch((err) => this._saveError(err));
     } else if (act === "setupchk") {
       const f = this.s.setup;
       const list = f[t.dataset.key];
@@ -4525,7 +4476,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!el) return;
     const act = el.dataset.act;
     if (this.s.menu && e.target.closest(".menu")) this.s.menu = null;
-    if (["colorby", "names", "groupby", "allfloors", "queue", "guidebox", "mainent", "onlymain", "setupchk", "setupauto", "formimg", "dashkey", "dashwhere", "dashview", "replacedev", "bondtap", "bondshow", "phvalue", "phone"].includes(act)) return;
+    if (["colorby", "names", "groupby", "allfloors", "queue", "guidebox", "setupchk", "setupauto", "formimg", "dashkey", "dashwhere", "dashview", "replacedev", "bondtap", "bondshow", "phvalue", "phone"].includes(act)) return;
     if (act === "modalbg") {
       // A frame line dragged out of the dialog ends with a click on the background: keep the dialog.
       if (e.target === el && !(this.s.dialog && this.s.dialog.type === "bondask") && !(this._frUp && Date.now() - this._frUp < 400)) this._closeDialog();
@@ -4538,10 +4489,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
         break;
       case "reload":
-        this.s.error = null;
-        this.s.loading = true;
-        this._render();
-        this._init();
+        this._reload();
         break;
       case "plan":
         this._openPlan(el.dataset.id);
@@ -5558,17 +5506,6 @@ class DeviceFloorplanPanel extends HTMLElement {
     return pos ? { x: pos.x, y: pos.y } : null;
   }
 
-  _setMain(id, entityId, other = false) {
-    this.mainEntity[id] = entityId;
-    this.s.otherEnt = null;
-    this.s.entFilter = "";
-    const d = this.byId.get(id);
-    // A previously linked entity leaves the list when another one is chosen (#43).
-    if (d) d.entities = d.entities.filter((e) => !e.other);
-    this._ws("devices/main_entity", { device_id: id, entity_id: entityId }).catch((err) => this._saveError(err));
-    this._render();
-  }
-
   async _reloadDevices() {
     try {
       const [st, dv] = await Promise.all([this._ws("state"), this._ws("devices")]);
@@ -5604,7 +5541,6 @@ class DeviceFloorplanPanel extends HTMLElement {
     const st = this._status(d);
     s.placingRoom = null;
     s.placingBox = null;
-    s.entFilter = "";
     if (st === "unplaced" || st === "hiddenroom") {
       // Picking a device to place doesn't open its details (they'd take the list's space);
       // picking it again while placing opens them.
@@ -6714,7 +6650,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._signImage(plan);
       this._render();
     } catch (err) {
-      fail(err.message || String(err));
+      fail(errText(err));
     }
   }
 
@@ -6781,7 +6717,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this.s.tool = this._firstOpenStep();
     } catch (err) {
       f.busy = false;
-      f.err = err.message || String(err);
+      f.err = errText(err);
     }
     this._render();
   }
@@ -6797,7 +6733,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
     } catch (err) {
       const e = this.shadowRoot.getElementById("formerr");
-      if (e) e.textContent = err.message || String(err);
+      if (e) e.textContent = errText(err);
     }
   }
 
@@ -6997,7 +6933,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (!cfg || cfg.strategy) d.cfgError = "Home Assistant generates this dashboard automatically (you haven't taken control of it), so the card can't be added for you.";
       else d.config = cfg;
     } catch (err) {
-      d.cfgError = err && err.code === "config_not_found" ? "Home Assistant generates this dashboard automatically (you haven't taken control of it), so the card can't be added for you." : `Could not open this dashboard (${err.message || err}).`;
+      d.cfgError = err && err.code === "config_not_found" ? "Home Assistant generates this dashboard automatically (you haven't taken control of it), so the card can't be added for you." : `Could not open this dashboard (${errText(err)}).`;
     }
     d.view = this._firstFreeView();
     this._render();
@@ -7070,7 +7006,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
     } catch (err) {
       d.busy = false;
-      d.err = err.message || String(err);
+      d.err = errText(err);
       this._render();
     }
   }
@@ -7150,7 +7086,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._render();
       this._toast(`Exported ${fmt.toUpperCase()}`, false);
     } catch (err) {
-      this.s.dialog.err = `Export failed: ${err.message || err}`;
+      this.s.dialog.err = `Export failed: ${errText(err)}`;
       this._render();
     }
   }
@@ -7320,7 +7256,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._toast(`Imported “${name}”: ${matched} device${matched === 1 ? "" : "s"} matched${missing ? `, ${missing} not found here` : ""}.`, false);
     } catch (err) {
       f.busy = false;
-      f.err = `Import failed: ${err.message || err}`;
+      f.err = `Import failed: ${errText(err)}`;
       this._render();
     }
   }

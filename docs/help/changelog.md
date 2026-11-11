@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.2 · Housekeeping
+
+**Cleaner code and a few fixes.**
+
+- **Shutters**: tapping a device with a shutter opens the card's shutter controls (open / stop / close, position), also when the device's main entity is a sensor (e.g. a Shelly 2PM drawn as a bar).
+- **Floorplan Editor**: when the connection to Home Assistant drops and comes back, it reloads by itself; errors show a readable message instead of *[object Object]*.
+- **Security, calmer**: by default only what needs attention shows (open, motion, unlocked, alarm). **Layers → All sensors** shows every sensor again; the card editor sets the default.
+- **Unavailable sensors in Security** always show, in red with a dashed ring: a sensor that went silent may be a threat.
+- **Relays aren't doors**: the "opening" input of a switch or light relay (e.g. a Sonoff ZBMINIR2's wall-switch input) no longer lands in Security, unless it's drawn as an opening or picked in Edit markers.
+- **Hidden entities are skipped**: an entity you hid in Home Assistant (e.g. a raw sensor behind a template) is no longer picked automatically in any overlay; picked by hand in Edit markers it still shows.
+- **Labels near the edge**: a marker's readings open inwards only when the card really has no room; the space around the plan now counts.
+- **Edit markers**: each extra reading has a **Label | Badge** switch (was a small ○).
+- The "Edit card → Edit markers on the plan" hint is gone: in the dashboard's edit mode Home Assistant's own overlay covers the card.
+- **Floorplan Editor**: the light's Colour row shows on one line again.
+- **card-mod**: the card carries the overlay it shows as a class (`ov-live`, `ov-comfort`, …), so you can style one overlay.
+- Unused code removed (also the old "The marker shows" selector in the Editor); problems that were silently ignored are now written to Home Assistant's log.
+- Every change is now checked automatically with Ruff (Python) and ESLint (JavaScript), next to Home Assistant's and HACS's own checks.
+
 ## 0.10.1
 
 Maintenance release: validation without exceptions, README updates. No changes to the integration.

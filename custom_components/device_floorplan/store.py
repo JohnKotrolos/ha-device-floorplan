@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from math import hypot
 import os
-from pathlib import Path
 import shutil
 import time
+from math import hypot
+from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -21,7 +21,6 @@ from .const import (
     IMAGES_DIR,
     IMAGES_URL,
     MAX_WWW_IMAGES,
-    WWW_IMAGE_EXT,
     SIGNAL_DEVICES_CHANGED,
     SIGNAL_PLAN_ADDED,
     SIGNAL_PLAN_REMOVED,
@@ -29,6 +28,7 @@ from .const import (
     START_NOTIFICATION_ID,
     STORAGE_KEY,
     STORAGE_VERSION,
+    WWW_IMAGE_EXT,
 )
 
 PLAN_KINDS = ("floor", "view")

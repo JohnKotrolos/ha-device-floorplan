@@ -7,10 +7,10 @@ place them quickly, one sensor per plan with all positions, and a
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import voluptuous as vol
-
 from homeassistant.components import frontend, panel_custom, persistent_notification
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -44,6 +44,8 @@ from .http import FloorplanImageView, FloorplanUploadView
 from .new_devices import NewDeviceWatcher
 from .robots import RobotWatcher
 from .store import FloorplanData
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.IMAGE]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -103,13 +105,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = FloorplanData(hass)
     await data.async_load()
-    from .devices import default_main_entity  # noqa: PLC0415
+    from .devices import default_main_entity
     data.migrate_split(lambda dev: default_main_entity(hass, data, dev))  # 0.5.1, #91
-    from .devices import migrate_replaced  # noqa: PLC0415
+    from .devices import migrate_replaced
     try:
         migrate_replaced(hass, data)  # 0.6.0, #106
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        _LOGGER.warning("Could not migrate replaced devices", exc_info=True)
     await hass.async_add_executor_job(
         lambda: data.images_path.mkdir(parents=True, exist_ok=True)
     )
