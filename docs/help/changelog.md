@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.3 · Counting downloads
+
+- Each release now carries a `device_floorplan.zip`, which the Marketplace (and HACS) installs from, so the Marketplace can show how many times Device Floorplan was downloaded. Nothing changes in the integration itself; updating works as usual.
+
 ## 0.10.2 · Housekeeping
 
 **Cleaner code and a few fixes.**
