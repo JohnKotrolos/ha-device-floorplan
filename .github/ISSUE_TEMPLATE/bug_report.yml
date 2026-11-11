@@ -24,6 +24,18 @@ body:
         - Other
     validations:
       required: true
+  - type: dropdown
+    id: where2
+    attributes:
+      label: Where are you running this integration?
+      options:
+        - HA OS
+        - H.A. Container
+        - HA Supervisor/core (deprecated)
+        - Demo
+        - Other
+    validations:
+      required: false
   - type: input
     id: version
     attributes:
