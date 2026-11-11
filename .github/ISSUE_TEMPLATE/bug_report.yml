@@ -27,11 +27,11 @@ body:
   - type: dropdown
     id: where2
     attributes:
-      label: Where are you running this card?
+      label: Where are you running this integration?
       options:
-        - H.A. OS
+        - HA OS
         - H.A. Container
-        - H.A. Supervisor/core (deprecated)
+        - HA Supervisor/core (deprecated)
         - Demo
         - Other
     validations:
