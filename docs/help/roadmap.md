@@ -2,22 +2,18 @@
 
 What's coming, roughly in order. No dates: it's built in spare time, and your feedback moves things up. Updated with each release.
 
-## Next
+## Next 1-2
 
 - **Electricity overlay** (0.11): live power at each device, rooms shaded by what they use, and optional flowing lines in Home Assistant's energy colours. A hint in the device popup when a big consumer has no power data.
 - **Card editor**: chip settings (transparency, text size, colour) and a "Fix proportions" action for squeezed plan images.
-- **Mobile card**: room cards in portrait (only rooms where something happens), the plan in landscape.
-- Light pools for every light shape in more overlays, and a real night photo of your plan as an option (instead of the drawn night look).
-- Persons on several floors: the card follows the floor a person is on.
-- Polishing from your feedback: bonds, phantoms, the night look, people, room shapes.
+- **Mobile card - Foundation**: room cards in portrait (only rooms where something happens), the plan in landscape.
+- **Zigbee2MQTT** network map (roles and links), like ZHA today.
 
 ## Later
 
-- **Comfort colours per room shape**: the room fills with its temperature colour, now that rooms can have a shape.
-- **Motion zones** that fill when something moves and fade over the next minutes: you see the path through the corridor.
-- **Doors and covers drawn**: an opening arc for doors, a shade over the window for blinds.
-- **Coverage map**: an estimate of the Zigbee / Wi-Fi coverage from the signals measured at the devices' spots, so you see where a repeater would help.
-- **Zigbee2MQTT** network map (roles and links), like ZHA today.
+- **Doors and covers **: Own images in the Card
+- **Mobile card - We Go Mobile**: Release for the Mobile Card Celebration
+- 
 
 ## Ideas from you
 
