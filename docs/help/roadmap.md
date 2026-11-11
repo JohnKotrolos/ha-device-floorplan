@@ -8,7 +8,7 @@ What's coming, roughly in order. No dates: it's built in spare time, and your fe
 - **Card editor**: chip settings (transparency, text size, colour) and a "Fix proportions" action for squeezed plan images.
 - **Mobile card - Foundation**: room cards in portrait (only rooms where something happens), the plan in landscape.
 - **Zigbee2MQTT** network map (roles and links), like ZHA today.
-- **Device Floorplan Localisation**:
+- **Device Floorplan Localisation**: framework and supported languages
 
 ## Later
 
