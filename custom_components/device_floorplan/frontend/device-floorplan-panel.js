@@ -894,7 +894,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (first) {
       this._init();
       // 0.10.2: when HA's connection comes back, a failed load retries by itself.
-      if (hass.connection) hass.connection.addEventListener("ready", () => { if (this.s.error) this._reload(); });
+      if (hass.connection && typeof hass.connection.addEventListener === "function") hass.connection.addEventListener("ready", () => { if (this.s.error) this._reload(); });
     } else this._hydrateSoon();
   }
   get hass() {
