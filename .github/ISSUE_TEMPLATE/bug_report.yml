@@ -24,6 +24,18 @@ body:
         - Other
     validations:
       required: true
+  - type: dropdown
+    id: where2
+    attributes:
+      label: Where are you running this card?
+      options:
+        - H.A. OS
+        - H.A. Container
+        - H.A. Supervisor/core (deprecated)
+        - Demo
+        - Other
+    validations:
+      required: false
   - type: input
     id: version
     attributes:
