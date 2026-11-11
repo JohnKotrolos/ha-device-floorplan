@@ -4,6 +4,9 @@ What's coming, roughly in order. No dates: it's built in spare time, and your fe
 
 ## Next
 
+- **Electricity overlay** (0.11): live power at each device, rooms shaded by what they use, and optional flowing lines in Home Assistant's energy colours. A hint in the device popup when a big consumer has no power data.
+- **Card editor**: chip settings (transparency, text size, colour) and a "Fix proportions" action for squeezed plan images.
+- **Mobile card**: room cards in portrait (only rooms where something happens), the plan in landscape.
 - Light pools for every light shape in more overlays, and a real night photo of your plan as an option (instead of the drawn night look).
 - Persons on several floors: the card follows the floor a person is on.
 - Polishing from your feedback: bonds, phantoms, the night look, people, room shapes.
