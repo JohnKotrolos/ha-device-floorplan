@@ -112,3 +112,5 @@ $('replay-editor-tour').onclick = async () => {
   stopEditorTour = startEditorTour(home.hass,$('editor-view')) ?? stopEditorTour;
 };
 if (tourRequested && currentView === 'editor') stopEditorTour = startEditorTour(home.hass,$('editor-view')) ?? stopEditorTour;
+// 0.11 (#8): a tap outside a dialog closes it, like Home Assistant's own dialogs.
+document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom)return;if(d.id==='card-editor-dialog')closeCardEditor();else d.close()}));

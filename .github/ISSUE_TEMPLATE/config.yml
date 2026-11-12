@@ -3,3 +3,9 @@ contact_links:
   - name: Guide
     url: https://johnkotrolos.github.io/ha-device-floorplan/
     about: Setup, the Floorplan Editor, the card and the FAQ.
+  - name: Help - Q&A
+    url: https://github.com/JohnKotrolos/ha-device-floorplan/discussions/categories/help-q-a
+    about: Installation, setup and "how does this work?" questions.
+  - name: Ideas
+    url: https://github.com/JohnKotrolos/ha-device-floorplan/discussions/categories/ideas
+    about: Something to improve or a use case that isn't covered yet.

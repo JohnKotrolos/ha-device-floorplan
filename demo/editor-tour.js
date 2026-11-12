@@ -6,12 +6,8 @@ const switchPoint = {x:55, y:43};
 const lightPoint = {x:52, y:23};
 const near = (point, target, tolerance = 5) => Boolean(point &&
   Math.abs(point.x - target.x) <= tolerance && Math.abs(point.y - target.y) <= tolerance);
-const hasReference = (work, ref) => work.refs.some(candidate =>
-  candidate.dir === ref.dir && Math.abs(candidate.length - ref.length) < 0.005 &&
-  ((near({x:candidate.ax,y:candidate.ay}, {x:ref.ax,y:ref.ay}, 3) &&
-    near({x:candidate.bx,y:candidate.by}, {x:ref.bx,y:ref.by}, 3)) ||
-   (near({x:candidate.bx,y:candidate.by}, {x:ref.ax,y:ref.ay}, 3) &&
-    near({x:candidate.ax,y:candidate.ay}, {x:ref.bx,y:ref.by}, 3))));
+// 0.11: any reference in the right direction counts: draw it where and as long as you like.
+const hasReference = (work, ref) => work.refs.some(candidate => candidate.dir === ref.dir && candidate.length > 0);
 
 function makeLessons(plan) {
   const [horizontal, vertical] = plan.refs;
@@ -21,8 +17,8 @@ function makeLessons(plan) {
     [
       { title:'Give the floorplan a scale', copy:'A floorplan image has pixels. Two known lengths give the Editor a horizontal and vertical scale in metres. Use straight edges you can measure, such as the sides of this kitchen table.', watch:true, target:'[data-act="tool"][data-tool="measure"]' },
       { title:'Watch the long edge', copy:'Click the two ends of the long edge of the table, enter 1.48 m in Real length, then choose Set scale. The line on the plan shows the saved horizontal reference.', watch:true, refs:[horizontal], point:{x:horizontal.bx,y:horizontal.by} },
-      { title:'Set the horizontal scale yourself', copy:'Click each end of the long edge nearest the top of the plan, starting at the blue dot. Type 1.48 in Real length and click Set scale. If you miss an end, use the × beside the measurement and try again.', reference:horizontal, ready:panel => hasReference(panel.work, horizontal) },
-      { title:'Set the vertical scale', copy:'Starting at the blue dot, click the two ends of the short left edge of the table. Replace the estimated length with 0.86 m and choose Set scale. You should now see one reference for each direction.', reference:vertical, ready:panel => hasReference(panel.work, vertical) },
+      { title:'Set the horizontal scale yourself', copy:'Draw a horizontal line along any edge you can measure, for example the long edge of the table (1.48 m). Type its length in Real length and click Set scale. If you miss, use the × beside the measurement and try again.', reference:horizontal, ready:panel => hasReference(panel.work, horizontal) },
+      { title:'Set the vertical scale', copy:'Now draw a vertical line along any edge you can measure, for example the short edge of the table (0.86 m). Enter its length and choose Set scale. You should now see one reference for each direction.', reference:vertical, ready:panel => hasReference(panel.work, vertical) },
       { title:'Check both references', copy:'The two lines show 1.48 m horizontally and 0.86 m vertically. On your own plan, use lengths you measured in the room. The Editor now has a scale for sizing effects such as a light’s radius.', watch:true }
     ],
     [],
@@ -270,8 +266,8 @@ export function startEditorTour(hass, editorView) {
         const cue = ready ? 'done' : panel.s.m2 ? 'length' : panel.s.m1 ? 'end' : 'start';
         if (cue === lastCue) return;
         lastCue = cue;
-        const {ax, ay, bx, by, dir} = step.reference;
-        pointAt(cue === 'start' ? {x:ax,y:ay} : cue === 'end' ? {x:bx,y:by} : null);
+        const {dir} = step.reference;
+        pointAt(null); // 0.11: free drawing, no fixed spots
         highlight(cue === 'length' ? '#lenin, [data-act="setscale"]' : null);
         // Both table references share an endpoint. Let the second measurement
         // start there without grabbing the handle of the already saved line.

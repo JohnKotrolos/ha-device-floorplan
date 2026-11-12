@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+import re
 import shutil
 import time
 from math import hypot
@@ -33,6 +35,17 @@ from .const import (
 
 PLAN_KINDS = ("floor", "view")
 IMAGE_KINDS = ("top", "angled")
+
+
+def find_plan_device(hass: HomeAssistant, plan_id: str):
+    """0.11: the plan's HA device, without the deprecated identifier lookup."""
+    from homeassistant.helpers import device_registry as dr
+
+    key = (DOMAIN, plan_id)
+    for device in dr.async_get(hass).devices.values():
+        if key in device.identifiers:
+            return device
+    return None
 
 
 class FloorplanData:
@@ -69,6 +82,10 @@ class FloorplanData:
         # Per device: {"only_main": bool, "part": "own" | "part"}
         self.device_opts: dict[str, dict[str, Any]] = {}
         self.setup_done = False
+        # 0.11: card state shared by every screen (appliance "done" / unloaded), never in the browser.
+        self.card_state: dict[str, Any] = {}
+        self._closed = False
+        self._image_locks: dict[str, asyncio.Lock] = {}
         self.images_path = Path(hass.config.path(IMAGES_DIR))
 
     async def async_load(self) -> None:
@@ -81,6 +98,7 @@ class FloorplanData:
         self.main_entity = data.get("main_entity", {})
         self.device_opts = data.get("device_opts", {})
         self.setup_done = bool(data.get("setup_done", False))
+        self.card_state = data.get("card_state", {})
 
     @staticmethod
     def _defaults(plan: dict[str, Any]) -> None:
@@ -109,19 +127,35 @@ class FloorplanData:
         """0.10: save data changed outside update_plan (rooms cleaned by a robot)."""
         self._save()
 
+    def _data(self) -> dict[str, Any]:
+        return {
+            "plans": self.plans,
+            "skipped": self.skipped,
+            "seen": sorted(self.seen),
+            "main_entity": self.main_entity,
+            "device_opts": self.device_opts,
+            "setup_done": self.setup_done,
+            "card_state": self.card_state,
+        }
+
     @callback
     def _save(self) -> None:
-        self._store.async_delay_save(
-            lambda: {
-                "plans": self.plans,
-                "skipped": self.skipped,
-                "seen": sorted(self.seen),
-                "main_entity": self.main_entity,
-                "device_opts": self.device_opts,
-                "setup_done": self.setup_done,
-            },
-            1,
-        )
+        if self._closed:
+            return
+        self._store.async_delay_save(self._data, 1)
+
+    async def async_flush(self) -> None:
+        """0.11: write now and stop this instance from writing later (unload / reload)."""
+        self._closed = True
+        await self._store.async_save(self._data())
+
+    @callback
+    def set_card_state(self, key: str, value: Any) -> None:
+        if value is None:
+            self.card_state.pop(key, None)
+        else:
+            self.card_state[key] = value
+        self._save()
 
     # ------------------------------------------------------------------ plans
     @callback
@@ -244,6 +278,7 @@ class FloorplanData:
             "image_source": "ha" if plan.get("image_external") else ("upload" if plan.get("image") else None),
             "width": plan.get("width") or 0,
             "height": plan.get("height") or 0,
+            "orig_size": plan.get("orig_size"),
             "positions": plan["positions"],
             "anchors": plan["anchors"],
             "refs": plan["refs"],
@@ -268,9 +303,7 @@ class FloorplanData:
     @callback
     def plan_device_id(self, plan_id: str) -> str | None:
         """The HA device that represents this plan (created by its entities)."""
-        from homeassistant.helpers import device_registry as dr
-
-        device = dr.async_get(self.hass).async_get_device(identifiers={(DOMAIN, plan_id)})
+        device = find_plan_device(self.hass, plan_id)
         return device.id if device else None
 
     @callback
@@ -393,6 +426,14 @@ class FloorplanData:
     @callback
     def update_plan(self, plan_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         plan = self.plans[plan_id]
+        if changes.get("width") and changes.get("height"):  # 0.11 Fix proportions
+            if not plan.get("orig_size"):
+                plan["orig_size"] = [plan.get("width") or 0, plan.get("height") or 0]
+            plan["width"] = int(changes["width"])
+            plan["height"] = int(changes["height"])
+        if changes.get("reset_size") and plan.get("orig_size"):  # 0.11 Reset proportions
+            plan["width"], plan["height"] = plan["orig_size"]
+            plan.pop("orig_size", None)
         if "name" in changes and changes["name"].strip():
             plan["name"] = changes["name"].strip()
         if changes.get("kind") in PLAN_KINDS:
@@ -540,30 +581,38 @@ class FloorplanData:
                 )
         async_dispatcher_send(self.hass, SIGNAL_PLAN_REMOVED, plan_id)
 
+    def _image_lock(self, plan_id: str) -> asyncio.Lock:
+        return self._image_locks.setdefault(plan_id, asyncio.Lock())
+
+    async def _commit_image(self, plan_id: str, old_files: list[str | None]) -> None:
+        """0.11: the new image is saved to disk first, only then the old files go."""
+        await self._store.async_save(self._data())
+        keep = {self.plans[plan_id].get("image"), self.plans[plan_id].get("image_backup")} if plan_id in self.plans else set()
+        for old in old_files:
+            if old and old not in keep:
+                await self.hass.async_add_executor_job(self._remove_file, self.images_path / old)
+        async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+
     async def async_set_image(
         self, plan_id: str, body: bytes, ext: str, width: int, height: int
     ) -> None:
-        plan = self.plans[plan_id]
-        old = plan.get("image")
-        filename = f"{plan_id}.{ext}"
-        await self.hass.async_add_executor_job(self._write_file, filename, body)
-        if old and old != filename:
-            await self.hass.async_add_executor_job(
-                self._remove_file, self.images_path / old
-            )
-        if plan.get("image_backup"):
-            await self.hass.async_add_executor_job(
-                self._remove_file, self.images_path / plan["image_backup"]
-            )
-        plan["image"] = filename
-        plan["image_external"] = None
-        plan["image_backup"] = None
-        plan["image_version"] = int(time.time())
-        if width > 0 and height > 0:
-            plan["width"] = width
-            plan["height"] = height
-        self._save()
-        async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+        async with self._image_lock(plan_id):
+            stamp = int(time.time() * 1000)
+            filename = f"{plan_id}_{stamp}.{ext}"
+            await self.hass.async_add_executor_job(self._write_file, filename, body)
+            plan = self.plans.get(plan_id)
+            if plan is None:  # deleted meanwhile
+                await self.hass.async_add_executor_job(self._remove_file, self.images_path / filename)
+                return
+            old = [plan.get("image"), plan.get("image_backup")]
+            plan["image"] = filename
+            plan["image_external"] = None
+            plan["image_backup"] = None
+            plan["image_version"] = int(time.time())
+            if width > 0 and height > 0:
+                plan["width"] = width
+                plan["height"] = height
+            await self._commit_image(plan_id, old)
 
     async def async_set_image_file(
         self, plan_id: str, src: Path, width: int, height: int
@@ -579,26 +628,29 @@ class FloorplanData:
 
         The plan keeps pointing at the original (so editing that file updates
         the plan) and a backup copy is stored, used if the original goes away.
+        0.11: the old image stays until the new one is saved; a failed backup keeps the old backup.
         """
-        plan = self.plans[plan_id]
-        for key in ("image", "image_backup"):
-            if plan.get(key):
-                await self.hass.async_add_executor_job(
-                    self._remove_file, self.images_path / plan[key]
-                )
-                plan[key] = None
-        src = self.www_path(url)
-        if src is not None:
-            backup = f"{plan_id}_backup{src.suffix.lower()}"
-            ok = await self.hass.async_add_executor_job(self._copy_file, src, backup)
-            if ok:
+        async with self._image_lock(plan_id):
+            src = self.www_path(url)
+            backup = None
+            if src is not None:
+                name = f"{plan_id}_backup_{int(time.time() * 1000)}{src.suffix.lower()}"
+                if await self.hass.async_add_executor_job(self._copy_file, src, name):
+                    backup = name
+            plan = self.plans.get(plan_id)
+            if plan is None:
+                if backup:
+                    await self.hass.async_add_executor_job(self._remove_file, self.images_path / backup)
+                return
+            old = [plan.get("image")] + ([plan.get("image_backup")] if backup else [])
+            plan["image"] = None
+            if backup:
                 plan["image_backup"] = backup
-        plan["image_external"] = url
-        plan["image_version"] = int(time.time())
-        plan["width"] = width
-        plan["height"] = height
-        self._save()
-        async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
+            plan["image_external"] = url
+            plan["image_version"] = int(time.time())
+            plan["width"] = width
+            plan["height"] = height
+            await self._commit_image(plan_id, old)
 
     # ---------------------------------------------------------------- devices
     @callback
@@ -699,7 +751,7 @@ class FloorplanData:
     # ------------------------------------------------------------------ files
     def _write_file(self, filename: str, body: bytes) -> None:
         self.images_path.mkdir(parents=True, exist_ok=True)
-        tmp = self.images_path / f".{filename}.tmp"
+        tmp = self.images_path / f".{filename}.{os.getpid()}.{time.time_ns()}.tmp"
         tmp.write_bytes(body)
         tmp.replace(self.images_path / filename)
 
@@ -740,7 +792,8 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         col = light.get("color")
         if isinstance(col, str) and col and col != "auto":
             entry_col = col.strip()[:12]  # #112: "k:<kelvin>" or "#rrggbb"
-            clean["color"] = entry_col
+            if re.fullmatch(r"#[0-9a-fA-F]{6}|k:\d{3,5}", entry_col):  # 0.11: nothing else gets stored
+                clean["color"] = entry_col
         entry["light"] = clean
     if pos.get("of"):
         entry["of"] = str(pos["of"])  # split device (#91): this entity acts here

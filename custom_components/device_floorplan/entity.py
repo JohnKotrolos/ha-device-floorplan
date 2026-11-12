@@ -10,7 +10,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, NAME, PANEL_URL_PATH, VERSION
-from .store import FloorplanData
+from .store import FloorplanData, find_plan_device
 
 
 def plan_device_name(plan: dict[str, Any]) -> str:
@@ -41,6 +41,6 @@ def sync_plan_device(hass: HomeAssistant, data: FloorplanData, plan_id: str) -> 
     if plan is None:
         return
     dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, plan_id)})
+    device = find_plan_device(hass, plan_id)
     if device is not None and device.name != plan_device_name(plan):
         dev_reg.async_update_device(device.id, name=plan_device_name(plan))

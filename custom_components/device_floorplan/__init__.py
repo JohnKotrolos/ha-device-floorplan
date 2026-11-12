@@ -179,6 +179,9 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        data = hass.data.get(DOMAIN)
+        if data is not None and hasattr(data, "async_flush"):
+            await data.async_flush()  # 0.11: a pending save is written before the reload reads it
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
         hass.data.pop(DOMAIN, None)
     return unloaded

@@ -35,12 +35,27 @@ export function ensureRobot(db) {
   return true;
 }
 
+/** 0.11 (#7): rounded turns, like a real robot drives (two passes of corner cutting). */
+function smooth(pts) {
+  let p = pts;
+  for (let k = 0; k < 2 && p.length > 2; k++) {
+    const o = [p[0]];
+    for (let i = 0; i < p.length - 1; i++) {
+      const [ax, ay] = p[i], [bx, by] = p[i + 1];
+      o.push([Math.round(ax * 0.75 + bx * 0.25), Math.round(ay * 0.75 + by * 0.25)], [Math.round(ax * 0.25 + bx * 0.75), Math.round(ay * 0.25 + by * 0.75)]);
+    }
+    o.push(p[p.length - 1]);
+    p = o;
+  }
+  return p;
+}
+
 /** The map entity's attributes at step n (from = where this run started, for "Clean this room"). */
 function mapAttrs(n, from, back) {
   const s = R.S[n];
   const pos = back ? { x: back[0], y: back[1], a: back[2] } : { x: s[0], y: s[1], a: s[2] };
   const path = n || back ? [...R.P.slice(Math.max(0, R.S[from][3] - 1), s[3]), [s[0], s[1]], ...(back ? [[back[0], back[1]]] : [])] : [];
-  return { vacuum_position: pos, charger_position: { x: R.dock[0], y: R.dock[1], a: 0 }, path, rooms: Object.fromEntries(Object.entries(R.R).map(([k, r]) => [k, { room_id: r.room_id, name: r.name, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }])) };
+  return { vacuum_position: pos, charger_position: { x: R.dock[0], y: R.dock[1], a: 0 }, path: smooth(path), rooms: Object.fromEntries(Object.entries(R.R).map(([k, r]) => [k, { room_id: r.room_id, name: r.name, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }])) };
 }
 
 /** Drives the robot: start / pause / return_to_base / stop / clean_area, one step every 0.7 s. */

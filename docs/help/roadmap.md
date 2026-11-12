@@ -18,4 +18,4 @@ What's coming, roughly in order. No dates: it's built in spare time, and your fe
 
 ## Ideas from you
 
-Have an idea? [Open an issue with the label *idea*](https://github.com/JohnKotrolos/ha-device-floorplan/issues?q=label%3Aidea) on GitHub, or vote on an existing one with a 👍.
+Have an idea? Post it in [Discussions → Ideas](https://github.com/JohnKotrolos/ha-device-floorplan/discussions/categories/ideas) on GitHub, or upvote an existing one.

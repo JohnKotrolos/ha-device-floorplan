@@ -50,6 +50,18 @@ Close markers spread out side by side so each stays readable; a thin line points
 | Zigbee roles, LQI ring, links, path | | | ✓ | not yet | |
 | *N new · Place them* hint | | | admins only | | |
 
+## How the plan is built
+
+Everything on the plan sits in one of five layers. Each layer has its own rules, so things never fight over the same spot.
+
+| Layer (bottom → top) | What's in it | How it behaves |
+|---|---|---|
+| 1. **Plan** | The picture of your floor, the night look | Doesn't react to taps |
+| 2. **Rooms** | Room shading (heatmap, energy, last cleaned), motion and presence glow, room names | Tap a room for its details |
+| 3. **Markers** | Device icons, info chips (temperatures, energy…), camera dots | Spread out automatically so none overlap |
+| 4. **Windows** | Camera pictures, appliance status ("Drying · 2 min", "Ready to unload") | Attached to their marker with a connecting line, placed after the markers; never pushed around by markers, they only avoid each other and the plan's edges |
+| 5. **Popups and menus** | Info cards, device lists, the Layers menu | Above everything; tap outside or ✕ to close |
+
 ## Several floors
 
 A card can show several plans: at the top of the card editor, floor tabs **1 · 2 · +** like Home Assistant's stack editors, each tab one plan from the Floorplan Editor. The card opens the first floor (or the one you last looked at on that screen).
@@ -136,7 +148,7 @@ People show in **Live** (the People overlay is gone since 0.9.0). **Also show pe
 
 Open the dashboard's edit mode and edit the card. It has two parts:
 
-- **Frame and preview** (card settings): *Space around the plan*: the plan's default from the Floorplan Editor, or **custom for this card** (same on all sides, or per side; + adds space, − trims). **Preview** shows the whole card at a real screen size (wall panel 1280 × 800, tablet, desktop, phone or custom), so you see whether the buttons fit and how much room the plan has.
+- **Frame** (card settings): *Space around the plan*: the plan's default from the Floorplan Editor, or **custom for this card** (same on all sides, or per side; + adds space, − trims).
 - **Space for the buttons** (Overlay buttons): **Reserve space** (the plan fits beside them) or **Float over the plan**; the plan then uses the whole card.
 - **Per floor**, in a frame with the floor tabs: for the floor you picked, **Markers** (the **Edit markers** button) and **Rooms on this floor** (custom Room names, Rooms hidden on the card). Nothing else depends on the floor.
 - **Card settings (the whole house, all floors)**: the floor the card opens with and swiping · title and card ID · **Overlay buttons on the card** · **Overlays** (each built-in overlay, Light scenes, Custom overlays) · **Rooms** (how names look, where they show) · **People** · **Day & night** · **Look and tap behaviour**. Overlays are the same on every floor.
@@ -358,7 +370,7 @@ Under **Overlay Bar → Overlay Bar: hold, status and shortcuts**, each button h
   - *When* takes states (`on, open, printing`) or a number test (`>50`); empty means on / open / armed / unlocked.
 - **Automatic status** (off by default, one switch for the card): Lights shows how many of the lights the Lights overlay shows are on; Security a dot when a door or window is open, the alarm armed or a lock unlocked (not shutters); Health an amber dot when a battery is low or a device offline; Network a dot when a device is offline. Each button can turn it off or use its own status instead.
 
-In a card with a fixed height (wall panel, sections grid) the plan sits at the **top**, the space left goes below; *Frame and preview → Plan position* can centre it instead.
+In a card with a fixed height (wall panel, sections grid) the plan sits at the **top**, the space left goes below; *Frame → Plan position* can centre it instead.
 
 ```yaml
 plan_position: top        # top | centre

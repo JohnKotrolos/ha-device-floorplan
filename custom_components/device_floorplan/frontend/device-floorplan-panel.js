@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.10.3";
+const VERSION = "0.11.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -26,6 +26,10 @@ function lightCss(col) {
 }
 const DOCS = "https://johnkotrolos.github.io/ha-device-floorplan/";
 const LS = "device_floorplan_";
+// 0.11: the Energy overlay's two points, placed like devices (Step 3 → Energy points).
+const EPTS = { __energy_panel: ["Electrical panel", "Where your electrical panel / house meter is: every device's flow line goes here."], __energy_source: ["Solar", "Where your solar inverter is: the solar flow starts here."], __energy_battery: ["Battery", "Where your home battery is: the battery flow starts here."] };
+const EPT_ICON = { __energy_panel: "mdi:flash", __energy_source: "mdi:solar-power-variant", __energy_battery: "mdi:home-battery" };
+// Until the 0.11 release: offer the dummy points even when a real one exists (for the release screenshots).
 const STATIC = "/device_floorplan_static";
 const BRANDS = "https://brands.home-assistant.io/_";
 
@@ -395,6 +399,24 @@ header h1 .logo { width:28px; height:28px; }
 .mk.bondhint { z-index: 7; }
 .mk.bondhint .ring { transform: scale(1.55); transition: transform .18s; box-shadow: 0 0 0 4px var(--df-card), 0 0 0 8px var(--df-ok); }
 .mk.bondhint .tip { opacity:1; background: var(--df-ok); }
+.lvlhint { margin:6px 0 0; padding:6px 8px; border-radius:8px; background: color-mix(in srgb, var(--df-primary) 10%, transparent); font-size:12px; }
+.pin.epin { width:32px; height:32px; padding:0; box-sizing:border-box; justify-content:center; border-radius:50%; border:2px solid #488fc2; background:#fff; color:#222; }
+.pin.epin.src { border-color:#ff9800; }
+.pin.epin.bat { border-color:#4db6ac; }
+.pin.epin { border-style:dashed; } /* a point you set, not a device: dashed like phantoms */
+.pin.epin ha-icon { --mdc-icon-size:18px; }
+.epts { margin: 0 0 8px; }
+.epts .ghead.static { padding: 8px 12px; cursor:default; }
+.epts .row { flex-wrap:wrap; }
+.epts .row:has(.rep)::after { content:""; order:8; flex-basis:100%; } /* Replace / Bond go under the name */
+.epts .row .rep { order:9; margin: 0 0 8px 38px; border:1px solid #488fc2; color:#2f6fa8; background:transparent; border-radius:12px; padding:2px 10px; font:inherit; font-size:12px; cursor:pointer; max-width: calc(100% - 50px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.epts .row .rep.note { border-color: transparent; color: var(--df-sec); cursor:default; padding-left:0; }
+.epts .ico.av.eptag { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; box-sizing:border-box; border-radius:50%; border:2px solid #488fc2; background:#fff; color:#222; }
+.epts .ico.av.eptag.src { border-color:#ff9800; }
+.epts .ico.av.eptag.bat { border-color:#4db6ac; }
+.epts .ico.av.eptag.dummy { border-style:dashed; }
+.epts .row.done .ico.av.eptag { opacity:.45; filter: grayscale(1); }
+.epts .ico.av.eptag ha-icon { --mdc-icon-size:16px; }
 .pin { position:absolute; transform: translate(-50%, -50%); display:flex; align-items:center; gap:2px; font-size:12px; font-weight:500; color: var(--df-primary); background: var(--df-card); border:1.5px solid var(--df-primary); border-radius:12px; padding:3px 8px 3px 4px; white-space:nowrap; pointer-events:auto; cursor:grab; touch-action:none; box-shadow:0 1px 4px rgba(0,0,0,.2); }
 .pin svg { width:14px; height:14px; }
 #dragghost { position:fixed; left:-1000px; top:-1000px; pointer-events:none; }
@@ -540,6 +562,10 @@ header h1 .logo { width:28px; height:28px; }
 .details .usesrow .link { padding:0; font-size:12px; }
 .details .uses { display:flex; flex-direction:column; gap:2px; margin-top:4px; }
 .details .uses small { color: var(--df-sec); }
+/* 0.11 (#5): every drag handle sits above markers and labels, with a bigger invisible grip; names never catch the mouse. */
+.lhd, .ohd, .ahd, .rh { z-index:20 !important; }
+.lhd::before, .ohd::before, .ahd::before, .rh::before { content:""; position:absolute; inset:-10px; border-radius:50%; }
+.pin.lbl, .mk .tip, .bx .tip { pointer-events:none; }
 .ahd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #4fa3ff; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .ohd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #26c6da; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .details .lsec.opn { border-color: color-mix(in srgb, #26c6da 45%, transparent); background: color-mix(in srgb, #26c6da 8%, var(--df-card)); }
@@ -631,6 +657,7 @@ header h1 .logo { width:28px; height:28px; }
 .live { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; letter-spacing:.06em; color:#fff; background:#e53935; border-radius:12px; padding:3px 10px 3px 8px; }
 .live i { width:8px; height:8px; border-radius:50%; background:#fff; animation: livepulse 1.4s ease-in-out infinite; }
 @keyframes livepulse { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+summary { cursor:pointer; user-select:none; }
 details.box summary { font-weight:500; }
 .cardprev { min-height:300px; border-radius:12px; overflow:hidden; background: var(--primary-background-color); --dfc-chrome: 300px; }
 .viewport.zoomed:not(.cross) { cursor: grab; }
@@ -891,10 +918,9 @@ class DeviceFloorplanPanel extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    this._watchConn(hass);
     if (first) {
       this._init();
-      // 0.10.2: when HA's connection comes back, a failed load retries by itself.
-      if (hass.connection && typeof hass.connection.addEventListener === "function") hass.connection.addEventListener("ready", () => { if (this.s.error) this._reload(); });
     } else this._hydrateSoon();
   }
   get hass() {
@@ -910,7 +936,31 @@ class DeviceFloorplanPanel extends HTMLElement {
     window.addEventListener("keydown", this._onKey);
     if (this._vp && this._ro) this._ro.observe(this._vp.parentElement);
   }
+  /** 0.11: when HA's connection comes back, a failed load reloads and a failed save is sent again.
+   *  The listener is removed when the panel goes away. */
+  _watchConn(hass) {
+    const conn = hass && hass.connection;
+    if (!conn || typeof conn.addEventListener !== "function" || this._conn === conn) return;
+    this._unwatchConn();
+    this._conn = conn;
+    this._onReady = () => {
+      if (this.s.error) return this._reload();
+      if (this.s.save === "err") {
+        this.s.save = "busy";
+        this._flushSave();
+      }
+    };
+    conn.addEventListener("ready", this._onReady);
+  }
+
+  _unwatchConn() {
+    if (this._conn && this._onReady && typeof this._conn.removeEventListener === "function") this._conn.removeEventListener("ready", this._onReady);
+    this._conn = null;
+    this._onReady = null;
+  }
+
   disconnectedCallback() {
+    this._unwatchConn();
     window.removeEventListener("keydown", this._onKey);
     if (this._ro) this._ro.disconnect();
     this._flushSave();
@@ -999,7 +1049,8 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   _planOrder(p) {
-    if (p.kind === "floor") return (p.level ?? 0) * 10;
+    // 0.11: like a building, the highest floor first; views after all floors.
+    if (p.kind === "floor") return -(p.level ?? 0) * 10;
     return 100000 + (p.sort || 0);
   }
 
@@ -1661,7 +1712,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _saveHtml() {
     const s = this.s;
     if (s.save === "busy") return `<span class="save busy" id="save">Saving…</span>`;
-    if (s.save === "err") return `<span class="save err" id="save" title="${esc(s.saveErr)}">Not saved: ${esc(s.saveErr || "error")}</span>`;
+    if (s.save === "err") return `<button class="save err" id="save" data-act="saveretry" title="${esc(s.saveErr)} · click to try again">Not saved: ${esc(s.saveErr || "error")} · Retry</button>`;
     return `<span class="save" id="save">✓ All changes saved</span>`;
   }
 
@@ -1678,9 +1729,10 @@ class DeviceFloorplanPanel extends HTMLElement {
       const sc = this._scale();
       const stretched = sc.h && sc.v && Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2) > 0.05;
       if (!sc.x) calib = `<span class="chip-status">○ Not calibrated</span>`;
-      else if (stretched) calib = `<span class="chip-status warn" title="Measure again with longer lines, or keep it as it is">! Horizontal and vertical differ by ${Math.round((Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2)) * 100)} %: the picture may be stretched</span>`;
+      else if (stretched) calib = `<span class="chip-status warn" title="Measure again with longer lines, or keep it as it is">! Horizontal and vertical differ by ${Math.round((Math.abs(sc.h - sc.v) / ((sc.h + sc.v) / 2)) * 100)} %: the picture may be stretched</span><button class="btn primary" data-act="fixprop" title="Stretch the plan to its true shape, using both measurements. Everything placed stays in its place.">Fix proportions</button>`;
       else if (this.work.refs.length === 1) calib = `<span class="chip-status ok">✓ Scale set · add a ${sc.h ? "vertical" : "horizontal"} measurement for best accuracy</span>`;
       else calib = `<span class="chip-status ok">✓ Scale set · horizontal + vertical</span>`;
+      if (plan.orig_size) calib += `<button class="btn" data-act="resetprop" title="Back to the picture's own shape">Reset proportions</button>`;
       const ref = this._laterFloor(plan);
       if (sc.x && ref) calib += `<button class="btn ${plan.align && "x" in plan.align ? "" : "primary"}" data-act="alignplan">${SVG.glue}Align with ${esc(ref.name)}</button>`;
     }
@@ -1694,7 +1746,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     let placing = "";
     const pd = this.s.placing && this.byId.get(this.s.placing);
     if (pd || this.s.placingRoom) {
-      const name = pd ? pd.name : (this.areaById.get(this.s.placingRoom) || {}).name;
+      const name = pd ? pd.name : (this.areaById.get(this.s.placingRoom) || {}).name || (EPTS[this.s.placingRoom] || [])[0];
       placing = `<span class="placing">Placing <b>${esc(name)}</b> · click on the plan
         <label><input type="checkbox" data-act="queue" ${this.s.queue ? "checked" : ""}>then next</label>
         ${pd && this.s.sel !== pd.id ? `<button data-act="placingdetails">Details</button>` : ""}<button data-act="stopplace">Stop (Esc)</button></span>`;
@@ -1967,9 +2019,30 @@ class DeviceFloorplanPanel extends HTMLElement {
 
       });
     }
+    // 0.11 Energy points: placed in Step 3 (Devices to place → Energy points); square tags, shown in every step.
+    if (this.work) {
+      if (this._eSrc === undefined && this._hass) {
+        this._eSrc = null;
+        this._hass.callWS({ type: "energy/get_prefs" }).then((p) => {
+          const has = (t) => (p.energy_sources || []).some((x) => x.type === t);
+          this._eSrc = has("solar") || has("battery");
+          this._eHas = { __energy_panel: true, __energy_source: has("solar"), __energy_battery: has("battery") };
+          // Grid: flow_from (older HA) or stat_energy_from (HA 2026.11+).
+          const st = (t, keys) => (p.energy_sources || []).filter((x) => x.type === t).flatMap((x) => keys.flatMap((k) => (k === "flow_from" ? (x.flow_from || []).map((f) => f.stat_energy_from) : [x[k]])));
+          this._eStats = { __energy_panel: st("grid", ["stat_energy_from", "flow_from"]).filter(Boolean), __energy_source: st("solar", ["stat_energy_from"]).filter(Boolean), __energy_battery: st("battery", ["stat_energy_from", "stat_energy_to"]).filter(Boolean) };
+          this._render();
+        }).catch(() => (this._eSrc = false));
+      }
+      for (const [eid, [lbl, tip]] of Object.entries(EPTS)) {
+        const pos = this.work.anchors[eid];
+        // Same look as on the card: a white circle with a coloured ring and its icon; the name on hover.
+        if (pos) parts.push(`<span class="pin epin ${eid === "__energy_panel" ? "" : eid === "__energy_battery" ? "bat" : "src"}" data-pin="${eid}" data-x="${pos.x}" data-y="${pos.y}" title="${esc(`${lbl}: ${tip}`)}"><ha-icon icon="${EPT_ICON[eid]}"></ha-icon></span>`);
+      }
+    }
     // room pins (under the devices)
     if (this.work && (lRooms !== "off" || s.placingRoom)) {
       for (const [aid, pos] of Object.entries(this.work.anchors)) {
+        if (aid.startsWith("__energy_")) continue;
         const a = this.areaById.get(aid);
         if (lRooms === "full" || s.placingRoom) {
           parts.push(`<span class="pin" data-pin="${esc(aid)}" data-x="${pos.x}" data-y="${pos.y}" title="Drag into the middle of the room">${SVG.pin}${esc(a ? a.name : aid)}</span>`);
@@ -2047,7 +2120,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if ((s.placing || s.placingRoom || s.placingBox) && s.hover) {
       const pb = s.placingBox ? s.placingBox.split("|") : null;
       const d = (s.placing || pb) && this.byId.get(s.placing || pb[0]);
-      const name = d ? (pb ? `${d.name} · ${pb[1] || "box / radio"}` : d.name) : (this.areaById.get(s.placingRoom) || {}).name;
+      const name = d ? (pb ? `${d.name} · ${pb[1] || "box / radio"}` : d.name) : (this.areaById.get(s.placingRoom) || {}).name || (EPTS[s.placingRoom] || [])[0];
       parts.push(`<span class="ghost" id="ghost" data-x="${s.hover.x}" data-y="${s.hover.y}"><span class="c"></span><span class="n">${esc(name)}</span></span>`);
     }
     // saved measurements: editable in the Measure step, a faded "2.40 m" otherwise
@@ -2425,7 +2498,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle. The orange strips on the plan show where; click one below to go there.</span>${gs.pairs.map((x) => `<button class="link gluepair" data-act="gluefocus" data-k="${esc(`${x.a}|${x.b}`)}">· ${howTxt(x)}</button>`).join("")}</div>`;
     else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
-      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p></div>
+      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p>${scope === "with devices" && (this.floors || []).length && this._plan().kind === "floor" ? `<p class="lvlhint">Showing all rooms. Link this plan to a Home Assistant floor (⋮ → Floor) to see only its rooms.</p>` : ""}</div>
       <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
   }
 
@@ -2504,7 +2577,65 @@ class DeviceFloorplanPanel extends HTMLElement {
       ${s.toolsOpen ? `<p><b>Search</b> for a device you know, or <b>narrow the list</b> with <b>Type</b>, <b>Connection</b> and <b>Status</b>. Then click a device and click its spot on the plan, or drag it there. Placed devices are greyed out.</p>` : ""}</div>
       ${newBar}
       ${controls}
-      <div class="list">${this._listHtml(shown, statuses)}${this._hiddenGroupHtml(hiddenDevs, statuses)}</div></aside>`;
+      <div class="list">${this._energyPtsHtml(false)}${this._listHtml(shown, statuses)}${this._hiddenGroupHtml(hiddenDevs, statuses)}${this._energyPtsHtml(true)}</div></aside>`;
+  }
+
+  /** 0.11: "Energy points" at the top of Devices to place: the electrical panel (always) and the solar / battery
+   *  box (when Home Assistant's Energy has one). Click, then click on the plan; drop one back here to remove it. */
+  /** The real thing behind an Energy point: the device of the grid meter / solar / battery sensor, or the
+   *  sensor itself when it has no device (helpers); null when HA's Energy names none. */
+  _eReal(role) {
+    return this._eReals(role)[0] || null;
+  }
+
+  /** All real devices behind a point (several grid meters in one board: all of them), in Energy's order. */
+  _eReals(role) {
+    const out = [];
+    for (const stat of (this._eStats || {})[role] || []) {
+      const en = this._hass && this._hass.entities && this._hass.entities[stat];
+      const d = (en && en.device_id && this.byId.get(en.device_id)) || this.byId.get(`entity:${stat}`);
+      if (d && !out.includes(d)) out.push(d);
+    }
+    return out;
+  }
+
+  /** 0.11: Energy points. To place: at the top of the list. Placed: at the bottom, with ✓ on plan, like any
+   *  placed device. A real device looks like itself (its icon and name, as on the plan); a point you set uses the
+   *  point's icon, dashed. The house grid comes from Home Assistant's Energy (Grid), never from a bond: a bond only
+   *  seats more grid meters at the panel. */
+  _energyPtsHtml(placed) {
+    if (!this.work) return "";
+    const tag = (k) => `<span class="ico av eptag ${k === "__energy_panel" ? "" : k === "__energy_battery" ? "bat" : "src"} dummy"><ha-icon icon="${EPT_ICON[k]}"></ha-icon></span>`;
+    const ok = `<span class="pill ok">✓ on plan</span>`;
+    const rows = [];
+    for (const k of Object.keys(EPTS)) {
+      const reals = this._eReals(k);
+      const dummyOn = !!this.work.anchors[k];
+      if (!(this._eHas || {})[k] && !dummyOn && !reals.length) continue; // only what HA's Energy has (the panel always)
+      const role = EPTS[k][0];
+      const lead = reals[0];
+      if (lead && !dummyOn) {
+        const st = this._status(lead);
+        const on = st !== "unplaced";
+        if (on === placed) rows.push(this._rowHtml(lead, st, { role, title: EPTS[k][1] }));
+      } else {
+        // A point you set: when there's no real one in HA, or it was set before the real one came.
+        const rname = lead ? lead.name : "";
+        const rep = lead && dummyOn ? `<button class="rep" data-act="ereplace" data-id="${k}" title="Put ${esc(rname)} where this point is, and remove the point">Replace with ${esc(rname)}</button>` : "";
+        if (dummyOn === placed) rows.push(`<div class="row ${dummyOn ? "done" : "todo"} ${this.s.placingRoom === k ? "sel" : ""}"><button class="main" data-act="pickroom" data-id="${k}" title="${esc(EPTS[k][1])}">${tag(k)}<span class="rtxt"><span class="rname">${esc(role)}</span><span class="rmeta"><span>${dummyOn ? "a point you set · drag to move" : "click, then click its spot"}</span></span></span>${dummyOn ? ok : ""}</button>${rep}</div>`);
+      }
+      // More grid meters in the same board: bonded onto the panel (they stay full devices).
+      const panelAt = lead && this.work.positions[lead.id] ? lead : null;
+      for (const m of k === "__energy_panel" ? reals.slice(1) : []) {
+        const st = this._status(m);
+        const bonded = !!(panelAt && this._bondOf(m.id) && this._bondOf(m.id) === this._bondOf(panelAt.id));
+        if (bonded !== placed) continue;
+        const btn = bonded ? "" : panelAt ? `<button class="rep" data-act="ebond" data-id="${esc(m.id)}" title="Seat it at the panel: one marker, it stays a full device">Bond to the panel</button>` : `<span class="rep note">Bond to the panel once the panel is placed</span>`;
+        rows.push(this._rowHtml(m, bonded ? "placed" : st === "placed" ? "unplaced" : st, { role: `${role} · grid meter`, title: EPTS[k][1], after: btn }));
+      }
+    }
+    if (!rows.length) return "";
+    return `<div class="epts"><div class="ghead static"><b>Energy points</b> <small>${placed ? "on the plan" : "where the Energy overlay's flow lines start"}</small></div>${rows.join("")}</div>`;
   }
 
   /** Devices of rooms hidden on this plan: out of the list and the counts, in one collapsed group. */
@@ -2568,7 +2699,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       .join("");
   }
 
-  _rowHtml(d, st) {
+  _rowHtml(d, st, ep) {
     const s = this.s;
     let bat = "";
     if (d.battery_entity && this._hass && this._hass.states[d.battery_entity]) {
@@ -2593,12 +2724,12 @@ class DeviceFloorplanPanel extends HTMLElement {
     const ent = d.loose ? `<span>${esc(d.entity_id)}</span>` : "";
     const rb = this.work && this.work.positions[d.id] && this._bondOf(d.id);
     const parts = d.parts && d.parts.length ? `<span style="color:var(--df-ok)">🔗 Bonded ×${d.parts.length + 1}</span>` : rb ? `<span style="color:var(--df-ok)" title="${esc(this._bondName(rb))}">🔗 Bonded</span>` : "";
-    const meta = isNew + bat + area + parts + ent + hit;
+    const meta = (ep ? `<span>${esc(ep.role)}</span>` : "") + isNew + bat + area + parts + ent + hit;
     return `<div class="row ${done ? "done" : "todo"} ${s.sel === d.id || s.placing === d.id ? "sel" : ""}" draggable="${st === "skipped" ? "false" : "true"}" data-dev="${esc(d.id)}">
-      <button class="main" data-act="pick" data-id="${esc(d.id)}">${this._avatarHtml(d)}
+      <button class="main" data-act="pick" data-id="${esc(d.id)}"${ep ? ` title="${esc(ep.title)}"` : ""}>${ep ? `<span class="ico av">${this._iconHtml(d)}</span>` : this._avatarHtml(d)}
         <span class="rtxt"><span class="rname">${esc(this._pl(d))}</span>${meta ? `<span class="rmeta">${meta}</span>` : ""}</span>${pill}</button>
       ${st === "placed" || st === "approx" ? `<button class="small" data-act="locate" data-id="${esc(d.id)}" title="Show on plan" aria-label="Show on plan">${SVG.locate}</button>` : ""}
-      <button class="small" data-act="info" data-id="${esc(d.id)}" title="More info" aria-label="More info">${SVG.info}</button></div>`;
+      <button class="small" data-act="info" data-id="${esc(d.id)}" title="More info" aria-label="More info">${SVG.info}</button>${(ep && ep.after) || ""}</div>`;
   }
 
   _detailsHtml() {
@@ -3641,7 +3772,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _lightColourHtml(s) {
     const col = s.color || "auto";
     const k = col.startsWith("k:") ? Number(col.slice(2)) : 3000;
-    const hex = col.startsWith("#") ? col : "#ffd27f";
+    const hex = /^#[0-9a-f]{6}$/i.test(col) ? col : "#ffd27f"; // 0.11: only a real colour reaches the HTML
     return `<div class="lclr"><span>Colour</span><button class="${col === "auto" ? "on" : ""}" data-act="lightauto" title="Use the real colour of smart lights. Plain lights glow warm white.">Auto</button>
       <input type="range" id="lightk" min="2200" max="6500" step="100" value="${k}" class="${col.startsWith("k:") ? "on" : ""}" aria-label="Warm to cool white" title="Pick a white: warm ↔ cool">
       <input type="color" id="lighthex" value="${hex}" class="${col.startsWith("#") ? "on" : ""}" aria-label="Custom colour" title="Pick any colour"></div>`;
@@ -4020,7 +4151,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const level = f.level ?? (p && p.level != null ? p.level : 0);
     const img = f.img ?? (p ? p.image_type : "top");
     const used = (fid) => this.plans.some((pl) => pl.floor_id === fid && (!p || pl.id !== p.id));
-    const floorOpts = this.floors.map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} ${used(fl.floor_id) ? "disabled" : ""}>${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan" : ""}</option>`).join("");
+    const floorOpts = this.floors.slice().sort((x, y) => (y.level ?? 0) - (x.level ?? 0)).map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} ${used(fl.floor_id) ? "disabled" : ""}>${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan" : ""}</option>`).join("");
     const opt = (val, title, desc) => `<label class="opt ${img === val ? "on" : ""}"><input type="radio" name="img" value="${val}" data-act="formimg" ${img === val ? "checked" : ""}><span><b>${title}</b><span>${desc}</span></span></label>`;
     const hasImage = !!f.image || (p && p.image_url && !f.changeImage);
     const title = p ? (p.kind === "view" ? "Plan settings" : "Floor settings") : inline ? "Create your first plan" : "New plan";
@@ -4490,6 +4621,37 @@ class DeviceFloorplanPanel extends HTMLElement {
         break;
       case "reload":
         this._reload();
+        break;
+      case "fixprop": {
+        // 0.11: a squeezed picture gets its true shape. The height changes so both directions use one scale;
+        // everything is stored in % of the picture, so devices, rooms and lines stay where they are.
+        const p = this._plan();
+        const sc = this._scale();
+        if (!p || !sc.h || !sc.v) break;
+        const height = Math.max(1, Math.round((p.height * sc.v) / sc.h));
+        this._ws("plan/update", { plan_id: p.id, width: p.width, height })
+          .then((res) => {
+            Object.assign(p, { width: res.width ?? p.width, height: res.height ?? height });
+            this._render();
+          })
+          .catch((err) => this._saveError(err));
+        break;
+      }
+      case "resetprop": {
+        // 0.11: back to the picture's own shape.
+        const p = this._plan();
+        if (!p) break;
+        this._ws("plan/update", { plan_id: p.id, reset_size: true })
+          .then((res) => {
+            Object.assign(p, { width: res.width, height: res.height, orig_size: res.orig_size });
+            this._render();
+          })
+          .catch((err) => this._saveError(err));
+        break;
+      }
+      case "saveretry": // 0.11
+        this.s.save = "busy";
+        this._flushSave();
         break;
       case "plan":
         this._openPlan(el.dataset.id);
@@ -5071,6 +5233,32 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "pick":
         this._pickDevice(id);
         break;
+      case "ebond": {
+        // 0.11: one more grid meter seated at the panel (a normal bond: it stays a full device).
+        const lead = this._eReal("__energy_panel");
+        const m = this.byId.get(id);
+        if (lead && m && this.work.positions[lead.id]) {
+          this._change(() => {
+            this._placeAt(m.id, this.work.positions[lead.id]);
+            this._bond(m.id, lead.id);
+          });
+          this._toast(`${m.name} bonded to the panel`);
+        }
+        break;
+      }
+      case "ereplace": {
+        // 0.11: the real device takes the dummy point's place; the point goes.
+        const real = this._eReal(id);
+        const pos = this.work.anchors[id];
+        if (real && pos) {
+          this._change(() => {
+            this._placeAt(real.id, pos);
+            delete this.work.anchors[id];
+          });
+          this._toast(`${real.name} is now the ${EPTS[id][0].toLowerCase()} point`);
+        }
+        break;
+      }
       case "pickroom":
         Object.assign(s, { placingRoom: id, placing: null });
         this._render();
@@ -6211,7 +6399,7 @@ class DeviceFloorplanPanel extends HTMLElement {
           const a = this.areaById.get(g.id);
           this._scheduleSave();
           this._render();
-          this._toast(`${a ? a.name : "Room"} pin taken off the plan`);
+          this._toast(EPTS[g.id] ? `${EPTS[g.id][0]} taken off the plan` : `${a ? a.name : "Room"} pin taken off the plan`);
         }
       } else this._render(); // anywhere else outside the plan: snaps back
       return;
@@ -6346,7 +6534,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._change(() => {
         this.work.anchors[room] = { x: p.x, y: p.y };
       });
-      const next = this._roomsForPlan().find((r) => !r.pos && !r.ignored && r.area_id !== room);
+      const next = !EPTS[room] && this._roomsForPlan().find((r) => !r.pos && !r.ignored && r.area_id !== room);
       s.placingRoom = s.queue && next ? next.area_id : null;
       this._render();
       return;

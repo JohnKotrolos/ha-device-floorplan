@@ -125,10 +125,14 @@ No floorplan yet? See
 - People need a room sensor per person (Bermuda, ESPresense, a template…).
 
 It runs every day in a real home with ~90 devices. Something not working, confusing or
-missing in yours? Please [open an issue](https://github.com/JohnKotrolos/ha-device-floorplan/issues/new/choose);
-screenshots help a lot.
+missing in yours? Ask in [Discussions](https://github.com/JohnKotrolos/ha-device-floorplan/discussions)
+or [report a bug](https://github.com/JohnKotrolos/ha-device-floorplan/issues/new/choose); screenshots help a lot.
 
 ## Install
+
+Add it in one click:
+
+[![Open your Home Assistant instance and open a repository inside the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=JohnKotrolos&repository=ha-device-floorplan&category=integration)
 
 **From the Marketplace (Home Assistant 2026.11 and later, recommended)**
 
@@ -200,6 +204,107 @@ A floorplan with device positions is a map of your home, so plan images are
 `config/device_floorplan/`. Images you link from `config/www` stay public at
 `/local/…`, as everything in that folder. Planner data lives in `.storage/device_floorplan`.
 
+## Reference
+
+### Floorplan Editor
+
+| Step / tool | What it does | Where |
+|---|---|---|
+| **Plans** | One plan per floor (linked to a Home Assistant floor) or a view (garden, one room…); floors listed highest first | Tabs at the top, ⋮ per plan |
+| **Picture & frame** | A file, an image in `config/www` or a sample plan; space around it or a trimmed margin | Plan ⋮ → Floor settings |
+| **Measure** | One horizontal and one vertical line of a known length give the scale | Step 1 |
+| **Fix / Reset proportions** | Stretches a squeezed picture to its true shape (and back); nothing placed moves | Step 1, when the two lines disagree |
+| **Mark rooms** | Drag your Home Assistant areas onto the plan; with a linked floor only its rooms (and unassigned ones) are listed | Step 2 |
+| **Shape & Glue Rooms** | Pull corners and walls onto each room; overlapping rooms meet on one line | Step 2 |
+| **Energy points** | Electrical panel and solar / battery: where the Energy overlay's flow lines start | Step 3, top of *Devices to place* |
+| **Place devices** | **Auto-place**, then drag; dashed markers are guesses until you touch them | Step 3 |
+| **Bonds** | Drag one device onto another: one marker for both (bulbs in one lamp, shutter + contact) | Step 3 |
+| **Split** | A device that acts somewhere else (a relay in the box, the lamp it switches) | Device details |
+| **Phantoms** | A marker for something without its own device, made of entities | Step 3 |
+| **Light on the plan** | Bulb, spot, strip, panel or wall lamp, with its glow and colour (Auto = the bulb's own) | Device details |
+| **Snap to wall, sizes** | Bars for shutters, doors and TVs; end handles to size them | Device details |
+| **Undo / Redo, saving** | Every change saves by itself; *Not saved · Retry* when the connection dropped | Top bar |
+
+### The card
+
+| Part | What it is | How to use it |
+|---|---|---|
+| **Overlays** | Separate views of the same plan, each showing only what matters for one topic | Buttons on the Overlay Bar or Side Rail; choose and order them in the card editor |
+| ↳ **Live** | What is happening now: lights on, open doors, motion, running appliances, people; a camera while it sees something; any device you add, while it's active | Tap to switch; something you turn off stays a few seconds to undo; Layers → Cameras |
+| ↳ **Lights** | Every light with its glow, colour and brightness; light scenes | Tap to switch, hold for details |
+| ↳ **Comfort** | Room temperatures as a heatmap, humidity, air conditioners with their air flow | Layers: heatmap, labels, climate devices |
+| ↳ **Security** | Cameras, and only what needs attention (open, motion, unlocked, alarm, unavailable in red); *All secure* otherwise | Layers → All sensors; tap a camera for its live view |
+| ↳ **Network** | Zigbee (ZHA), Wi-Fi and LAN devices, their roles, links and signal | Layers: connections, links, legend |
+| ↳ **Health** | Batteries and devices that are offline | Low battery threshold in the card editor |
+| ↳ **Energy** | Today's use per device and room from Home Assistant's Energy settings; a day scrubber from 00:00 to Now; flow lines from the electrical panel | Drag the scrubber; Layers: room shading, flow lines |
+| ↳ **Cleaning** | Robot vacuums with their path, rooms by when they were last cleaned | Start, pause, dock; tap a room to clean it |
+| **Layers** | Extra details per overlay, remembered per screen | The layers button |
+| **Floors** | One card for all floors, stacked like the building | Floor buttons |
+| **People** | Where household members are, by room | Card editor → People |
+| **Edit markers** | Per floor: which devices show where, icons, names, tap actions, extra readings as label or badge | Card editor → floor tabs at the top |
+| **General settings** | Whole card: look and chips, tap behaviour, night look, overlay buttons, frame | Card editor, lower sections |
+
+<details>
+<summary><b>Card configuration (YAML)</b></summary>
+
+Everything below is set in the card editor; the YAML is only for reference.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `type` | string | **required** | `custom:device-floorplan-card` |
+| `plans` | list | — | Plan ids, one per floor (or `plan` for one) |
+| `overlays` | list | all available | Which overlay buttons, in this order |
+| `default_overlay` | string | first | Overlay when the card opens |
+| `remember_floor` | boolean | `true` | Each screen remembers its last floor |
+| `look.size` | number | `34` | Marker size (px) |
+| `look.markers` | string | `icon_text` | `icon_text` or `icon` |
+| `look.chips` | string | `dark` | Info chips: `dark`, `light`, `auto` (theme) or `custom` |
+| `look.chip_color` | [r, g, b] | — | With `chips: custom` |
+| `look.chip_bg` | string | `normal` | `solid`, `normal`, `light`, `clear` |
+| `look.chip_size` | string | `m` | `s`, `m`, `l`, `xl` (separate from the marker size) |
+| `look.names` | string | `hover` | Device names: `hover`, `always`, `off` |
+| `security.show_quiet` | boolean | `false` | All sensors by default, not only what needs attention |
+| `energy.min_w` | number | `0` | In *Now*: devices from this many watts (a device at 0 W never shows) |
+| `energy.flow` | boolean | `true` | Flow lines shown by default (viewers switch them under Layers) |
+| `cleaning.opacity` | number | `60` | Strength of the "last cleaned" colours (%) |
+
+</details>
+
+### How the plan is built
+
+Everything on the plan sits in one of five layers, each with its own rules:
+
+| Layer (bottom → top) | What's in it | How it behaves |
+|---|---|---|
+| 1. **Plan** | The picture of your floor, the night look | Doesn't react to taps |
+| 2. **Rooms** | Room shading (heatmap, energy, last cleaned), motion and presence glow, room names | Tap a room for its details |
+| 3. **Markers** | Device icons, info chips (temperatures, energy…), camera dots | Spread out automatically so none overlap |
+| 4. **Windows** | Camera pictures, appliance status ("Drying · 2 min", "Ready to unload") | Attached to their marker with a connecting line, placed after the markers; never pushed around by markers, they only avoid each other and the plan's edges |
+| 5. **Popups and menus** | Info cards, device lists, the Layers menu | Above everything; tap outside or ✕ to close |
+
+### Styling names (card-mod)
+
+With [card-mod](https://github.com/thomasloven/lovelace-card-mod) you can style beyond the card editor.
+
+| Name | Type | What it is |
+|---|---|---|
+| `ov-live`, `ov-lights`, `ov-comfort`, `ov-security`, `ov-network`, `ov-health`, `ov-energy`, `ov-cleaning` | class on `ha-card` | The overlay being shown (style one overlay only) |
+| `.m` | class | A marker (icon) |
+| `.chip` | class | An info chip (temperature, AC, battery, energy…) |
+| `.room` | class | A room name |
+| `.ovbar` | class | The Overlay Bar / Side Rail |
+| `--dfc-size` | variable | Marker size |
+| `--dfc-accent` | variable | Accent colour |
+| `--dfc-chipbg`, `--dfc-chipfg`, `--dfc-chipborder` | variables | Chip background, text and border |
+| `--dfc-chipsize` | variable | Chip text size |
+| `--dfc-roomfg`, `--dfc-roomhalo` | variables | Room name colour and its halo |
+
+```yaml
+card_mod:
+  style: |
+    ha-card.ov-comfort .chip { --dfc-chipbg: rgba(0,0,0,.35); }
+```
+
 ## Related projects
 
 - [Zigbee Floorplan Card](https://github.com/TheLarsinator/zigbee-floorplan-card):
@@ -211,6 +316,16 @@ A floorplan with device positions is a map of your home, so plan images are
 
 ## Roadmap and changes
 
-Ideas welcome as issues with the label *idea*. See the
+Ideas welcome in [Discussions → Ideas](https://github.com/JohnKotrolos/ha-device-floorplan/discussions/categories/ideas). See the
 [roadmap](https://johnkotrolos.github.io/ha-device-floorplan/help/roadmap) and the
 [changelog](https://johnkotrolos.github.io/ha-device-floorplan/help/changelog).
+
+## AI-assisted development
+
+Device Floorplan is built with [Claude](https://claude.ai) as a pair programmer. Claude writes most of the code and these docs; Claude is credited as co-author on the commits. I set the direction and the design rules, test every build in my own home before it ships, and decide what goes out.
+
+The test bed is a real apartment: 12 rooms on one floor, mapped in Home Assistant with hundreds of devices and about 2,500 sensors over Zigbee (ZHA), Wi-Fi, Shelly and Tuya Local: more than 20 lights, shutters, four AC units, presence and motion sensors, an alarm panel, cameras, appliances on smart plugs, a 3D printer, and an Android tablet as the wall panel. A second Home Assistant instance is used for clean installs, and robot vacuum support was tested against a Valetudo test robot.
+
+Every change also passes automatic checks on GitHub: Home Assistant's own validation (hassfest), the HACS check, and the Ruff and ESLint code linters. The code was reviewed independently by a second AI, and its findings were checked and fixed in 0.11.
+
+Bugs are still bugs, whoever typed them. Issues, ideas and pull requests are welcome.

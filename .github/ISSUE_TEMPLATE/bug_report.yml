@@ -30,7 +30,7 @@ body:
       label: Where are you running this integration?
       options:
         - HA OS
-        - H.A. Container
+        - HA Container
         - HA Supervisor/core (deprecated)
         - Demo
         - Other

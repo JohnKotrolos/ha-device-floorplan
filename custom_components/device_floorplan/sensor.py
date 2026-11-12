@@ -21,7 +21,7 @@ from .const import (
 )
 from .devices import build_plan_payload, list_devices
 from .entity import plan_device_info, sync_plan_device
-from .store import FloorplanData
+from .store import FloorplanData, find_plan_device
 from .valetudo import async_setup_valetudo
 
 
@@ -53,7 +53,7 @@ class PlanSensor(SensorEntity):
             "plan_id", "plan_name", "kind", "floor_id", "level", "image_type",
             "image_url", "image_fallback_url", "image_width", "image_height", "frame", "metres_per_px_x",
             "metres_per_px_y", "real_width_m", "real_height_m", "approx_count",
-            "devices", "entities", "bonds", "phantoms", "zigbee_devices", "areas", "robots", "cleaned", "clean_log", "room_area", "now", "pace", "pace_default",
+            "devices", "entities", "bonds", "phantoms", "zigbee_devices", "areas", "energy_points", "robots", "cleaned", "clean_log", "room_area", "now", "pace", "pace_default",
         }
     )
 
@@ -110,7 +110,7 @@ class PlanSensor(SensorEntity):
         else:
             self.hass.async_create_task(self.async_remove(force_remove=True))
         dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(identifiers={(DOMAIN, plan_id)})
+        device = find_plan_device(self.hass, plan_id)
         if device is not None:
             dev_reg.async_remove_device(device.id)
 

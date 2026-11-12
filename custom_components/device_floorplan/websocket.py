@@ -60,6 +60,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_setup_complete,
         ws_setup_reset,
         ws_overlay_subscribe,
+        ws_card_state_get,
+        ws_card_state_set,
     ):
         websocket_api.async_register_command(hass, handler)
 
@@ -157,6 +159,10 @@ def ws_plan_create(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Optional("robots"): {cv.string: dict},
         vol.Optional("pace"): {cv.string: vol.Coerce(float)},
         vol.Optional("pace_default"): vol.Coerce(float),
+        # 0.11 Fix proportions: the picture's shape (px), both together.
+        vol.Inclusive("width", "size"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100000)),
+        vol.Inclusive("height", "size"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100000)),
+        vol.Optional("reset_size"): cv.boolean,
     }
 )
 @callback
@@ -359,3 +365,30 @@ def ws_overlay_subscribe(hass: HomeAssistant, connection, msg) -> None:
         f"{DOMAIN}_show_overlay", _forward
     )
     connection.send_result(msg["id"])
+
+
+# 0.11: card state shared by all screens (appliance done / unloaded).
+@websocket_api.websocket_command({vol.Required("type"): "device_floorplan/card_state/get"})
+@callback
+def ws_card_state_get(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], {"card_state": data.card_state})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "device_floorplan/card_state/set",
+        vol.Required("key"): vol.All(cv.string, vol.Length(max=120)),
+        vol.Required("value"): vol.Any(None, dict),
+    }
+)
+@callback
+def ws_card_state_set(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    if not msg["key"].startswith("appl_"):
+        connection.send_error(msg["id"], "invalid_key", "Unknown card state")
+        return
+    data.set_card_state(msg["key"], msg["value"])
+    connection.send_result(msg["id"], {"ok": True})

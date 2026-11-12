@@ -109,7 +109,11 @@ def map_json(png: bytes) -> dict[str, Any] | None:
         body = png[i + 8 : i + 8 + n]
         if kind == b"zTXt" and body.startswith(KEY):
             try:
-                return json.loads(zlib.decompress(body[len(KEY) + 1 :]))
+                d = zlib.decompressobj()
+                raw = d.decompress(body[len(KEY) + 1 :], 64 * 1024 * 1024)  # 0.11: at most 64 MB
+                if d.unconsumed_tail:
+                    return None
+                return json.loads(raw)
             except (zlib.error, ValueError):
                 return None
         if kind == b"IEND":
@@ -197,7 +201,7 @@ def async_setup_valetudo(hass: HomeAssistant, entry: ConfigEntry, add: AddEntiti
                 except Exception:  # noqa: BLE001 - no picture yet: try again next scan
                     _LOGGER.debug("No map image yet from %s", ent.entity_id)
                     continue
-                if map_json(img.content) is None:
+                if await hass.async_add_executor_job(map_json, img.content) is None:
                     continue
                 known.add(ent.id)
                 add([ValetudoMapSensor(hass, ent)])

@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.10.3).
+ * Device Floorplan – dashboard card (v0.11.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.10.3";
+const CARD_VERSION = "0.11.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -29,9 +29,12 @@ const OVERLAYS = {
   security: { label: "Security", icon: "mdi:shield-home-outline" },
   network: { label: "Network", icon: "mdi:access-point-network" },
   health: { label: "Health", icon: "mdi:battery-heart-variant" },
+  energy: { label: "Energy", icon: "mdi:lightning-bolt" },
   cleaning: { label: "Cleaning", icon: "mdi:robot-vacuum" },
   people: { label: "People", icon: "mdi:account-group-outline" },
 };
+/** 0.11: overlays added by recent updates (offered once to cards that list their own overlays). */
+const NEW_OVERLAYS = ["energy"];
 const OVERLAY_ORDER = ["live", "lights", "comfort", "security", "network", "health"];
 
 // 0.8.2 Overlay Bar Reloaded: a status on a bar button (icon colour, dot, count, short value, other icon).
@@ -227,12 +230,6 @@ function entName(hass, e) {
   return e;
 }
 /** 0.8.2: screen sizes for the card editor's preview (CSS pixels). */
-const PREVIEW_SIZES = [
-  { id: "wall", label: "Wall panel", w: 1280, h: 800 },
-  { id: "tablet", label: "Tablet", w: 1024, h: 768 },
-  { id: "desktop", label: "Desktop", w: 1440, h: 900 },
-  { id: "phone", label: "Phone", w: 390, h: 844 },
-];
 const lsGet = (k) => {
   try {
     return JSON.parse(localStorage.getItem(k) || "null");
@@ -461,10 +458,8 @@ function colourRgb(col) {
   return null;
 }
 
-/** The colour a light shows: the bulb's own colour, else the lamp colour set in the Editor, else warm. */
+/** The colour a light shows. 0.11: a colour set in the Editor always wins; "Auto" uses the bulb's own colour, else warm. */
 function bulbRgb(at, lampCol) {
-  const has = at && (Array.isArray(at.rgb_color) || at.color_temp_kelvin || at.color_temp);
-  if (has) return lightRgb(at);
   return colourRgb(lampCol) || lightRgb(at || {});
 }
 
@@ -820,7 +815,29 @@ function kindOf(eid, st) {
   return "other";
 }
 
+/** 0.11 Electricity: the power of a sensor in W (W / kW / MW), or null. */
+function powerW(st) {
+  if (!st || !st.attributes || st.attributes.device_class !== "power" || !live(st) || !num(st.state)) return null;
+  const u = String(st.attributes.unit_of_measurement || "W").toLowerCase();
+  const f = u === "kw" ? 1000 : u === "mw" ? 1e6 : 1;
+  return Number(st.state) * f;
+}
+const isPower = (st) => !!(st && st.attributes && st.attributes.device_class === "power");
+/** "850 W", "1.24 kW". */
+function fmtW(w) {
+  const a = Math.abs(w);
+  return a >= 1000 ? `${(w / 1000).toFixed(a >= 10000 ? 1 : 2)} kW` : `${Math.round(w)} W`;
+}
+/** "0.42 kWh", "12.3 kWh". */
+function fmtKwh(v) {
+  return `${v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(2)} kWh`;
+}
+/** Device colours, in the order Home Assistant's Energy dashboard uses for its devices. */
+const E_COLORS = ["#4269d0", "#efb118", "#ff725c", "#6cc5b0", "#3ca951", "#ff8ab7", "#a463f2", "#97bbf5", "#9c6b4e", "#9498a0"];
+
 /** Kind → Live / custom overlay setting key. */
+// 0.11: the overlay the card editor is working on: previews (HA's and the large one) keep showing it.
+let EDIT_OV = null;
 const LIVE_KEY = { light: "lights", switch: "switches", fan: "switches", cover: "covers", climate: "climate", motion: "motion", opening: "openings", lock: "locks", alarm: "locks", media: "media", appliance: "appliances", camera: "cameras", safety: "safety" };
 
 function tapKind(kind) {
@@ -902,6 +919,64 @@ svg.rpath { position:absolute; inset:0; width:100%; height:100%; pointer-events:
 svg.rpath polyline { fill:none; stroke: rgb(33,150,243); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; opacity:.55; vector-effect: non-scaling-stroke; }
 svg.fresh { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 svg.fresh polygon { pointer-events: visiblePainted; cursor:pointer; stroke:none; transition: fill .3s; }
+/* 0.11 Energy: room shading, flow lines from the electrical panel, compact chips in each device's energy colour, the day scrubber. */
+svg.efill polygon { pointer-events:none; cursor:default; }
+svg.lines path.eln { fill:none; stroke-width:1.5; stroke-linecap:round; }
+@media (prefers-reduced-motion: reduce) { svg.lines circle:has(animateMotion) { display:none; } }
+/* 0.11 layer 3: camera dot; layer 4: windows (camera pictures), placed after the markers. */
+.m.camdot { width:16px; height:16px; min-width:0; padding:0; border-radius:50%; border:3px solid #fff; background:#26a69a; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.m.camdot::before { inset:-14px; }
+.wins { position:absolute; inset:0; pointer-events:none; z-index:4; }
+.cwin { position:absolute; pointer-events:auto; border:2px solid #fff; border-radius:10px; overflow:hidden; background:#222; box-shadow: 0 4px 14px rgba(0,0,0,.4); cursor:pointer; }
+.cwin img { width:100%; height:100%; object-fit:cover; display:block; }
+.cwin .cnm { position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; gap:6px; padding:2px 6px; font-size:11px; color:#fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); white-space:nowrap; }
+.cwin .cnm .cn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.cwin .crd { position:absolute; top:4px; right:4px; display:flex; gap:4px; }
+.cwin .crd > span { display:inline-flex; align-items:center; gap:2px; padding:0 5px; border-radius:7px; background: rgba(0,0,0,.6); color:#fff; font-size:10px; line-height:16px; }
+.cwin .crd { max-width: calc(100% - 8px); }
+.cwin .crd > span { min-width:0; flex: 0 1 auto; }
+.cwin .crd b { font-weight:inherit; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cwin .crd ha-icon, .cwin .crd ha-state-icon { --mdc-icon-size:11px; }
+.cwin .crd .lo { color:#ffb74d; font-weight:600; }
+.cwin .cx { flex:none; width:22px; height:22px; padding:0; border:0; border-radius:50%; background: rgba(0,0,0,.65); color:#fff; font-size:16px; line-height:24px; cursor:pointer; opacity:0; transition: opacity .15s; }
+.cwin:hover .cx { opacity:1; }
+@media (hover: none) { .cwin .cx { opacity:1; } }
+svg.lines path.elbow { fill:none; stroke:#26a69a; stroke-width:2; }
+.chip.en { padding: 3px 9px 3px 6px; border-radius: 999px; box-shadow: 0 0 0 2px var(--dfc-c), 0 1px 4px rgba(0,0,0,.3); font-size: 12px; }
+.chip.en ha-icon { --mdc-icon-size: 14px; color: var(--dfc-c); }
+.epin { position:absolute; transform:translate(-50%,-50%); width:32px; height:32px; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); border: 2px solid var(--energy-grid-consumption-color, #488fc2); color: var(--primary-text-color, #222); box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events:none; z-index:2; }
+.epin.source { border-color: var(--energy-solar-color, #ff9800); }
+.epin.battery { border-color: var(--energy-battery-out-color, #4db6ac); }
+.epin ha-icon { --mdc-icon-size:18px; }
+.epin.dummy { border-style: dashed; }
+.epin.val { width:auto; min-width:32px; padding:0 9px 0 6px; border-radius:16px; gap:4px; font-size:12px; font-weight:600; white-space:nowrap; }
+.room .rage.epw { color: var(--energy-grid-consumption-color, #488fc2); font-weight:600; }
+.newov { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 12px 2px; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--primary-color, #03a9f4) 10%, transparent); font-size: 13px; }
+.newov ha-icon { --mdc-icon-size: 18px; color: var(--primary-color, #03a9f4); }
+.newov button { border: 0; border-radius: 14px; padding: 4px 12px; font: inherit; cursor: pointer; background: var(--secondary-background-color, rgba(0,0,0,.06)); color: var(--primary-text-color); }
+.newov button[data-add] { background: var(--primary-color, #03a9f4); color: #fff; }
+.heatleg.eleg i.eshade { width:22px; border-radius:3px; background: linear-gradient(90deg, color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 15%, transparent), var(--energy-grid-consumption-color, #488fc2)); }
+.heatleg.eleg i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+.escrub { position:relative; margin: 8px 12px 0; }
+.escrub .etrack { display:grid; align-items:end; height:28px; gap:2px; }
+.escrub .etrack i { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-style:normal; font-size:10px; color: var(--secondary-text-color); }
+.escrub .etrack i.hr { border-left: 1px solid var(--divider-color, rgba(0,0,0,.12)); }
+.escrub .etrack i.hr b { width: 70%; max-width: 12px; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 55%, transparent); }
+.escrub .etrack i.hr small { position:absolute; top:0; left:2px; font-size:9px; line-height:1; opacity:.8; }
+.escrub .etrack i.hr.later b { background: var(--divider-color, rgba(0,0,0,.12)); }
+.escrub .etrack i.on { color: var(--primary-text-color); font-weight:600; }
+.escrub .etrack i.hr.on { background: color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 14%, transparent); border-radius:3px; }
+.escrub .etrack i.hr.on b { background: var(--energy-grid-consumption-color, #488fc2); }
+.escrub .etrack i.end { justify-content:center; font-size:10px; overflow:hidden; border-radius:8px; background: var(--secondary-background-color, rgba(0,0,0,.05)); }
+.escrub .etrack i.end.on { background: var(--energy-grid-consumption-color, #488fc2); color:#fff; }
+.escrub .etrack { cursor:grab; touch-action: pan-y; user-select:none; }
+.escrub .erange { position:absolute; left:0; top:0; width:100%; height:100%; margin:0; opacity:0; pointer-events:none; }
+.heatleg.eleg .ewhen { color: var(--primary-text-color); }
+.heatleg.eleg { flex-wrap:nowrap; gap:14px; padding-top:2px; white-space:nowrap; overflow-x:auto; scrollbar-width:none; }
+.heatleg.eleg::-webkit-scrollbar { display:none; }
+.heatleg.secok { color: var(--success-color, #43a047); font-weight:600; }
+.heatleg.secok ha-icon { --mdc-icon-size:18px; margin-right:4px; }
+.heatleg.eleg ha-icon { --mdc-icon-size:16px; margin-right:3px; }
 .room.solo { padding: 1px 7px; }
 .room.solo small.rage { opacity: 1; font-size: .9em; font-weight: 600; }
 .room small.rage.now { color: rgb(33,150,243); opacity: 1; font-weight: 600; }
@@ -948,6 +1023,9 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .m { position:absolute; transform: translate(-50%, -50%); border:0; padding:0; background:transparent; cursor:pointer; font: inherit; color: var(--primary-text-color); -webkit-tap-highlight-color: transparent; touch-action: manipulation; z-index:1; }
 .m .ic { width: var(--dfc-size); height: var(--dfc-size); border-radius:50%; display:flex; align-items:center; justify-content:center; background: var(--card-background-color, #fff); box-shadow: 0 1px 4px rgba(0,0,0,.35); --mdc-icon-size: calc(var(--dfc-size) * .55); border: 2px solid transparent; transition: box-shadow .2s, background .2s, transform .1s; position:relative; }
 .m:active .ic { transform: scale(.94); }
+/* 0.11 (#9): every marker is easy to hit: at least 44 px, invisible, also when it shows text only; its value label is tappable too. */
+.m::before { content:""; position:absolute; left:50%; top:50%; width:max(44px, 100%); height:max(44px, 100%); transform:translate(-50%, -50%); border-radius:50%; }
+.m .val { pointer-events:auto; }
 .m.on .ic { border-color: var(--dfc-c, var(--dfc-accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dfc-c, var(--dfc-accent)) 25%, transparent), 0 1px 6px rgba(0,0,0,.35); }
 .m.light.on .ic { background: color-mix(in srgb, var(--dfc-lc, #ffc107) 22%, var(--card-background-color, #fff)); color: color-mix(in srgb, var(--dfc-lc, #ffc107) 80%, #000 12%); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--dfc-lc, #ffc107) 55%, transparent); border-color: var(--dfc-lc, #ffc107); }
 .m.glow .ic, .m.glow .val { opacity:0; }
@@ -955,7 +1033,7 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .bdg { position:absolute; top:-7px; right:-9px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background: var(--dfc-c, var(--primary-color, #03a9f4)); color:#fff; font-size:10px; font-weight:600; line-height:16px; text-align:center; white-space:nowrap; box-shadow:0 0 0 2px var(--card-background-color, #fff); pointer-events:none; }
 .chip .bdg { top:-8px; right:-8px; }
 .m.noi .val { position:static; transform:none; margin:0; }
-.m .xs, .chip .xs { display:flex; flex-direction:column; align-items:flex-start; gap:0; font-size: calc(var(--dfc-size) * .3); line-height:1.25; }
+.m .xs, .chip .xs { display:flex; flex-direction:column; align-items:flex-start; gap:0; font-size: calc(var(--dfc-chipsize, 34px) * .3); line-height:1.25; }
 .m .xs { position:absolute; top: calc(100% + 2px); left:50%; transform: translateX(-50%); background: var(--dfc-chipbg); color: var(--dfc-chipfg); border:1px solid var(--dfc-chipborder); border-radius:8px; padding:2px 7px; white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.3); }
 .chip .xs { margin-top:2px; opacity:.85; }
 .m.eb .xs { top:auto; bottom: calc(100% + 2px); }
@@ -967,8 +1045,8 @@ svg.lines line.hub { stroke: var(--dfc-accent); stroke-width:1.6; stroke-dasharr
 .m.el .xs, .m.el .tip { left:0; transform:none; }
 .xl { display:flex; align-items:center; gap:3px; white-space:nowrap; --mdc-icon-size: calc(var(--dfc-size) * .32); }
 .chip.cl2.cmp { gap:5px; padding: 4px 9px 4px 6px; }
-.chip.cl2.cmp .t { font-size: calc(var(--dfc-size) * .42); font-weight:500; white-space:nowrap; }
-.chip.cl2.cmp .mw { font-size: calc(var(--dfc-size) * .32); opacity:.8; }
+.chip.cl2.cmp .t { font-size: calc(var(--dfc-chipsize, 34px) * .42); font-weight:500; white-space:nowrap; }
+.chip.cl2.cmp .mw { font-size: calc(var(--dfc-chipsize, 34px) * .32); opacity:.8; }
 .m.dim .ic { opacity:.55; transform: scale(.82); }
 .m.unavail .ic { opacity:.45; border: 2px dashed var(--secondary-text-color); }
 ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color, #e53935); color: var(--error-color, #e53935); }
@@ -988,11 +1066,11 @@ ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color,
 .m.net.square .ic { border-radius: 7px; }
 .m.net.unavailable .ic { opacity:.8; }
 .chip { position:absolute; transform: translate(-50%, -50%); border:0; cursor:pointer; font: inherit; padding: 6px 12px; border-radius: 12px; background: var(--dfc-chipbg); color: var(--dfc-chipfg); box-shadow: 0 2px 8px rgba(0,0,0,.28); display:flex; flex-direction:column; align-items:center; gap:1px; line-height:1.2; text-align:center; border: 1px solid var(--dfc-chipborder); backdrop-filter: blur(4px); -webkit-tap-highlight-color: transparent; z-index:1; }
-.chip .l1 { font-size: calc(var(--dfc-size) * .42); font-weight:500; white-space:nowrap; }
-.chip .l2 { font-size: calc(var(--dfc-size) * .38); opacity:.9; white-space:nowrap; }
-.chip .ico { --mdc-icon-size: 15px; display:flex; align-items:center; gap:4px; font-size: calc(var(--dfc-size) * .38); font-weight:500; white-space:nowrap; }
+.chip .l1 { font-size: calc(var(--dfc-chipsize, 34px) * .42); font-weight:500; white-space:nowrap; }
+.chip .l2 { font-size: calc(var(--dfc-chipsize, 34px) * .38); opacity:.9; white-space:nowrap; }
+.chip .ico { --mdc-icon-size: 15px; display:flex; align-items:center; gap:4px; font-size: calc(var(--dfc-chipsize, 34px) * .38); font-weight:500; white-space:nowrap; }
 .chip.clim { border-left: 4px solid var(--dfc-c); }
-.chip.clim .ico { font-size: calc(var(--dfc-size) * .42); --mdc-icon-size: calc(var(--dfc-size) * .42); }
+.chip.clim .ico { font-size: calc(var(--dfc-chipsize, 34px) * .42); --mdc-icon-size: calc(var(--dfc-chipsize, 34px) * .42); }
 .chip.clim .ico ha-icon { color: var(--dfc-c); }
 .chip.clim.off { opacity:.7; }
 .chip.low { background:#e53935; color:#fff; border-color:#e53935; }
@@ -1078,12 +1156,13 @@ ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color,
 .ovbar:not(.vert) .chev.s { left:3px; } .ovbar:not(.vert) .chev.e { right:3px; }
 .ovbar.vert .chev { left:50%; transform: translateX(-50%); }
 .ovbar.vert .chev.s { top:3px; } .ovbar.vert .chev.e { bottom:3px; }
-.ovbar.ce:not(.vert) .dock { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent); }
-.ovbar.cs:not(.vert) .dock { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 34px), transparent); }
-.ovbar.cs.ce:not(.vert) .dock { -webkit-mask-image: linear-gradient(to right, transparent, #000 34px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to right, transparent, #000 34px, #000 calc(100% - 34px), transparent); }
-.ovbar.vert.ce .dock { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent); }
-.ovbar.vert.cs .dock { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 34px), transparent); }
-.ovbar.vert.cs.ce .dock { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 34px, #000 calc(100% - 34px), transparent); }
+/* 0.11: near a scroll arrow the buttons fade out and leave a clear band for the arrow (nothing half-visible behind it). */
+.ovbar.ce:not(.vert) .dock { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
+.ovbar.cs:not(.vert) .dock { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
+.ovbar.cs.ce:not(.vert) .dock { -webkit-mask-image: linear-gradient(to right, transparent, transparent 36px, #000 72px, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, transparent 36px, #000 72px, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
+.ovbar.vert.ce .dock { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
+.ovbar.vert.cs .dock { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
+.ovbar.vert.cs.ce .dock { -webkit-mask-image: linear-gradient(to bottom, transparent, transparent 36px, #000 72px, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, transparent, transparent 36px, #000 72px, #000 calc(100% - 72px), transparent calc(100% - 36px), transparent); }
 /* fixed-height cards: the plan sits at the top (or centred), the bar right next to it */
 /* the Side Rail: full height, flush with the card's edge */
 ha-card.srail .dockrow { padding:0; margin:0; height: var(--dfc-rail-len, 0px); max-height:none; align-self:flex-start; gap:0; }
@@ -1136,7 +1215,7 @@ ha-card.srail .dockrow.rail-dark .lslot button.layers { box-shadow:none; }
 @keyframes dfcSpin { to { transform: rotate(360deg); } }
 @keyframes dfcFlow { from { background-position: 200% 0; } to { background-position: 0 0; } }
 @keyframes dfcApPulse { 0%, 100% { opacity:1; } 50% { opacity:.45; } }
-.applbl { position:absolute; z-index:4; transform: translate(-50%, -100%); display:flex; flex-direction:column; gap:2px; padding:5px 10px; border-radius:12px; border:1px solid var(--dfc-chipborder); background: var(--dfc-chipbg); color: var(--dfc-chipfg); font: 500 12px/1.3 var(--primary-font-family, sans-serif); white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.2); cursor:pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.applbl { position:absolute; z-index:4; transform: translate(-50%, calc(-100% - 30px)); display:flex; flex-direction:column; gap:2px; padding:5px 10px; border-radius:12px; border:1px solid var(--dfc-chipborder); background: var(--dfc-chipbg); color: var(--dfc-chipfg); font: 500 12px/1.3 var(--primary-font-family, sans-serif); white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.2); cursor:pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .applbl .ar { display:flex; align-items:center; gap:6px; }
 .applbl .ar i { width:8px; height:8px; border-radius:50%; flex:none; }
 .alist .arow { display:flex; align-items:center; gap:6px; }
@@ -1253,20 +1332,20 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .rail button.fl:hover .pill { opacity:1; }
 /* climate chip v2 */
 .chip.cl2 { flex-direction:row; align-items:center; gap: 7px; padding: 5px 9px 5px 7px; border: 2px solid var(--dfc-c); text-align:left; }
-.chip.cl2 > ha-icon { --mdc-icon-size: calc(var(--dfc-size) * .56); color: var(--dfc-c); flex:none; }
+.chip.cl2 > ha-icon { --mdc-icon-size: calc(var(--dfc-chipsize, 34px) * .56); color: var(--dfc-c); flex:none; }
 .chip.cl2 .mc { display:flex; flex-direction:column; line-height:1.15; }
-.chip.cl2 .mw { font-size: calc(var(--dfc-size) * .36); font-weight:500; white-space:nowrap; }
-.chip.cl2 .st { font-size: calc(var(--dfc-size) * .31); opacity:.75; white-space:nowrap; }
+.chip.cl2 .mw { font-size: calc(var(--dfc-chipsize, 34px) * .36); font-weight:500; white-space:nowrap; }
+.chip.cl2 .st { font-size: calc(var(--dfc-chipsize, 34px) * .31); opacity:.75; white-space:nowrap; }
 .chip.cl2 .vs { width:1px; align-self:stretch; background: currentColor; opacity:.25; margin: 1px 1px; }
 .chip.cl2 .tc { display:flex; flex-direction:column; align-items:flex-end; line-height:1.15; }
-.chip.cl2 .t { font-size: calc(var(--dfc-size) * .44); font-weight:500; white-space:nowrap; }
-.chip.cl2 .h { font-size: calc(var(--dfc-size) * .31); opacity:.8; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-size) * .32); }
+.chip.cl2 .t { font-size: calc(var(--dfc-chipsize, 34px) * .44); font-weight:500; white-space:nowrap; }
+.chip.cl2 .h { font-size: calc(var(--dfc-chipsize, 34px) * .31); opacity:.8; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-chipsize, 34px) * .32); }
 .chip.cl2.off { opacity:.62; }
 .chip.rd { padding: 5px 9px; }
 .chip.rd .tc, .chip.cl2 .tc { display:flex; flex-direction:column; align-items:flex-end; line-height:1.15; }
 .chip.rd .tc { align-items:center; }
-.chip.rd .t { font-size: calc(var(--dfc-size) * .44); font-weight:500; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-size) * .38); }
-.chip.rd .h { font-size: calc(var(--dfc-size) * .31); opacity:.8; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-size) * .32); }
+.chip.rd .t { font-size: calc(var(--dfc-chipsize, 34px) * .44); font-weight:500; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-chipsize, 34px) * .38); }
+.chip.rd .h { font-size: calc(var(--dfc-chipsize, 34px) * .31); opacity:.8; white-space:nowrap; display:flex; align-items:center; gap:1px; --mdc-icon-size: calc(var(--dfc-chipsize, 34px) * .32); }
 .narrow .chip.cl2 .mw { display:none; }
 /* highlight from a popup list */
 .m.hl .ic, .chip.hl { animation: dfchl 1.1s ease-in-out 3; }
@@ -1309,6 +1388,9 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!config || !(config.plan || (Array.isArray(config.plans) && config.plans.length))) throw new Error("Choose a plan (plan: <plan id>)");
     this._raw = config; // as stored in the dashboard (to find and save this card, #97)
     const c = { ...config };
+    // 0.11: the Electricity overlay of the test builds is called Energy.
+    if (Array.isArray(c.overlays)) c.overlays = c.overlays.map((o) => (o === "electricity" ? "energy" : o));
+    if (c.electricity && !c.energy) c.energy = c.electricity;
     // Older configs (0.4.x card, card v0.0x): keep them working.
     if (!c.default_overlay && c.default_view) c.default_overlay = "live";
     // 0.7.4: the Plan overlay is gone; room names are a layer in every overlay. Old configs go to Live.
@@ -1318,6 +1400,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (Array.isArray(c.overlays)) c.overlays = c.overlays.filter((o) => o !== "people");
     this._config = c;
     const dock = this._overlays();
+    if (this.preview && EDIT_OV && dock.includes(EDIT_OV)) this._overlay = EDIT_OV;
     if (!this._overlay || !dock.includes(this._overlay)) this._overlay = this._defaultOverlay();
     const net = this._ov("network");
     const saved = lsGet(`dfc_net_${this._lsKey()}`) || {};
@@ -1474,6 +1557,31 @@ class DeviceFloorplanCard extends HTMLElement {
       });
       // 0.7.5: tap = info card, hold = the marker's action. On touch screens hold, then slide = explore:
       // the name and state of whatever is under the finger, like a mouse hover; lifting does nothing.
+      // 0.11 Energy: drag over the day; every column (Today, the hours, Now) is one magnetic step.
+      root.addEventListener("pointerdown", (e) => {
+        const tr = e.target.closest && e.target.closest(".etrack");
+        if (!tr) return;
+        const cols = [...tr.children].map((c) => c.getBoundingClientRect());
+        const pick = (x) => {
+          let i = cols.findIndex((r) => x < r.right + 1);
+          if (i < 0) i = cols.length - 1;
+          const at = i === 0 ? "today" : i === cols.length - 1 || i - 1 > new Date().getHours() ? "now" : i - 1;
+          if (at !== this._eAt) {
+            this._eAt = at;
+            this._update(true);
+          }
+        };
+        pick(e.clientX);
+        const mv = (ev) => pick(ev.clientX);
+        const up = () => {
+          window.removeEventListener("pointermove", mv);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+        };
+        window.addEventListener("pointermove", mv);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", up);
+      });
       root.addEventListener("pointerdown", (e) => {
         clearTimeout(this._holdT);
         clearTimeout(this._armT);
@@ -1550,6 +1658,8 @@ class DeviceFloorplanCard extends HTMLElement {
   disconnectedCallback() {
     this._connected = false;
     clearInterval(this._nightT);
+    this._netTimer(false); // 0.11: no Network polling after the card is gone
+    clearTimeout(this._trigT);
     window.removeEventListener("device-floorplan-action", this._onExternal);
     window.removeEventListener("location-changed", this._onLocation);
     window.removeEventListener("popstate", this._onLocation);
@@ -1678,13 +1788,20 @@ class DeviceFloorplanCard extends HTMLElement {
   _overlays() {
     // 0.10: Cleaning joins the default list once a robot is set up on this plan (or when chosen in the card editor).
     const robots = Object.keys((this._a && this._a.robots) || {}).length ? ["cleaning"] : [];
-    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...robots, ...this._custom().map((c) => c.id)];
+    // 0.11: Electricity joins the default list once a device on this plan has a power sensor.
+    const st = (this._hass && this._hass.states) || {};
+    const power = (this._eData && this._eData.devs.length) || Object.values((this._a && this._a.devices) || {}).some((d) => (d.entities || []).some((e) => isPower(st[e]))) ? ["energy"] : [];
+    const list = Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...power, ...robots, ...this._custom().map((c) => c.id)];
     return list.filter((o) => o !== "plan" && this._ovDef(o));
   }
 
   /** 0.7.4: a layer of an overlay, as the viewer left it (else the card's default). */
   _layerOn(ov, name, dflt) {
-    const v = (this._lay[ov] || {})[name];
+    const l = this._lay[ov] || {};
+    const v = l[name];
+    // 0.11: a screen's choice counts only while the card's own setting is still the one it changed.
+    if (typeof l[`${name}@d`] === "boolean" && l[`${name}@d`] !== dflt) return dflt;
+    if (ov === "energy" && typeof l[`${name}@d`] !== "boolean") return dflt; // choices from the 0.11 test builds
     return typeof v === "boolean" ? v : dflt;
   }
 
@@ -1692,11 +1809,13 @@ class DeviceFloorplanCard extends HTMLElement {
   _layerDefault(ov, name) {
     if (ov === "comfort") return this._ov("comfort")[{ heat: "heatmap", labels: "readings", air: "airflow", clim: "climate_shown" }[name] || name] !== false;
     if (ov === "security" && name === "all") return this._ov("security").show_quiet === true;
+    if (ov === "energy") return { fill: true, flow: this._ov("energy").flow !== false }[name] ?? true;
+    if ((ov === "live" || ov === "security") && name === "cams") return false;
     return true;
   }
 
-  _setLayer(ov, name, on) {
-    this._lay = { ...this._lay, [ov]: { ...(this._lay[ov] || {}), [name]: on } };
+  _setLayer(ov, name, on, dflt) {
+    this._lay = { ...this._lay, [ov]: { ...(this._lay[ov] || {}), [name]: on, ...(typeof dflt === "boolean" ? { [`${name}@d`]: dflt } : {}) } };
     lsSet(`dfc_layers_${this._lsKey()}`, this._lay);
   }
 
@@ -1825,7 +1944,8 @@ class DeviceFloorplanCard extends HTMLElement {
     phase = phase || "idle";
     const key = ap.item.id;
     // Finished: a cycle that was running and stopped keeps a check until the door opens or you tap "Unloaded".
-    this._applDone = this._applDone || lsGet(`dfc_appl_${this._lsKey()}`) || {};
+    if (!this._applDone) this._applLoad();
+    this._applDone = this._applDone || {};
     this._applPrev = this._applPrev || {};
     const active = ["water", "spin", "heat", "run", "attention"].includes(phase);
     const prev = this._applPrev[key];
@@ -1842,7 +1962,7 @@ class DeviceFloorplanCard extends HTMLElement {
       this._applChg[key] = since ? new Date(since.last_changed).getTime() : 0;
     } else if (prev !== phase) this._applChg[key] = Date.now();
     this._applPrev[key] = phase;
-    lsSet(`dfc_appl_${this._lsKey()}`, this._applDone);
+    this._applSave();
     const doneFor = this._per(ap.item, "live").done_for || "30";
     let doneLeft = 0;
     if (this._applDone[key] && doneFor !== "unloaded") {
@@ -1942,7 +2062,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const y = Math.min(...grp.map((o) => o.y));
       const att = grp.some((o) => ["done", "attention", "error"].includes(o.st.phase));
       const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? "Done · tap to unload" : `${cesc(this._applWord(o))}${o.st.time ? ` · ${cesc(o.st.time.replace(" remaining", "").replace(" elapsed", ""))}` : ""}`}</span>`).join("");
-      html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => this._applTip(o)).join(", "))}">${rows}</button>`;
+      const anc = grp.map((o) => `${o.x},${o.y},${o.st.col || "150,150,150"}`).join(";");
+      html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-anc="${anc}" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => this._applTip(o)).join(", "))}">${rows}</button>`;
     }
     return html;
   }
@@ -2501,7 +2622,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!this._cx) this._cx = this._ctx(a);
     const lightItems = new Set(items.filter((i) => !this._hidden(i, "lights") && this._qualifies(i, "lights", a)).map((i) => i.id));
     const low = Number((this._config.health || {}).low ?? 20);
-    let lights = 0;
+    const litItems = new Set(); // 0.11: lights on are counted per marker, like on the plan (a bond counts once)
     let sec = false;
     let health = false;
     let net = false;
@@ -2520,7 +2641,7 @@ class DeviceFloorplanCard extends HTMLElement {
         if (!st) continue;
         const k = kindOf(e, st);
         if (domainOf(e) === "light" && st.state === "on") {
-          if (lightItems.has(it.id)) lights++;
+          if (lightItems.has(it.id)) litItems.add(it.id);
         } else if (k === "opening" && st.state === "on" && !hasCover && ["door", "window", "garage_door"].includes(st.attributes.device_class)) sec = true;
         else if (domainOf(e) === "alarm_control_panel" && (/^armed/.test(st.state) || st.state === "triggered")) sec = true;
         else if (domainOf(e) === "lock" && st.state === "unlocked") sec = true;
@@ -2534,6 +2655,7 @@ class DeviceFloorplanCard extends HTMLElement {
       if (inf.err) clean = { dot: "var(--error-color, #db4437)" };
       else if (inf.attn && !clean) clean = { dot: "#ffa000" };
     }
+    const lights = litItems.size;
     return {
       cleaning: clean,
       lights: lights ? { badge: lights, color: "#F2B84B" } : null,
@@ -2665,6 +2787,16 @@ class DeviceFloorplanCard extends HTMLElement {
     return all.filter((e) => !this._hiddenInHA(e));
   }
 
+  /** 0.11: the selected marker in Edit markers when it's hidden or idle: a real, drawable marker (the quick
+   *  "does it qualify" answer is only a key, which drew as "undefined" in custom overlays). */
+  _selSpec(item, ov, name) {
+    const q = this._specsFor(item, ov, true).filter((x) => x && x.item);
+    if (q.length) return q.slice(0, 1);
+    const e = item.main_entity;
+    const st = e && this._hass.states[e];
+    return e && st ? [this._liveSpec(item, name, e, st, kindOf(e, st), {})] : [];
+  }
+
   _hidden(item, overlay) {
     const o = this._dev(item.id);
     return Array.isArray(o.hide_in) && o.hide_in.includes(overlay);
@@ -2700,17 +2832,18 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "plan" || !this._ovDef(ov)) return out;
     this._cx = this._ctx(a);
     this._skippedUnknown = 0;
+    const name0 = (item) => this._dev(item.id).name || item.name;
     for (const item of this._items(a)) {
       const isSel = this._pick && this._selId === item.id;
       if (this._hidden(item, ov)) {
         // 0.7.5: Edit markers: a selected marker hidden here is drawn faded, so changes can be seen.
-        if (isSel) out.push(...this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, ghost: true })));
+        if (isSel) out.push(...this._selSpec(item, ov, name0(item)).map((x) => ({ ...x, ghost: true })));
         continue;
       }
       let sp = this._specsFor(item, ov, false);
       // Off / idle right now (Live hides it): while selected it shows as it looks when active.
       // (Appliances show their label instead, see _applHtml.)
-      if (isSel && !sp.length && !((ov === "live" || ov === "lights") && this._applOf(item))) sp = this._specsFor(item, ov, true).slice(0, 1).map((x) => ({ ...x, on: true, dim: false, cls: "" }));
+      if (isSel && !sp.length && !((ov === "live" || ov === "lights") && this._applOf(item))) sp = this._selSpec(item, ov, name0(item)).map((x) => ({ ...x, on: true, dim: false, cls: "" }));
       out.push(...sp);
     }
     return this._robotSpecs(a, ov, out);
@@ -3004,6 +3137,151 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   /** Card settings of one device in one overlay (#100/#101): { lead, extras, icon, tap }. */
+  /** 0.11: each camera its own colour (dot, line, picture border), stable: by its place among the plan's cameras. */
+  _camColor(s) {
+    const ids = this._a ? this._items(this._a).filter((it) => this._camOf(it)).map((it) => it.id).sort() : [];
+    return E_COLORS[Math.max(0, ids.indexOf(s.item.id)) % E_COLORS.length];
+  }
+
+  /** 0.11 Live camera, layer 3: a small dot where the camera is (spread like any marker). */
+  _camHtml(s) {
+    return `<button class="m camdot ${edgeCls(s.x, s.y, this._em)}" style="left:${s.x}%;top:${s.y}%;background:${this._camColor(s)}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(s.name)}"><span class="tip">${cesc(s.name)}</span></button>`;
+  }
+
+  /** Layer 4, windows: camera pictures. Placed by _placeWins() after the markers, next to their dot. */
+  _winHtml() {
+    if (this._overlay !== "live" && this._overlay !== "security") return "";
+    const cams = [...(this._specs ? this._specs.values() : [])].filter((sp) => sp.cam && sp.win);
+    if (!cams.length) return "";
+    clearTimeout(this._snapT);
+    this._snapT = setTimeout(() => this._update(true), 10000); // a fresh still every 10 s
+    const tick = Math.floor(Date.now() / 10000);
+    return `<div class="wins">${cams.map((sp) => {
+      const pic = this._hass.states[sp.eid] && this._hass.states[sp.eid].attributes.entity_picture;
+      const src = pic ? `${pic}${pic.includes("?") ? "&" : "?"}_=${tick}` : "";
+      // Readings in the name bar: what you picked under Also show; automatically only a low battery.
+      const lowAt = Number(this._ov("health").low ?? 20);
+      const isLow = (e) => {
+        const st = this._hass.states[e];
+        return !!st && st.attributes.device_class === "battery" && Number(st.state) < lowAt;
+      };
+      let rd = (sp.extras || []).filter((x) => domainOf(x.eid) !== "camera");
+      if (!Array.isArray(this._per(sp.item, "live").extras)) {
+        const bat = [...new Set([...(sp.item.entities || []), ...(sp.item.allEntities || [])])].find(isLow);
+        rd = bat ? [{ eid: bat, text: this._extraText(bat), icon: null }] : [];
+      }
+      // 0.11: at most two readings on a picture (the editor stops at two), in the order picked; never cut, they
+      // shrink with "…". "22.0 °C" → "22 °C".
+      const ord = rd.slice(0, 2);
+      const pill = (x) => {
+        const t = String(x.text).replace(/(\d)\.0(?=\D|$)/, "$1");
+        return `<span class="${isLow(x.eid) ? "lo" : ""}" title="${cesc(t)}">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}<b>${cesc(t)}</b></span>`;
+      };
+      const rds = ord.length ? `<span class="crd">${ord.map(pill).join("")}</span>` : "";
+      const last = (this._camLast = this._camLast || {})[sp.key];
+      this._camLast[sp.key] = src;
+      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="Close">×</button>` : ""}</span></div>`;
+    }).join("")}</div>`;
+  }
+
+  /** After the markers are laid out: each window next to its marker's final spot (above-right; left / below
+   *  near the edges), clear of the other windows; an elbow line joins them. Returns the SVG lines. */
+  _placeWins(box, W, H) {
+    let out = "";
+    // Appliance status (layer 4): a line from each appliance up to its status pill.
+    const br = box.getBoundingClientRect();
+    for (const pill of box.querySelectorAll(".applbl[data-anc]")) {
+      const pr = pill.getBoundingClientRect();
+      if (!pr.width) continue;
+      const bx = pr.left - br.left + pr.width / 2;
+      const by = pr.bottom - br.top;
+      for (const a of pill.dataset.anc.split(";")) {
+        const [ax0, ay0, ...rgb] = a.split(",");
+        const c = rgb.join(",");
+        const ax = (Number(ax0) / 100) * W;
+        const ay = (Number(ay0) / 100) * H;
+        const r = Math.min(10, Math.abs(ay - by), Math.abs(bx - ax));
+        const sx = Math.sign(bx - ax);
+        out += `<path class="elbow" style="stroke:rgb(${c})" d="M${ax},${ay} L${ax},${by + r} Q${ax},${by} ${ax + sx * r},${by} L${bx},${by}"/>`;
+      }
+    }
+    const placed = [];
+    const ww = Math.min(160, W * 0.3);
+    const wh = ww * 0.5625;
+    for (const win of box.querySelectorAll(".cwin")) {
+      const dot = box.querySelector(`[data-k="${CSS.escape(win.dataset.wk)}"]`);
+      if (!dot) continue;
+      const cx = parseFloat(dot.style.left) || 0;
+      const cy = parseFloat(dot.style.top) || 0;
+      const left = cx > W * 0.62;
+      let up = cy > wh + 40;
+      let x = left ? cx - 28 - ww : cx + 28;
+      let y = up ? cy - 40 - wh : cy + 40;
+      for (let i = 0; i < 6 && placed.some((p) => x < p.x + p.w + 8 && x + ww + 8 > p.x && y < p.y + p.h + 8 && y + wh + 8 > p.y); i++) y += up ? -(wh + 8) : wh + 8;
+      x = Math.max(2, Math.min(W - ww - 2, x));
+      y = Math.max(2, Math.min(H - wh - 2, y));
+      up = y + wh / 2 < cy;
+      placed.push({ x, y, w: ww, h: wh });
+      Object.assign(win.style, { left: `${x}px`, top: `${y}px`, width: `${ww}px`, height: `${wh}px` });
+      // Elbow: vertical from the dot, then horizontal into the window's side, rounded corner.
+      const ey = y + wh / 2;
+      const ex = left ? x + ww : x;
+      const r = Math.min(14, Math.abs(ey - cy), Math.abs(ex - cx)); // rounded like the Energy lines
+      const sy = ey < cy ? -1 : 1;
+      const sx = ex < cx ? -1 : 1;
+      out += `<path class="elbow" style="stroke:${win.dataset.c || "#26a69a"}" d="M${cx},${cy} L${cx},${ey - sy * r} Q${cx},${ey} ${cx + sx * r},${ey} L${ex},${ey}"/>`;
+    }
+    return out;
+  }
+
+  /** 0.11: the device's camera entity, if it has one. */
+  _camOf(item) {
+    // A device is a camera only when its main entity is one: a tablet's or a robot's map "camera" doesn't count.
+    // Or when you pick the camera as what leads in Live (a doorbell whose main entity is its button).
+    const lead = (this._dev(item.id).per || {}).live?.lead;
+    const e = lead && domainOf(lead) === "camera" ? lead : item.main_entity;
+    return e && domainOf(e) === "camera" && this._hass.states[e] && !/map|valetudo|xiaomi_cloud_map/i.test(e) ? e : null;
+  }
+
+  /** What brings a device into Live: the picked trigger, else (cameras) its own motion / person / ring sensor. */
+  _liveWhen(item) {
+    const p = this._per(item, "live");
+    const cam = this._camOf(item);
+    if (cam && (p.popup === "off" || p.popup === false)) return null; // "Pop up on events" off: only with Layers → Cameras
+    if (p.when && this._hass.states[p.when]) return p.when;
+    // 0.11: Live is open: a device you add shows while it is active (its own main state).
+    if (!cam) return this._added(item, "live") && this._hass.states[item.main_entity] ? item.main_entity : null;
+    const ents = [...new Set([...(item.entities || []), ...(item.allEntities || [])])];
+    return ents.find((e) => {
+      const st = this._hass.states[e];
+      if (!st) return false;
+      const dc = st.attributes.device_class;
+      if (domainOf(e) === "event") return ["doorbell", "motion"].includes(dc) || /ring|ding|doorbell|motion|person/.test(e);
+      return domainOf(e) === "binary_sensor" && (MOTION_DC.has(dc) || (!dc && /motion|presence|occupancy|person|ring|ding|doorbell|visitor/.test(e)));
+    }) || null;
+  }
+
+  /** Closed with ✕ during this trigger event (opens again on the next one; per screen). */
+  _camShut(trig) {
+    const st = this._hass.states[trig];
+    return !!(st && this._camX && this._camX[trig] === (domainOf(trig) === "event" ? st.state : st.last_changed));
+  }
+
+  /** Is the trigger on (or was it, within the last 30 s; an event within the last minute)? */
+  _trigOn(e) {
+    const st = this._hass.states[e];
+    if (!st) return false;
+    const now = Date.now();
+    let left = 0;
+    if (domainOf(e) === "event") left = 60000 - (now - Date.parse(st.state));
+    else if (["on", "open", "detected", "home", "playing", "cleaning", "heating", "cooling", "running", "printing", "recording", "streaming"].includes(st.state)) return true;
+    else left = 30000 - (now - Date.parse(st.last_changed));
+    if (!(left > 0)) return false;
+    clearTimeout(this._trigT);
+    this._trigT = setTimeout(() => this._update(true), left + 200);
+    return true;
+  }
+
   _per(item, ov) {
     const o = this._dev(item.id);
     return (o.per && typeof o.per === "object" && o.per[ov]) || {};
@@ -3135,12 +3413,30 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "live") {
       const opts = this._ov("live");
       const kinds = opts.show || LIVE_DEFAULT;
+      // 0.11: "Show in Live when…": a camera (or any device with a picked trigger) shows only while its
+      // motion / ring / door sensor is on, and a little after. A camera without a trigger stays out of Live.
+      const trig = this._liveWhen(item);
+      const cam = this._camOf(item);
+      if (trig || cam) {
+        if (q) return [{ key: item.id }];
+        // A camera without a trigger shows only with Layers → Cameras; unavailable cameras never in Live.
+        // 0.11: Layers → Cameras shows every camera; on top of that a trigger pops one up by itself.
+        const layer = !!cam && this._layerOn("live", "cams", false) && this._layerOn("live", `cam:${item.id}`, true);
+        const popped = !!trig && this._trigOn(trig) && !this._camShut(trig);
+        const show = layer || popped;
+        if (!show) return [];
+        const lead = cam || item.main_entity;
+        if (cam && !live(hass.states[cam])) return [];
+        const sp = this._liveSpec(item, name, lead, hass.states[lead], kindOfE(lead), { ...opts, values: false });
+        return one({ ...sp, key: `${item.id}|${lead}`, on: true, dim: false, ents: trig ? [lead, trig] : [lead], trig: layer ? null : trig, cam: !!cam, win: true });
+      }
       if (item.bond && !this._per(item, ov).lead) {
         const kind = this._mainKind(item);
         const key = LIVE_KEY[kind];
         if (!key || !kinds.includes(key)) return [];
         if (kind === "climate" && !q) return [];
         const bs = this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], kind, opts);
+        if (!q && !bs.on && this._undoFor([item.main_entity, ...(item.entities || [])])) return one({ ...bs, dim: true });
         if (!q && (opts.show_off || "hidden") === "hidden" && !bs.on) return [];
         if (kind === "light" && this._glowOnly(ov)) bs.glow = true;
         return one(bs);
@@ -3165,6 +3461,7 @@ class DeviceFloorplanCard extends HTMLElement {
         return one(this._climateChip(item, name, lead, null, null, { compact: true }));
       }
       const spec = this._liveSpec(item, name, lead, hass.states[lead], kind, opts);
+      if (!q && !spec.on && this._undoFor([lead])) return one({ ...spec, dim: true });
       if (kind === "light" && this._glowOnly(ov)) {
         if (!spec.on && !q) return [];
         spec.glow = true;
@@ -3215,7 +3512,10 @@ class DeviceFloorplanCard extends HTMLElement {
       const fits = (e) => {
         const k = kindOf(e, hass.states[e]);
         if (k === "opening" && relay && domainOf(e) === "binary_sensor") return false;
-        return sec.includes(k) && !(k === "camera" && opts.cameras === false);
+        // 0.11: shutters are no security alert (their bar on the window shows the position).
+        if (domainOf(e) === "cover") return false;
+        // 0.11: a camera only when the device is one (its main entity), not a tablet's or robot's camera entity.
+        return sec.includes(k) && !(k === "camera" && (opts.cameras === false || this._camOf(item) !== e));
       };
       // #100: one marker per device; its other sensors are in the popup.
       const lead = this._leadFor(item, ov, fits);
@@ -3224,12 +3524,23 @@ class DeviceFloorplanCard extends HTMLElement {
       const k = kindOf(lead, st);
       // 0.10.2: unavailable counts as an alert in Security (a silent sensor may be a threat).
       const alert = this._isOn(lead, st, k) || !live(st);
-      if (!q && !alert && !this._layerOn(ov, "all", this._layerDefault(ov, "all"))) return [];
+      // 0.11: a camera is a fixture: always on the Security map as its dot (unavailable: the usual red marker);
+      // its picture as in Live: when its trigger fires, or with Layers → Cameras.
+      if (k === "camera" && live(st)) {
+        if (q) return [{ key: item.id }];
+        const trig = this._liveWhen(item);
+        const layer = this._layerOn(ov, "cams", false) && this._layerOn(ov, `cam:${item.id}`, true);
+        const popped = !!trig && this._trigOn(trig) && !this._camShut(trig);
+        const sp = this._liveSpec(item, name, lead, st, k, { values: false });
+        return one({ ...sp, key: `${item.id}|${lead}`, on: true, dim: false, ents: trig ? [lead, trig] : [lead], trig: layer ? null : trig, cam: true, win: layer || popped });
+      }
+      if (!q && !alert && k !== "camera" && !this._layerOn(ov, "all", this._layerDefault(ov, "all"))) return [];
       const others = allowed.filter((e) => e !== lead && fits(e));
       const spec = { ...this._liveSpec(item, name, lead, st, k, { values: false }), key: `${item.id}|${lead}`, ents: [lead], also: others };
       return one(spec);
     }
     if (ov === "health") return this._healthSpecs(item, name, allowed, this._ov("health"), q).map((sp) => this._withExtras(sp, item, ov));
+    if (ov === "energy") return this._energySpecs(item, name, q);
     if (ov === "network") return this._netSpecs(item, name, cx, q);
     const def = this._ovDef(ov);
     if (def && def.custom) return this._customSpecs(item, name, allowed, def.custom, q, ov);
@@ -3426,6 +3737,355 @@ class DeviceFloorplanCard extends HTMLElement {
     return [];
   }
 
+  // ------------------------------------------------------------------ 0.11 Energy
+  /** Energy data from Home Assistant's own Energy settings: the devices (with their kWh statistic and power
+   *  sensor) and the sources, plus today's hourly statistics. Refreshed every 5 minutes while Energy shows. */
+  _eLoad(force) {
+    const now = Date.now();
+    const day = new Date().toDateString();
+    if (!this._hass || this._eBusy) return;
+    if (!force && this._eData && this._eData.day === day && now - this._eData.t < 300000) return;
+    this._eBusy = true;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    this._hass
+      .callWS({ type: "energy/get_prefs" })
+      .then(async (prefs) => {
+        const devs = (prefs.device_consumption || []).filter((d) => d.stat_consumption);
+        const srcs = [];
+        for (const sr of prefs.energy_sources || []) {
+          if (sr.type === "solar" && sr.stat_energy_from) srcs.push({ kind: "solar", stat: sr.stat_energy_from, rate: sr.stat_rate });
+          if (sr.type === "battery") {
+            if (sr.stat_energy_from) srcs.push({ kind: "battery_out", stat: sr.stat_energy_from, rate: sr.stat_rate });
+            if (sr.stat_energy_to) srcs.push({ kind: "battery_in", stat: sr.stat_energy_to });
+          }
+          if (sr.type === "grid") for (const f of sr.flow_from || []) if (f.stat_energy_from) srcs.push({ kind: "grid", stat: f.stat_energy_from, rate: sr.stat_rate });
+          if (sr.type === "grid" && sr.stat_energy_from) srcs.push({ kind: "grid", stat: sr.stat_energy_from, rate: sr.stat_rate }); // HA 2026.11+
+        }
+        const ids = [...devs.map((d) => d.stat_consumption), ...srcs.map((x) => x.stat)];
+        let stats = {};
+        if (ids.length) {
+          stats = await this._hass.callWS({ type: "recorder/statistics_during_period", start_time: start.toISOString(), end_time: new Date().toISOString(), statistic_ids: ids, period: "hour", types: ["change"] });
+        }
+        const hours = {};
+        for (const id of ids) {
+          const arr = new Array(24).fill(0);
+          for (const r of stats[id] || []) {
+            const h = new Date(typeof r.start === "number" ? r.start : r.start).getHours();
+            if (h >= 0 && h < 24) arr[h] += Math.max(0, Number(r.change) || 0);
+          }
+          hours[id] = arr;
+        }
+        this._eData = { day, t: Date.now(), devs, srcs, hours };
+        this._eErr = null;
+      })
+      .catch((e) => {
+        this._eErr = (e && (e.message || e.code)) || "Energy data not available";
+        this._eData = { day, t: Date.now(), devs: [], srcs: [], hours: {} };
+      })
+      .finally(() => {
+        this._eBusy = false;
+        this._update(true);
+      });
+  }
+
+  /** What the scrubber shows: "today" (kWh), "now" (W) or an hour 0..23 (kWh in that hour). */
+  _eSel() {
+    const h = new Date().getHours();
+    const v = this._eAt ?? "today";
+    return typeof v === "number" && v > h ? "today" : v;
+  }
+
+  /** Value of one statistic (+ its power sensor) for the current selection: { v, unit }. */
+  _eVal(stat, rate) {
+    const sel = this._eSel();
+    if (sel === "now") {
+      const w = powerW(this._hass.states[rate]);
+      return { v: w == null ? 0 : w, unit: "W", live: w != null };
+    }
+    const arr = (this._eData && this._eData.hours[stat]) || [];
+    const v = sel === "today" ? arr.reduce((x, y) => x + y, 0) : arr[sel] || 0;
+    return { v, unit: "kWh" };
+  }
+
+  /** Energy devices per plan item (by any of the item's entities), each with its colour. */
+  _eIndex(a) {
+    if (!this._eData) return new Map();
+    const key = `${this._eData.t}|${this._floor}`;
+    if (this._eIdx && this._eIdx.key === key) return this._eIdx.map;
+    const byEnt = new Map();
+    for (const item of this._items(a)) for (const e of [item.main_entity, ...(item.entities || []), ...(item.allEntities || [])]) if (e && !byEnt.has(e)) byEnt.set(e, item);
+    const map = new Map();
+    const byDev = new Map(this._items(a).map((it) => [it.id, it]));
+    const devOf = (e) => (e && this._hass.entities && this._hass.entities[e] ? this._hass.entities[e].device_id : null);
+    this._eData.devs.forEach((d, i) => {
+      // 0.11: by entity, else by the device the sensor belongs to (a plug's energy sensor, when the plug is placed).
+      const item = byEnt.get(d.stat_consumption) || byEnt.get(d.stat_rate) || byDev.get(devOf(d.stat_consumption)) || byDev.get(devOf(d.stat_rate));
+      if (!item) return;
+      const list = map.get(item.id) || [];
+      list.push({ ...d, color: E_COLORS[i % E_COLORS.length] });
+      map.set(item.id, list);
+    });
+    this._eIdx = { key, map };
+    return map;
+  }
+
+  /** 0.11: Home Assistant's "Upstream device": the stat of the device whose meter already includes this one
+   *  (only when that device is in Energy too). Such a device keeps its chip but isn't added again to totals. */
+  _eUp(stat) {
+    const devs = (this._eData && this._eData.devs) || [];
+    const d = devs.find((x) => x.stat_consumption === stat);
+    const up = d && d.included_in_stat;
+    return up && devs.some((x) => x.stat_consumption === up) ? up : null;
+  }
+
+  /** Totals, room shading and lines: what a chip adds (its top-level devices) and where its line goes. */
+  _eTree(sp, devs) {
+    sp.stats = new Set(devs.map((d) => d.stat));
+    sp.eSum = devs.filter((d) => !this._eUp(d.stat)).reduce((t, d) => t + d.v, 0);
+    const ups = devs.map((d) => this._eUp(d.stat));
+    sp.up = ups.every((u) => u && !sp.stats.has(u)) ? ups[0] : null;
+  }
+
+  _energySpecs(item, name, q) {
+    const list = this._eIndex(this._a || {}).get(item.id);
+    if (!list) return [];
+    let v = 0;
+    let unit = "kWh";
+    const tree = [];
+    for (const d of list) {
+      const r = this._eVal(d.stat_consumption, d.stat_rate);
+      v += r.v;
+      unit = r.unit;
+      tree.push({ stat: d.stat_consumption, v: r.v });
+    }
+    if (q) return [{ key: item.id }]; // 0.11: in Energy whenever it's in HA's Energy settings, whatever it uses now
+    // 0.11: from 0 W by default (any use shows); a device using nothing never shows.
+    const min = unit === "W" ? Number(this._ov("energy").min_w ?? 0) : 0.005;
+    if (!(v > 0) || v < min) return [];
+    const pos = item.box || item;
+    const sp = this._chipSpec({ ...item, x: pos.x, y: pos.y }, name, { lines: [unit === "W" ? fmtW(v) : fmtKwh(v)], icon: "mdi:flash", ents: list.map((d) => d.stat_rate || d.stat_consumption).filter((e) => this._hass.states[e]), kind: "reading", cls: "en" });
+    sp.color = list[0].color;
+    sp.energy = v;
+    sp.unit = unit;
+    sp.area = item.area_id;
+    this._eTree(sp, tree);
+    return [sp];
+  }
+
+  /** Area of an entity (its own, else its device's). */
+  _eAreaOf(e) {
+    const en = e && this._hass.entities && this._hass.entities[e];
+    if (!en) return null;
+    if (en.area_id) return en.area_id;
+    const dv = en.device_id && this._hass.devices && this._hass.devices[en.device_id];
+    return dv ? dv.area_id || null : null;
+  }
+
+  /** 0.11: energy devices with no marker on the plan show at their room's pin (so the plan adds up to HA's Energy);
+   *  what's on no room of this plan is summed as "Not on this plan". */
+  _eRoomSpecs(a) {
+    this._eOff = 0;
+    if (!this._eData) return [];
+    const placed = new Set();
+    for (const list of this._eIndex(a).values()) for (const d of list) placed.add(d.stat_consumption);
+    const per = {};
+    this._eData.devs.forEach((d, i) => {
+      if (placed.has(d.stat_consumption)) return;
+      const r = this._eVal(d.stat_consumption, d.stat_rate);
+      const area = this._eAreaOf(d.stat_consumption) || this._eAreaOf(d.stat_rate);
+      const ar = area && (a.areas || {})[area];
+      if (!ar || ar.x == null) {
+        if (!this._eUp(d.stat_consumption)) this._eOff += r.v; // an upstream device already counts it
+        return;
+      }
+      const g = (per[area] = per[area] || { ar, list: [], v: 0, unit: r.unit, i });
+      const ent = d.stat_rate || d.stat_consumption;
+      g.list.push({ name: d.name || entName(this._hass, ent), ent, v: r.v, stat: d.stat_consumption });
+      g.v += r.v;
+      if (r.v > (g.top || -1)) [g.top, g.i] = [r.v, i];
+    });
+    const out = [];
+    for (const [area, g] of Object.entries(per)) {
+      const min = g.unit === "W" ? Number(this._ov("energy").min_w ?? 0) : 0.005;
+      if (!(g.v > 0) || g.v < min) continue;
+      const n = g.list.length;
+      const fmt = g.unit === "W" ? fmtW(g.v) : fmtKwh(g.v);
+      const name = n > 1 ? `${g.ar.name || area} · ${n} devices` : g.list[0].name;
+      const item = { id: `energy:${area}`, name, main_entity: g.list[0].ent, entities: g.list.map((x) => x.ent), x: g.ar.x, y: g.ar.y, area_id: area };
+      const sp = this._chipSpec(item, name, { lines: [n > 1 ? `${n} · ${fmt}` : fmt], icon: "mdi:flash", ents: item.entities.filter((e) => this._hass.states[e]), kind: "reading", cls: "en" });
+      sp.color = E_COLORS[g.i % E_COLORS.length];
+      sp.energy = g.v;
+      sp.unit = g.unit;
+      sp.area = area;
+      sp.elist = g.list.sort((x, y) => y.v - x.v);
+      this._eTree(sp, g.list);
+      out.push(sp);
+    }
+    return out;
+  }
+
+  /** Totals per room from the energy markers shown. */
+  _eRooms(min = 1) {
+    const by = {};
+    const n = {};
+    for (const sp of this._specs ? this._specs.values() : []) if (sp.energy > 0 && sp.area) {
+      by[sp.area] = (by[sp.area] || 0) + (sp.eSum ?? sp.energy);
+      n[sp.area] = (n[sp.area] || 0) + 1;
+    }
+    if (min > 1) for (const k of Object.keys(by)) if (n[k] < min) delete by[k];
+    return by;
+  }
+
+  _eFmt(v) {
+    return this._eSel() === "now" ? fmtW(v) : fmtKwh(v);
+  }
+
+  /** Rooms shaded by their share, in Home Assistant's energy colour. */
+  _eFillHtml(a) {
+    if (this._overlay !== "energy" || !this._layerOn("energy", "fill", true)) return "";
+    const by = this._eRooms();
+    const max = Math.max(...Object.values(by), 1e-9);
+    const polys = Object.entries(a.areas || {}).filter(([id, r]) => by[id] > 0 && Array.isArray(r.shape) && r.shape.length >= 3).map(([id, r]) => `<polygon points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:var(--energy-grid-consumption-color, #488fc2);fill-opacity:${(0.1 + 0.42 * Math.min(1, by[id] / max)).toFixed(3)}"></polygon>`).join("");
+    return polys ? `<svg class="fresh efill" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>` : "";
+  }
+
+  /** Where the electrical panel and the solar / battery box are (placed in the Editor; else a good guess). */
+  _ePoints(a) {
+    // 0.11: the real grid meter / solar / battery when it's on the plan (its device, or the sensor itself), else the
+    // point set in the Editor. No guessing: without an electrical panel there are no flow lines.
+    const pts = a.energy_points || {};
+    const srcs = (this._eData && this._eData.srcs) || [];
+    const realAt = (kinds) => {
+      for (const x of srcs.filter((q) => kinds.includes(q.kind))) {
+        const en = this._hass.entities && this._hass.entities[x.stat];
+        const it = this._items(a).find((i) => i.id === `entity:${x.stat}` || (en && en.device_id && i.id === en.device_id) || [i.main_entity, ...(i.entities || []), ...(i.allEntities || [])].includes(x.stat));
+        if (it) return { x: (it.box || it).x, y: (it.box || it).y };
+      }
+      return null;
+    };
+    const has = (k) => srcs.some((x) => k.includes(x.kind));
+    const rP = realAt(["grid"]);
+    const rS = has(["solar"]) ? realAt(["solar"]) : null;
+    const rB = has(["battery_out", "battery_in"]) ? realAt(["battery_out", "battery_in"]) : null;
+    const panel = rP || pts.panel || null;
+    const source = has(["solar"]) ? rS || pts.source || null : null;
+    const battery = has(["battery_out", "battery_in"]) ? rB || pts.battery || null : null;
+    // A point you set (no real device on the plan) is dashed, like phantoms.
+    return { panel, source, battery, dummy: { panel: !rP, source: !rS, battery: !rB } };
+  }
+
+  /** The panel, the source and the flow lines: panel → every device using energy; source → panel. */
+  _eFlowHtml(a) {
+    this._eFlow = null;
+    if (this._overlay !== "energy") return "";
+    const { panel, source, battery, dummy } = this._ePoints(a);
+    if (!panel) return "";
+    if (this._layerOn("energy", "flow", this._layerDefault("energy", "flow"))) {
+      this._eFlow = { panel, source, battery, sol: this._eSum("solar"), out: this._eSum("battery_out"), chg: this._eSum("battery_in") };
+    }
+    // 0.11: each point shows its value. The panel: Home Assistant's grid total (all grid meters together), else
+    // the total of the devices on this plan; the lines flow into a number, as in Home Assistant.
+    const onPlan = [...(this._specs ? this._specs.values() : [])].reduce((t, sp) => t + (sp.energy > 0 ? sp.eSum ?? sp.energy : 0), 0);
+    const val = { panel: this._eSum("grid") || onPlan, source: this._eSum("solar"), battery: this._eSum("battery_out") };
+    const pin = (p, icon, label, cls) => {
+      const v = val[cls] > 0 ? this._eFmt(val[cls]) : "";
+      return `<div class="epin ${cls} ${dummy[cls] ? "dummy" : ""} ${v ? "val" : ""}" style="left:${p.x}%;top:${p.y}%" title="${cesc(label)}${v ? ` · ${cesc(v)}` : ""}"><ha-icon icon="${icon}"></ha-icon>${v ? `<span>${cesc(v)}</span>` : ""}</div>`;
+    };
+    return `${pin(panel, "mdi:flash", "Electrical panel", "panel")}${source ? pin(source, "mdi:solar-power-variant", "Solar", "source") : ""}${battery ? pin(battery, "mdi:home-battery", "Battery", "battery") : ""}`;
+  }
+
+  /** Flow lines in pixels (drawn after the layout, to each chip's final spot), like Home Assistant's energy
+   *  distribution: thin line, across then a rounded corner, one dot travelling along (faster = more). */
+  _eFlowSvg(box, W, H, t0 = 0) {
+    const f = this._eFlow;
+    if (!f) return "";
+    const P = (p) => ({ x: (p.x / 100) * W, y: (p.y / 100) * H });
+    const elbow = (p, q) => {
+      const dx = q.x - p.x;
+      const dy = q.y - p.y;
+      const r = Math.min(14, Math.abs(dx), Math.abs(dy));
+      return `M${p.x},${p.y} L${q.x - Math.sign(dx) * r},${p.y} Q${q.x},${p.y} ${q.x},${p.y + Math.sign(dy) * r} L${q.x},${q.y}`;
+    };
+    // 0.11: the plan is redrawn whenever a value changes; each dot starts where the clock says it should be
+    // (not from the start), so the movement looks continuous. A per-line offset keeps the dots from bunching.
+    let n = 0;
+    const line = (d, c, dur, back) => {
+      const t = Number(dur);
+      const phase = ((Date.now() / 1000 + n++ * 0.37 * t) % t).toFixed(2);
+      // begin is on this SVG's own clock: "now" there minus how far the dot should already be.
+      return `<path class="eln" d="${d}" style="stroke:${c}"/><circle r="4" style="fill:${c}"><animateMotion dur="${t}s" begin="${(t0 - phase).toFixed(2)}s" repeatCount="indefinite" path="${d}"${back ? ` keyPoints="1;0" keyTimes="0;1" calcMode="linear"` : ""}/></circle>`;
+    };
+    const specs = [...(this._specs ? this._specs.values() : [])].filter((sp) => sp.energy > 0);
+    const max = Math.max(...specs.map((sp) => sp.energy), 1e-9);
+    const pan = P(f.panel);
+    const at = (sp) => {
+      const el = box.querySelector(`[data-k="${CSS.escape(sp.key)}"]`);
+      return el && el.style.left.endsWith("px") ? { x: parseFloat(el.style.left), y: parseFloat(el.style.top) } : P(sp);
+    };
+    let out = specs.map((sp) => {
+      // Like Home Assistant: the dot travels from the device to the panel (same line, other direction). A device
+      // with an upstream device (a plug behind a sub-meter) flows into that one, when it's on the plan.
+      const upSp = sp.up && specs.find((t) => t !== sp && t.stats && t.stats.has(sp.up));
+      return line(elbow(upSp ? at(upSp) : pan, at(sp)), sp.color, (4 - 2.6 * (sp.energy / max)).toFixed(2), true);
+    }).join("");
+    // Like HA's distribution: solar → panel, battery → panel (discharging), solar (or panel) → battery (charging).
+    const sol = f.source && P(f.source);
+    const bat = f.battery && P(f.battery);
+    if (sol && f.sol > 0) out += line(elbow(sol, pan), "var(--energy-solar-color, #ff9800)", 2);
+    if (bat && f.out > 0) out += line(elbow(bat, pan), "var(--energy-battery-out-color, #4db6ac)", 2);
+    if (bat && f.chg > 0) out += line(elbow(sol || pan, bat), "var(--energy-battery-in-color, #f06292)", 2);
+    return out;
+  }
+
+  /** Total of one kind of source for the current selection. */
+  _eSum(kind) {
+    if (!this._eData) return 0;
+    return this._eData.srcs.filter((x) => x.kind === kind).reduce((t, x) => t + this._eVal(x.stat, x.rate).v, 0);
+  }
+
+  /** Under the plan: total, top 3, sources, and the day scrubber (00:00 → now; left end Today, right end Now). */
+  _eLegendHtml() {
+    if (this._overlay !== "energy") return "";
+    if (!this._eData) return `<div class="heatleg eleg">Loading energy…</div>`;
+    if (!this._eData.devs.length) return `<div class="heatleg eleg">${this._eErr ? cesc(this._eErr) : "No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here."}</div>`;
+    const specs = [...(this._specs ? this._specs.values() : [])].filter((sp) => sp.energy > 0).sort((x, y) => y.energy - x.energy);
+    const sum = specs.reduce((x, sp) => x + (sp.eSum ?? sp.energy), 0); // an upstream device's meter counts once
+    const it = (icon, label, v, c) => `<span class="cl"><ha-icon icon="${icon}" style="color:${c}"></ha-icon>${cesc(label)} <b>${cesc(v)}</b></span>`;
+    // 0.11: no device list (the chips and their colours say it); explain the room shading instead.
+    const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>Rooms: darker = more energy</span>` : "";
+    const sol = this._eSum("solar");
+    const grid = this._eSum("grid");
+    const sumTxt = `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>${it("mdi:flash", "On the plan", this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", "Not on this plan", this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
+    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}`;
+    const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.</span>` : "";
+    return `${this._eScrubHtml()}<div class="heatleg eleg">${sumTxt}${srcTxt}${top}${hint}</div>`;
+  }
+
+  /** The day scrubber: hour ticks with a mini bar each, snapping to full hours; Today ← → Now. */
+  _eScrubHtml() {
+    const h = new Date().getHours();
+    const totals = new Array(h + 1).fill(0);
+    for (const d of this._eData.devs) {
+      const arr = this._eData.hours[d.stat_consumption] || [];
+      for (let i = 0; i <= h; i++) totals[i] += arr[i] || 0;
+    }
+    const max = Math.max(...totals, 1e-9);
+    const sel = this._eSel();
+    const n = 26; // Today, 00..23 (later hours greyed), Now
+    const idx = sel === "today" ? 0 : sel === "now" ? n - 1 : sel + 1;
+    const hrs = Array.from({ length: 24 }, (_, i) => (i <= h ? totals[i] : null));
+    const cols = [`<i class="end ${idx === 0 ? "on" : ""}">Today</i>`, ...hrs.map((v, i) => `<i class="hr ${idx === i + 1 ? "on" : ""} ${v == null ? "later" : ""}" title="${String(i).padStart(2, "0")}:00${v == null ? "" : ` · ${cesc(fmtKwh(v))}`}"><b style="height:${v == null ? 2 : Math.round(4 + 22 * (v / max))}px"></b>${i % 6 === 0 ? `<small>${String(i).padStart(2, "0")}</small>` : ""}</i>`), `<i class="end ${idx === n - 1 ? "on" : ""}">Now</i>`].join("");
+    return `<div class="escrub"><div class="etrack" style="grid-template-columns:2.4fr repeat(24, minmax(0, 1fr)) 2fr">${cols}</div><input type="range" class="erange" min="0" max="${n - 1}" step="1" value="${idx}" aria-label="Energy: time of day" aria-valuetext="${cesc(this._eWhen())}"></div>`;
+  }
+
+  /** What the scrubber points at, in words. */
+  _eWhen() {
+    const sel = this._eSel();
+    const p = (h) => String(h).padStart(2, "0");
+    return sel === "today" ? "Today" : sel === "now" ? "Now (live)" : `${p(sel)}:00–${p(sel + 1)}:00`;
+  }
+
   /** Network (#49): connection icon, role colour/shape, LQI as the ring; values only in the popup. */
   _netSpecs(item, name, cx, q) {
     const hass = this._hass;
@@ -3575,6 +4235,37 @@ class DeviceFloorplanCard extends HTMLElement {
     this._apA = a;
     this._aps = Object.keys(n).sort((x, y) => n[y] - n[x] || x.localeCompare(y));
     return this._aps;
+  }
+
+  /** 0.11: appliance "done" state lives in Home Assistant, shared by every screen (was browser storage). */
+  _applLoad() {
+    if (this._applLoading || !this._hass) return;
+    this._applLoading = true;
+    const k = `appl_${this._lsKey()}`;
+    const old = lsGet(`dfc_${k}`); // one-time move from this browser
+    this._hass
+      .callWS({ type: "device_floorplan/card_state/get" })
+      .then((r) => {
+        const v = (r && r.card_state && r.card_state[k]) || old || {};
+        this._applDone = { ...v, ...(this._applDone || {}) };
+        this._applSent = JSON.stringify(v);
+        if (old) {
+          lsSet(`dfc_${k}`, null);
+          this._applSave();
+        }
+        this._update(true);
+      })
+      .catch(() => {
+        this._applLoading = false; // older backend: try again later
+      });
+  }
+
+  _applSave() {
+    if (!this._hass || this._applSent === undefined) return;
+    const v = JSON.stringify(this._applDone || {});
+    if (v === this._applSent) return;
+    this._applSent = v;
+    this._hass.callWS({ type: "device_floorplan/card_state/set", key: `appl_${this._lsKey()}`, value: this._applDone || {} }).catch(() => {});
   }
 
   _saveNet() {
@@ -3727,6 +4418,7 @@ class DeviceFloorplanCard extends HTMLElement {
       this._dirty = true;
       return;
     }
+    if (!this._eData || this._overlay === "energy") this._eLoad(); // 0.11 Energy (only reloads every 5 min)
     const sensor = this._sensor();
     const parts = [sensor ? sensor.last_updated : "none", this._floor, this._overlay, this._img || "", this._imgFailed ? 1 : 0, JSON.stringify(this._popup || null), this._menu ? 1 : 0, JSON.stringify(this._net || {}), this._zha ? this._zhaAt : 0, this._hass.themes && this._hass.themes.darkMode ? 1 : 0];
     // Only the entities the current overlay reads; a power sensor ticking elsewhere changes nothing.
@@ -3736,13 +4428,14 @@ class DeviceFloorplanCard extends HTMLElement {
         parts.push("-");
         continue;
       }
-      const a = st.attributes || {};
-      parts.push(`${st.state}|${a.brightness ?? ""}|${a.current_temperature ?? ""}|${a.temperature ?? ""}|${a.target_temp_low ?? ""}|${a.target_temp_high ?? ""}|${a.current_humidity ?? ""}|${a.rgb_color ?? ""}|${a.color_temp_kelvin ?? ""}|${a.entity_picture ?? ""}|${a.confidence ?? ""}`);
+      // 0.11: any change of state or attributes (shutter position, AC activity, battery…) re-renders.
+      parts.push(`${st.state}|${st.last_updated}`);
     }
     this._ns = this._nightState();
     parts.push(`n${this._ns.f}${this._ns.tint || ""}`);
     const nNew = this._hass.states["sensor.device_floorplan_new_devices"];
     parts.push(nNew ? nNew.state : "");
+    parts.push(`e${this._eAt ?? ""}|${this._eData ? this._eData.t : ""}`);
     const key = parts.join(";");
     if (!force && key === this._key) return;
     this._key = key;
@@ -3766,6 +4459,7 @@ class DeviceFloorplanCard extends HTMLElement {
       network: ["signal"],
     }[ov];
     if (kinds) for (const e of ov === "network" ? item.entities || [] : all) if (kinds.includes(kindOf(e, hass.states[e]))) ents.add(e);
+    if (ov === "energy") for (const d of this._eIndex(this._a || {}).get(item.id) || []) if (d.stat_rate) ents.add(d.stat_rate);
     const def = this._ovDef(ov);
     if (def && def.custom) for (const e of all) if (["temperature", "humidity", "battery", "climate"].includes(kindOf(e, hass.states[e]))) ents.add(e);
     return ents;
@@ -3777,9 +4471,15 @@ class DeviceFloorplanCard extends HTMLElement {
     const btn = this._buttons();
     const dark = this._hass.themes && this._hass.themes.darkMode;
     const chipMode = look.chips === "auto" ? (dark ? "dark" : "light") : look.chips;
-    const chipVars = chipMode === "light"
-      ? "--dfc-chipbg: color-mix(in srgb, var(--card-background-color, #fff) 92%, transparent); --dfc-chipfg: var(--primary-text-color); --dfc-chipborder: var(--divider-color);"
-      : "--dfc-chipbg: rgba(30,30,30,.78); --dfc-chipfg: #fff; --dfc-chipborder: rgba(255,255,255,.25);";
+    // 0.11: chips from the card editor (Look): style, background and text size as presets; a colour only for "Custom".
+    const bgPct = { solid: 100, light: 60, clear: 35 }[look.chip_bg];
+    const rgb = chipMode === "custom" && Array.isArray(look.chip_color) && look.chip_color.length === 3 ? look.chip_color.map((v) => Math.round(Number(v) || 0)) : null;
+    const lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255 : null;
+    let chipVars = chipMode === "light" || (chipMode === "custom" && !rgb)
+      ? `--dfc-chipbg: color-mix(in srgb, var(--card-background-color, #fff) ${bgPct ?? 92}%, transparent); --dfc-chipfg: var(--primary-text-color); --dfc-chipborder: var(--divider-color);`
+      : `--dfc-chipbg: rgba(30,30,30,${((bgPct ?? 78) / 100).toFixed(2)}); --dfc-chipfg: #fff; --dfc-chipborder: rgba(255,255,255,.25);`;
+    if (rgb) chipVars = `--dfc-chipbg: rgba(${rgb.join(",")},${((bgPct ?? 85) / 100).toFixed(2)}); --dfc-chipfg: ${lum > 0.6 ? "#1c1c1c" : "#fff"}; --dfc-chipborder: ${lum > 0.6 ? "rgba(0,0,0,.15)" : "rgba(255,255,255,.25)"};`;
+    chipVars += ` --dfc-chipsize: ${{ s: 30, l: 40, xl: 48 }[look.chip_size] || 34}px;`;
     const roomVars = dark ? "--dfc-roomfg:#fff; --dfc-roomhalo: rgba(0,0,0,.85);" : "--dfc-roomfg:#263238; --dfc-roomhalo: rgba(255,255,255,.95);";
     const style = `<style>${CARD_CSS}</style>`;
     if (!sensor) {
@@ -3815,12 +4515,14 @@ class DeviceFloorplanCard extends HTMLElement {
       // 0.7.5: ACs / thermostats as their own layer (their temperatures still count in the heatmap above).
       if (!this._layerOn("comfort", "clim", this._layerDefault("comfort", "clim"))) specs = specs.filter((sp) => sp.kind !== "climate");
     }
+    if (ov === "energy") specs = specs.concat(this._eRoomSpecs(a));
     this._specs = new Map(specs.map((s) => [s.key, s]));
     this._ghosts = ov === "network" ? this._netGhosts(specs) : [];
     const watch = new Set();
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
+    if (ov === "live" || ov === "security") for (const item of this._items(a)) { const tg = this._liveWhen(item); if (tg) watch.add(tg); }
     if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.progress, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
     if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
     if (ov === "live" || ov === "lights") for (const item of this._items(a)) for (const e of [item.main_entity, ...(item.entities || [])]) if (e && domainOf(e) === "media_player") watch.add(e);
@@ -3887,7 +4589,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const dockHtml = dockShown
       ? `<div class="dockrow ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
-    const title = look.title !== false && c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
+    const title = c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
     const people = this._peopleHtml(a);
     // 0.7.7: no "nothing to show" text on the plan: an empty overlay just means nothing is happening.
@@ -3902,10 +4604,10 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
           ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
-          ${this._freshHtml(a)}${this._robotHtml()}<svg class="lines"></svg>
+          ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${this._newOvHtml()}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
@@ -4323,7 +5025,8 @@ class DeviceFloorplanCard extends HTMLElement {
     const names = this._layerOn(this._overlay, "rooms", this._roomsDefault(this._overlay));
     // 0.10: how long ago each room was cleaned belongs to the Last cleaned layer (alone when names are off).
     const ages = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true);
-    if (!names && !ages) return "";
+    const ew = this._overlay === "energy" ? this._eRooms(2) : null; // 0.11: energy per room
+    if (!names && !ages && !ew) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
     // A marker (or a robot's dock) right on a room name: the name steps aside, up or down, away from it.
     const pts = [...(this._specs ? this._specs.values() : [])].map((sp) => ({ x: +sp.x, y: +sp.y }));
@@ -4335,18 +5038,20 @@ class DeviceFloorplanCard extends HTMLElement {
     return Object.entries(a.areas || {}).filter(([id]) => !(r.hidden || []).includes(id)).map(([id, room]) => {
       const nw = ages && (a.now || {})[id];
       const c = ages && ((a.cleaned || {})[id] || {}).t;
-      if (!names && !c && !nw) return "";
+      const pw = ew && ew[id] > 0 ? `<small class="rage epw">${cesc(this._eFmt(ew[id]))}</small>` : "";
+      if (!names && !c && !nw && !pw) return "";
       const name = (r.names && r.names[id]) || room.name;
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
       // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
       const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `cleaning · ${nw.pct}%` : "cleaning")}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}</div>`;
+      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}</div>`;
     }).join("");
   }
 
   _markerHtml(s) {
+    if (s.cam && (this._overlay === "live" || this._overlay === "security")) return this._camHtml(s);
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
       const cls = ["m", edgeCls(s.x, s.y, this._em), "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
@@ -4428,7 +5133,12 @@ class DeviceFloorplanCard extends HTMLElement {
     const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? "Path of the last run" : "Cleaning path") : "";
     const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "Last cleaned") : "";
     const secAll = ov === "security" ? lay("all", "mdi:shield-search", "All sensors") : "";
-    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}${secAll}`;
+    // 0.11: Cameras, and with 2+ cameras one tick per camera (this screen only; triggers still pop up).
+    const camItems = (ov === "live" || ov === "security") && this._a ? this._items(this._a).filter((it) => this._camOf(it)) : [];
+    const camsOn = camItems.length && this._layerOn(ov, "cams", false);
+    const snaps = camItems.length ? lay("cams", "mdi:cctv", "Cameras") + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
+    const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", "Room shading")}${lay("flow", "mdi:transit-connection-variant", "Flow lines")}` : "";
+    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
     return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
       <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
@@ -4525,6 +5235,30 @@ ${reset}
    *  in Cleaning first the robots' own Start / Pause / Dock. */
   _ovActs() {
     return Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
+  }
+
+  /** 0.11: a card that lists its own overlays doesn't get new ones by itself: admins see a tip, once per overlay. */
+  _newOvHtml() {
+    const raw = this._raw || {};
+    if (!this._hass || !this._hass.user || !this._hass.user.is_admin || !Array.isArray(raw.overlays) || !raw.overlays.length) return "";
+    const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
+    const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
+    if (!o) return "";
+    return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ New: <b>${cesc(OVERLAYS[o].label)}</b> overlay${o === "energy" ? ". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines." : ""}</span><button data-newov="${o}" data-add="1">Add to this card</button><button data-newov="${o}">Not now</button></div>`;
+  }
+
+  async _newOvAnswer(o, add) {
+    const raw = { ...(this._raw || {}) };
+    if (add) raw.overlays = [...(raw.overlays || []), o];
+    else raw.dismissed_overlays = [...new Set([...(raw.dismissed_overlays || []), o])];
+    try {
+      await this._saveToDashboard(raw);
+    } catch (_e) {
+      /* YAML dashboards can't be saved from here: it still applies until the page reloads */
+    }
+    this.setConfig(raw);
+    if (add) this._overlay = o;
+    this._update(true);
   }
 
   _ovActsHtml(ov) {
@@ -4720,6 +5454,7 @@ ${reset}
       }
       return this._layoutSoon();
     }
+    // 0.11: a Live camera (dot + picture) keeps its own layout: never spread apart as two markers.
     const els = [...box.querySelectorAll("[data-k]")];
     const rects = els.map((el) => {
       const w = el.offsetWidth || 30;
@@ -4807,7 +5542,7 @@ ${reset}
     const svg = this.shadowRoot.querySelector("svg.lines");
     if (svg) {
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-      svg.innerHTML = this._linkLines(W, H) + lines;
+      svg.innerHTML = this._eFlowSvg(box, W, H, svg.getCurrentTime ? svg.getCurrentTime() : 0) + this._linkLines(W, H) + lines + this._placeWins(box, W, H);
     }
   }
 
@@ -5042,10 +5777,12 @@ ${reset}
     }
     const pl = t.closest("[data-pulse]");
     if (pl) return this._moreInfo(pl.dataset.pulse);
+    const nov = t.closest("[data-newov]");
+    if (nov) return this._newOvAnswer(nov.dataset.newov, !!nov.dataset.add);
     const ad = t.closest("[data-appldone]");
     if (ad) {
       if (this._applDone) delete this._applDone[ad.dataset.appldone];
-      lsSet(`dfc_appl_${this._lsKey()}`, this._applDone || {});
+      this._applSave();
       this._popup = null;
       return this._update(true);
     }
@@ -5089,7 +5826,7 @@ ${reset}
       const ov = this._overlay;
       const name = ly.dataset.lay;
       const dflt = name === "rooms" ? this._roomsDefault(ov) : this._layerDefault(ov, name);
-      this._setLayer(ov, name, !this._layerOn(ov, name, dflt));
+      this._setLayer(ov, name, !this._layerOn(ov, name, dflt), dflt);
       return this._update(true);
     }
     if (t.closest(".lmenu")) return;
@@ -5146,6 +5883,18 @@ ${reset}
     }
     const pe = t.closest("[data-person]");
     if (pe) return this._moreInfo(pe.dataset.person);
+    const wk = t.closest("[data-wk]");
+    if (wk && !t.closest("[data-camx]")) {
+      const ws = this._specs && this._specs.get(wk.dataset.wk);
+      if (ws) return this._runAction(ws);
+      return;
+    }
+    const cx = t.closest("[data-camx]");
+    if (cx) {
+      const st0 = this._hass.states[cx.dataset.camx];
+      if (st0) this._camX = { ...(this._camX || {}), [cx.dataset.camx]: domainOf(cx.dataset.camx) === "event" ? st0.state : st0.last_changed };
+      return this._update(true);
+    }
     const k = t.closest("[data-k]");
     if (!k) return;
     if (this._swiped) {
@@ -5159,6 +5908,10 @@ ${reset}
     const s = this._specs && this._specs.get(k.dataset.k);
     if (!s) return;
     if (this._pick) return this._pick(s.item.id, s); // marker editing (#87/#95)
+    if (s.elist) {
+      this._popup = { type: "elist", key: s.key };
+      return this._update(true);
+    }
     // 0.7.5: bonds and phantoms (several things in one marker) open the info card; a single device does its tap action.
     if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom)) {
       this._popup = { type: "info", key: s.key };
@@ -5207,6 +5960,14 @@ ${reset}
 
   _onInput(e) {
     const t = e.target;
+    // 0.11 Energy: the day scrubber (whole steps = magnetic full hours).
+    if (t && t.classList && t.classList.contains("erange")) {
+      const i = Number(t.value);
+      const n = Number(t.max) + 1;
+      // Hours still to come snap to Now.
+      this._eAt = i === 0 ? "today" : i === n - 1 || i - 1 > new Date().getHours() ? "now" : i - 1;
+      return this._update(true);
+    }
     if (t && t.dataset && t.dataset.covpos) {
       clearTimeout(this._covT);
       this._covT = setTimeout(() => this._hass.callService("cover", "set_cover_position", { entity_id: t.dataset.covpos, position: Number(t.value) }), 350);
@@ -5364,7 +6125,7 @@ ${reset}
   _tipState(s) {
     if (s.type === "net") return "";
     let t = "";
-    if (s.type === "chip") t = s.cl2 ? [s.word, s.set, s.temp].filter(Boolean).join(" · ") : (s.lines || []).filter(Boolean).join(" · ");
+    if (s.type === "chip") return ""; // 0.11: a chip already shows its values: the tip only names it
     else if (s.eid || (s.ents || [])[0]) t = this._fmt(s.eid || s.ents[0]);
     return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
   }
@@ -5480,6 +6241,12 @@ ${reset}
     this._icPos = { anc: ic.dataset.anc, left, top };
   }
 
+  /** 0.11: was this just turned off in Live (still within its few undo seconds)? */
+  _undoFor(eids) {
+    const u = this._undo;
+    return !!(u && Date.now() < u.until && eids.some((e) => u.ents.includes(e)));
+  }
+
   _toggle(s) {
     const ents = s.ents.filter((e) => TOGGLE_DOMAINS.has(domainOf(e)));
     if (!ents.length) return this._moreInfo(s.ents[0]);
@@ -5489,6 +6256,12 @@ ${reset}
       return;
     }
     const anyOn = ents.some((e) => (this._hass.states[e] || {}).state === "on");
+    // 0.11: turned off in Live, it stays a few seconds, faded, so one more tap turns it back on.
+    if (anyOn && this._overlay === "live") {
+      this._undo = { ents, until: Date.now() + 6000 };
+      clearTimeout(this._undoT);
+      this._undoT = setTimeout(() => this._update(true), 6100);
+    }
     this._hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: ents });
   }
 
@@ -5593,6 +6366,12 @@ ${reset}
       return `<div class="pop"><div class="popin" role="dialog" aria-label="All off"><h3>Turn all lights off?${close}</h3><div>${p.n ? `${p.n} light${p.n > 1 ? "s are" : " is"} on.` : "No light is on right now."}</div><div class="acts"><button data-close="1">Cancel</button><button class="pri" data-confirm="1">All off</button></div></div></div>`;
     }
     if (p.type === "info") return this._infoHtml(p);
+    if (p.type === "elist") {
+      const es = this._specs && this._specs.get(p.key);
+      if (!es) return "";
+      const f = (v) => (es.unit === "W" ? fmtW(v) : fmtKwh(v));
+      return `<div class="pop"><div class="popin"><h3>${cesc(es.name)}${close}</h3><div class="list">${es.elist.map((x) => `<button data-mi="${cesc(x.ent)}">${cesc(x.name)}<small>${cesc(f(x.v))}</small></button>`).join("")}</div><div class="rbhint">Place these devices on the plan in the Floorplan Editor to see each one on its own.</div></div></div>`;
+    }
     if (p.type === "robot") return this._robotPop(p);
     if (p.type === "room") return this._roomPop(p);
     if (p.type === "appl") {
@@ -5719,6 +6498,7 @@ ${reset}
     if (o === "plan" || o === "people") o = "live"; // 0.7.4: Plan is gone, 0.8.2: People too (people are in Live)
     if (!this._ovDef(o)) return;
     this._overlay = o;
+    if (this.preview || this._fitHost) EDIT_OV = o;
     this._popup = null;
     this._menu = false;
     this._update(true);
@@ -5749,11 +6529,27 @@ const ED_CSS = `
 .dfe .kord button { border:0; background:transparent; color: var(--primary-color, #03a9f4); cursor:pointer; font-size:12px; }
 .dfe .bigbtn { display:flex; align-items:center; gap:8px; width:100%; justify-content:center; border:1px solid var(--primary-color, #03a9f4); color: var(--primary-color, #03a9f4); background: color-mix(in srgb, var(--primary-color, #03a9f4) 8%, transparent); border-radius:10px; padding:10px; font: inherit; font-weight:500; cursor:pointer; margin: 4px 0 10px; }
 .dfe h4 { margin: 22px 0 4px; font-size: 15px; font-weight: 500; display:flex; align-items:center; gap:8px; }
+.dfe details.csec { margin: 10px 0; border: 1px solid var(--divider-color, rgba(0,0,0,.12)); border-radius: 12px; background: var(--card-background-color, transparent); }
+/* 0.11: anything that opens or closes shows the hand pointer, on the whole line. */
+.dfe summary, .dfe-big summary { cursor:pointer; user-select:none; }
+.dfe details.csec > summary { list-style:none; cursor:pointer; padding: 12px 14px; }
+.dfe details.csec > summary::-webkit-details-marker { display:none; }
+.dfe details.csec > summary h4 { margin:0; font-size:16px; }
+.dfe details.csec > summary h4 .cv { margin-left:auto; transition: transform .15s; }
+.dfe details.csec[open] > summary h4 .cv { transform: rotate(180deg); }
+.dfe details.csec > summary p { margin: 4px 0 0 32px; font-size: 13px; color: var(--secondary-text-color); }
+.dfe details.csec > .csb { padding: 12px 14px 14px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+.dfe details.csec[open] { border-color: var(--primary-color, #03a9f4); }
 .dfe p { margin: 0 0 8px; font-size: 12px; color: var(--secondary-text-color); }
 .dfe input.flt, .dfe select.flt { box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
 .dfe .flts { display:flex; gap:8px; margin-bottom: 6px; }
 .dfe .flts input { flex:1; min-width:0; }
-.dfe .dev, .dfe .row { border-bottom: 1px solid var(--divider-color); }
+.dfe .dev { border-bottom: 1px solid var(--divider-color); }
+/* 0.11: the line under a list row starts where its fields start. */
+.dfe .row { border-bottom: 0; }
+.dfe .row::after { content:""; display:block; border-bottom: 1px solid var(--divider-color); margin: 8px 8px 0; }
+.dfe #chipreset { display:inline-flex; align-items:center; gap:6px; margin: 4px 0 8px; border:0; background:transparent; color: var(--primary-color, #03a9f4); font: inherit; font-size:13px; cursor:pointer; }
+.dfe #chipreset ha-icon { --mdc-icon-size:16px; }
 .dfe .dev > button, .dfe .row > button.hd { width: 100%; display:flex; align-items:center; gap:10px; border:0; background:transparent; color: var(--primary-text-color); font: inherit; font-size: 14px; padding: 9px 4px; cursor:pointer; text-align:left; }
 .dfe .dev > button .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dfe .dev > button .ovs { display:flex; gap:3px; --mdc-icon-size: 16px; color: var(--primary-color); }
@@ -5772,6 +6568,15 @@ const ED_CSS = `
 .dfe .prow-ed { border:1px solid var(--divider-color); border-radius:10px; padding:8px; margin-bottom:8px; }
 .dfe .prow-ed button.del { border:0; background:transparent; color: var(--error-color, #db4437); font: inherit; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:4px; margin-top:4px; --mdc-icon-size:18px; }
 .dfe #people > button.add { margin-bottom: 10px; }
+/* 0.11: your own overlays look like the built-in ones: a framed row with a chevron (content below). */
+.dfe #custom > .row { border: 1px solid var(--divider-color, rgba(0,0,0,.12)); border-radius: 12px; margin: 8px 0; overflow:hidden; }
+.dfe #custom > .row > .hd { width:100%; padding: 12px 14px; }
+.dfe #custom > .row .cv { margin-left:8px; transition: transform .15s; }
+.dfe #custom > .row .cv.up { transform: rotate(180deg); }
+.dfe #custom > .row > .body { padding: 0 14px 12px; }
+/* 0.11: every + Add button keeps clear of the row or line above it (generic). */
+.dfe button.add { margin-top: 12px; }
+.dfe .ftabs button.add { margin-top: 0; }
 .dfe .note { font-size: 12px; color: var(--secondary-text-color); }
 .dfe .sub { margin: 14px 0 10px; padding-left: 4px; }
 .dfe .sub h5 { margin: 0 0 2px; font-size: 14px; font-weight: 500; display:flex; align-items:center; gap:8px; --mdc-icon-size: 18px; }
@@ -5826,6 +6631,15 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big .bg-lh { display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; }
 .dfe-big .bg-q { flex:1; min-width:0; font: inherit; padding:5px 8px; border-radius:8px; border:1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
 .dfe-big h6 { margin:10px 0 4px; font-size:12px; font-weight:500; color: var(--secondary-text-color); }
+.dfe-big details.dgrp { margin: 4px 0; }
+.dfe-big .pr.rad { justify-content:flex-start; gap:8px; cursor:pointer; }
+.dfe-big [hidden], .dfe [hidden] { display:none !important; } /* flex rows ignored the hidden attribute */
+.dfe-big .pr.rad input { margin:0; }
+.dfe-big details.dgrp > summary { list-style:none; display:flex; align-items:center; gap:8px; padding: 8px 4px; font-size:15px; font-weight:600; color: var(--primary-text-color); border-bottom: 1px solid var(--divider-color, rgba(0,0,0,.1)); }
+.dfe-big details.dgrp > summary::-webkit-details-marker { display:none; }
+.dfe-big details.dgrp > summary::before { content:''; width:0; height:0; border-left:6px solid currentColor; border-top:5px solid transparent; border-bottom:5px solid transparent; transition: transform .15s; }
+.dfe-big details.dgrp[open] > summary::before { transform: rotate(90deg); }
+.dfe-big details.dgrp > summary .n { font-weight:500; color: var(--secondary-text-color); }
 .dfe-big .lr { display:flex; align-items:center; gap:6px; padding:2px 4px; border-radius:6px; }
 .dfe-big .lr.sel { background: color-mix(in srgb, var(--primary-color, #03a9f4) 14%, transparent); }
 .dfe-big .lnm { flex:1; text-align:left; border:0; background:transparent; color: inherit; font: inherit; font-size:13px; padding:4px 0; cursor:pointer; }
@@ -5833,6 +6647,8 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big .na { color: var(--secondary-text-color); font-size:11px; }
 .dfe-big .ovsec h5 { margin:12px 0 6px; font-size:14px; font-weight:500; }
 .dfe-big .ovsec .pr { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; padding:4px 0; }
+.dfe-big .ovsec .pr.rad { justify-content:flex-start; cursor:pointer; padding-left:4px; }
+.dfe-big .ovsec .pr.rad span { flex:1; text-align:left; }
 .dfe-big .ovsec select { max-width:60%; font: inherit; padding:4px; border-radius:6px; border:1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
 .dfe-big .ovsec .xs { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; margin:6px 0; }
 .dfe-big .ovsec .xh { width:100%; color: var(--secondary-text-color); font-size:12px; }
@@ -5857,6 +6673,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       return;
     }
     this._config = { ...config };
+    // 0.11: the test builds' "electricity" is "energy" (the card does the same), so the editor lists it too.
+    if (Array.isArray(this._config.overlays) && this._config.overlays.includes("electricity")) this._config.overlays = this._config.overlays.map((o) => (o === "electricity" ? "energy" : o));
+    if (this._config.electricity && !this._config.energy) this._config.energy = this._config.electricity;
+    delete this._config.electricity;
     this._render();
   }
 
@@ -5873,6 +6693,28 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (this._big) {
       this._big.wrap.remove();
       this._big = null;
+    }
+    // 0.11: the large preview belongs to the editor: it closes with it.
+    EDIT_OV = null;
+  }
+
+  /** Switch HA's own preview card (and ours) to the overlay being edited. */
+  _previewOv(o) {
+    const seen = new Set();
+    const walk = (root) => {
+      if (!root || seen.has(root)) return;
+      seen.add(root);
+      for (const el of root.querySelectorAll("*")) {
+        if (el.tagName === "DEVICE-FLOORPLAN-CARD" && el.preview && el._overlay !== o && el._overlays().includes(o)) el._setOverlay(o);
+        if (el.shadowRoot) walk(el.shadowRoot);
+      }
+    };
+    try {
+      let host = this;
+      while (host.getRootNode && host.getRootNode() !== document) host = host.getRootNode().host || document;
+      walk(host.shadowRoot || host);
+    } catch (_e) {
+      /* the preview just keeps its overlay */
     }
   }
 
@@ -6027,7 +6869,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   _ovOptions() {
-    return [...[...OVERLAY_ORDER, "cleaning"].map((o) => ({ value: o, label: OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
+    return [...[...OVERLAY_ORDER, "energy", "cleaning"].map((o) => ({ value: o, label: NEW_OVERLAYS.includes(o) ? `${OVERLAYS[o].label} ✨ new` : OVERLAYS[o].label })), ...this._custom().map((c) => ({ value: c.id, label: c.name || "Custom" }))];
   }
 
   /** The editor's settings forms, in display order (#70). */
@@ -6063,8 +6905,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           { name: "frame_mode", selector: { select: { options: [{ value: "plan", label: "The plan's default (set in the Floorplan Editor)" }, { value: "custom", label: "Custom for this card" }], mode: "dropdown" } } },
           ...(custom ? [{ name: "frame_linked", selector: { boolean: {} } }, ...(f.linked === false ? ["t", "r", "b", "l"].map((k) => ({ name: `frame_${k}`, selector: num })) : [{ name: "frame_all", selector: num }])] : []),
           { name: "plan_position", selector: { select: { options: [{ value: "top", label: "Top (space left below)" }, { value: "centre", label: "Centred" }], mode: "dropdown" } } },
-          { name: "preview_size", selector: { select: { options: [...PREVIEW_SIZES.map((p) => ({ value: p.id, label: `${p.label} (${p.w} × ${p.h})` })), { value: "custom", label: "Custom" }], mode: "dropdown" } } },
-          ...(this._pv === "custom" ? [{ name: "preview_w", selector: { number: { min: 300, max: 3840, step: 10, mode: "box", unit_of_measurement: "px" } } }, { name: "preview_h", selector: { number: { min: 300, max: 2160, step: 10, mode: "box", unit_of_measurement: "px" } } }] : []),
         ];
       })(),
       overlaysA: [
@@ -6107,6 +6947,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           ],
         },
         { type: "expandable", name: "health", title: "Health", icon: OVERLAYS.health.icon, schema: [{ name: "low", selector: { number: { min: 5, max: 60, step: 5, mode: "slider", unit_of_measurement: "%" } } }, { name: "only_problems", selector: { boolean: {} } }] },
+        { type: "expandable", name: "energy", title: "Energy", icon: OVERLAYS.energy.icon, schema: [
+          { name: "min_w", selector: { number: { min: 0, max: 200, step: "any", mode: "box", unit_of_measurement: "W" } } },
+          { name: "flow", selector: { boolean: {} } },
+        ] },
         { type: "expandable", name: "cleaning", title: "Cleaning", icon: OVERLAYS.cleaning.icon, schema: [{ name: "opacity", selector: { number: { min: 15, max: 100, step: 5, mode: "slider", unit_of_measurement: "%" } } }] },
       ],
       look: [
@@ -6114,12 +6958,21 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           type: "expandable", name: "look", title: "Look", icon: "mdi:palette-outline",
           schema: [
             { name: "size", selector: { number: { min: 24, max: 56, step: 2, mode: "slider", unit_of_measurement: "px" } } },
-            { name: "markers", selector: { select: { options: [{ value: "icon_text", label: "Icon and text (values next to icons)" }, { value: "icon", label: "Icon only" }], mode: "dropdown" } } },
-            { name: "chips", selector: { select: { options: [{ value: "dark", label: "Dark glass" }, { value: "light", label: "Light" }, { value: "auto", label: "Follow the theme" }], mode: "dropdown" } } },
+            { name: "markers", selector: { select: { options: [{ value: "icon_text", label: "Icon and value (e.g. 45 % next to a shutter)" }, { value: "icon", label: "Icon only" }], mode: "dropdown" } } },
             { name: "names", selector: { select: { options: [{ value: "hover", label: "On hover" }, { value: "always", label: "Always" }, { value: "off", label: "Off" }], mode: "dropdown" } } },
-            { name: "show_title", selector: { boolean: {} } },
           ],
         },
+        {
+          type: "expandable", name: "look", title: "Info chips (temperatures, AC, battery, energy…)", icon: "mdi:card-text-outline",
+          schema: [
+            { name: "chips", selector: { select: { options: [{ value: "dark", label: "Dark glass (default)" }, { value: "light", label: "Light" }, { value: "auto", label: "Follow the theme" }, { value: "custom", label: "Custom colour" }], mode: "dropdown" } } },
+            ...((this._config.look || {}).chips === "custom" ? [{ name: "chip_color", selector: { color_rgb: {} } }] : []),
+            { name: "chip_bg", selector: { select: { options: [{ value: "solid", label: "Solid" }, { value: "normal", label: "Normal (default)" }, { value: "light", label: "Light" }, { value: "clear", label: "See-through" }], mode: "dropdown" } } },
+            { name: "chip_size", selector: { select: { options: [{ value: "s", label: "Small" }, { value: "m", label: "Normal (default)" }, { value: "l", label: "Large" }, { value: "xl", label: "Extra large" }], mode: "dropdown" } } },
+          ],
+        },
+      ],
+      tap: [
         { type: "expandable", name: "tap", title: "Tap behaviour (hold always opens the details)", icon: "mdi:gesture-tap", schema: Object.keys(TAP_KINDS).map((name) => ({ name, selector: { select: { options: TAP_OPTIONS, mode: "dropdown" } } })) },
       ],
     };
@@ -6127,16 +6980,21 @@ class DeviceFloorplanCardEditor extends HTMLElement {
 
   _label(s) {
     const L = {
-      plan: "Plan", title: "Title (optional)", overlays: "Which buttons, in which order (drag to reorder)", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", preview_size: "Preview size (Preview button below)", preview_w: "Width", preview_h: "Height", layers_button: "Layers button (viewers switch room names and other layers)",
+      plan: "Plan", title: "Title on the card (optional, empty = none)", overlays: "Which buttons, in which order (drag to reorder). New overlays from updates appear here, marked ✨", default_overlay: "Overlay when the card opens",
+      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers)",
       lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
+      chip_bg: "Background",
+      chip_size: "Size (separate from the marker size)",
+      chip_color: "Colour",
+      min_w: "Now: show devices from (W)",
+      flow: "Flow lines shown by default (viewers can switch them under Layers)",
       show_quiet: "All sensors by default, also closed / idle (viewers can switch it under Layers)", cameras: "Show cameras",
       connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", wifi_links: "Draw Wi-Fi / LAN links to the router / access point (needs router device tracking)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
       low: "Battery is low below", only_problems: "Only low batteries and offline devices",
-      show_title: "Show the title on the card", size: "Marker size", markers: "Markers on the plan", chips: "Reading chips", names: "Device names", card_id: "Card ID (lets other cards switch this card's overlay)",
+      size: "Marker size", markers: "Values next to marker icons (overlays that show values)", chips: "Style", names: "Device names", card_id: "Card ID (lets other cards switch this card's overlay)",
       hide_admin_hint: "Hide the “N new · Place them” button (admins only see it)",
       ...TAP_KINDS,
     };
@@ -6166,9 +7024,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       frame_linked: (c.frame || {}).linked !== false,
       frame_all: Number((c.frame || {}).t) || 0,
       ...Object.fromEntries(["t", "r", "b", "l"].map((k) => [`frame_${k}`, Number((c.frame || {})[k]) || 0])),
-      preview_size: this._pv || "wall",
-      preview_w: (this._pvc || {}).w || 1280,
-      preview_h: (this._pvc || {}).h || 800,
       layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "top-right"),
       live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
@@ -6176,9 +7031,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       security: { show_quiet: false, quiet_small: true, cameras: true, ...(c.security || {}) },
       network: { connections: ["all"], layers: true, links: true, min_lqi: 0, hub_links: true, wifi_links: true, legend: true, labels: false, only_weak: false, ...(c.network || {}) },
       health: { low: 20, only_problems: false, ...(c.health || {}) },
+      energy: { min_w: 0, flow: true, ...(c.energy || {}) }, // 0.11: the editor shows the values in use
       cleaning: { opacity: 60, ...(c.cleaning || {}) },
       tap: { ...TAP_DEFAULT, ...(c.tap || {}) },
-      look: { size: 34, chips: "dark", names: c.names || "hover", markers: look.markers || (look.values === false || c.show_states === false ? "icon" : "icon_text"), ...look, show_title: look.title !== false },
+      look: { size: 34, chips: "dark", chip_bg: "normal", chip_size: "m", names: c.names || "hover", markers: look.markers || (look.values === false || c.show_states === false ? "icon" : "icon_text"), ...look },
       overlay_names: { ...(c.overlay_names || {}) },
       night: { ...NIGHT_DEFAULT, ...(c.night || {}) },
     };
@@ -6194,17 +7050,14 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (!out.hide_admin_hint) delete out.hide_admin_hint;
     if (out.look) {
       out.look = { ...out.look };
-      if ("show_title" in out.look) {
-        if (out.look.show_title === false) out.look.title = false;
-        else delete out.look.title;
-        delete out.look.show_title;
-      }
+      delete out.look.show_title; // 0.11: a title shows when there is one
+      delete out.look.title;
       delete out.look.dock; // moved to buttons
       delete out.look.values; // replaced by look.markers
     }
     if (Array.isArray(out.people) && !out.people.length) delete out.people;
     if (Array.isArray(out.people_in) && !out.people_in.length) delete out.people_in;
-    for (const k of ["live", "lights", "comfort", "security", "network", "health", "cleaning", "tap", "look", "overlay_names", "rooms", "buttons", "night"]) {
+    for (const k of ["live", "lights", "comfort", "security", "network", "health", "energy", "cleaning", "tap", "look", "overlay_names", "rooms", "buttons", "night"]) {
       if (!out[k]) continue;
       const v = {};
       const d0 = k === "rooms" ? { show_in: ["live"], style: "label", size: "m" } : k === "buttons" ? { position: "bottom", style: "labels" } : defaults[k] || {};
@@ -6231,6 +7084,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (!this._built) {
       this._built = true;
       const sec = (icon, title, p, inner) => `<h4><ha-icon icon="${icon}"></ha-icon>${title}</h4>${p ? `<p>${p}</p>` : ""}${inner}`;
+      // 0.11: card settings as clear sections: title + one line; one open at a time.
+      const csec = (icon, title, p, inner) => `<details class="csec"><summary><h4><ha-icon icon="${icon}"></ha-icon>${title}<ha-icon class="cv" icon="mdi:chevron-down"></ha-icon></h4>${p ? `<p>${p}</p>` : ""}</summary><div class="csb">${inner}</div></details>`;
       // 0.8.1: per floor first (Markers, Rooms), then the settings for the whole card (all floors).
       this.innerHTML = `<style>${ED_CSS}</style><div class="dfe">
         <h3 class="grp"><ha-icon icon="mdi:office-building-outline"></ha-icon>Per floor <small>(Markers and Rooms of the floor picked in the tabs)</small></h3>
@@ -6241,17 +7096,22 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
         <div id="fopts"></div>
         <div data-form="general"></div>
-        ${sec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions on every floor</h5><p>Your own buttons under the plan, shown in one overlay (buttons for one floor are in the floor menu above): run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
-        ${sec("mdi:layers-outline", "Overlays", "What each overlay shows.", `<div data-form="overlaysA"></div>
+        ${csec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions on every floor</h5><p>Your own buttons under the plan, shown in one overlay (buttons for one floor are in the floor menu above): run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
+        ${csec("mdi:layers-outline", "Overlays", "Your own overlays first, then what each overlay shows.", `<div class="sub"><h5><ha-icon icon="mdi:layers-plus"></ha-icon>Your own overlays</h5><p>Overlay buttons of your own, e.g. “Downstairs lights” or “Plants”: pick the kinds of devices it shows; add single devices in Edit markers.</p><div id="custom"></div></div><div data-form="overlaysA"></div>
           <div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes on every floor</h5><p>Buttons in the Lights overlay (scenes for one floor are in the floor menu above). Stored in this card only, nothing is created in Home Assistant.</p><div id="scenes"></div></div>
-          <div data-form="overlaysB"></div>
-          <div class="sub"><h5><ha-icon icon="mdi:layers-plus"></ha-icon>Custom overlays</h5><p>Your own overlay buttons, e.g. “Downstairs lights” or “Plants”: pick the kinds of devices it shows, and add single devices in the device list below.</p><div id="custom"></div></div>`)}
-        ${sec("mdi:texture-box", "Rooms", "How Room names look on the plan, and in which overlays they show by default.", `<div id="roomsg"></div>`)}
-        ${sec("mdi:account-group-outline", "People", "Each person at the room pin of the room they are in. Room sensor: any entity whose state is a room (Bermuda, ESPresense, a template sensor…); sensor 2 is used when 1 is unknown or not a room on this plan.", `<div id="people"></div>`)}
-        ${sec("mdi:weather-night", "Day & night", "", `<p id="nightnote"></p><div id="night"></div>`)}
-        ${sec("mdi:tune-variant", "Look and tap behaviour", "", `<div data-form="look"></div>`)}
-        ${sec("mdi:border-outside", "Frame and preview", "Space around the plan (+) or trimmed margin (−), % of the image: markers and Rooms never move. Then see the card at a real screen size.", `<div data-form="frame"></div><button class="bigbtn" id="pvbtn"><ha-icon icon="mdi:monitor-screenshot"></ha-icon><span>Preview</span></button>`)}
+          <div data-form="overlaysB"></div>`)}
+        ${csec("mdi:texture-box", "Rooms", "How Room names look on the plan, and in which overlays they show by default.", `<div id="roomsg"></div>`)}
+        ${csec("mdi:account-group-outline", "People", "Each person at the room pin of the room they are in. Room sensor: any entity whose state is a room (Bermuda, ESPresense, a template sensor…); sensor 2 is used when 1 is unknown or not a room on this plan.", `<div id="people"></div>`)}
+        ${csec("mdi:weather-night", "Day & night", "", `<p id="nightnote"></p><div id="night"></div>`)}
+        ${csec("mdi:tune-variant", "Look and tap behaviour", "", `<div data-form="look"></div><button class="lk" id="chipreset"><ha-icon icon="mdi:restore"></ha-icon>Reset Info chips</button><div data-form="tap"></div>`)}
+        ${csec("mdi:border-outside", "Frame", "Space around the plan (+) or trimmed margin (−), % of the image: markers and Rooms never move.", `<div data-form="frame"></div>`)}
       </div>`;
+      // One card-settings section open at a time; the opened one scrolls to the top.
+      for (const d of this.querySelectorAll("details.csec")) d.addEventListener("toggle", () => {
+        if (!d.open) return;
+        for (const o of this.querySelectorAll("details.csec")) if (o !== d) o.open = false;
+        d.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
       this._forms = {};
       for (const box of this.querySelectorAll("[data-form]")) {
         const key = box.dataset.form;
@@ -6265,7 +7125,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._forms[key] = f;
       }
       this.querySelector("#bigbtn").addEventListener("click", () => this._openBig());
-      this.querySelector("#pvbtn").addEventListener("click", () => this._openPreview());
+      // 0.11: chips back to the defaults in one click.
+      this.querySelector("#chipreset").addEventListener("click", () => {
+        const look = { ...(this._config.look || {}) };
+        for (const k of ["chips", "chip_bg", "chip_size", "chip_color", "chip_opacity", "chip_text"]) delete look[k];
+        this._config = { ...this._config, look };
+        if (!Object.keys(look).length) delete this._config.look;
+        this._emit();
+        this._engine(true);
+      });
     }
     this._engine(true);
     this._renderFloors();
@@ -6284,13 +7152,17 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   _fromForm(key, v) {
+    // 0.11: the large preview shows the overlay you are changing (chips: Comfort has the most).
+    const follow = { look: "comfort", live: "live", lights: "lights", comfort: "comfort", security: "security", network: "network", health: "health", energy: "energy", cleaning: "cleaning" }[key];
+    if (follow) {
+      EDIT_OV = follow;
+      this._previewOv(follow);
+    }
     const schema = this._schemas()[key] || [];
     const c = { ...this._config };
     for (const k of this._keysOf(schema)) if (k in v) c[k] = v[k];
     if (key === "frame") {
       for (const k of this._keysOf(schema)) delete c[k];
-      this._pv = v.preview_size || "wall";
-      this._pvc = { w: Number(v.preview_w) || 1280, h: Number(v.preview_h) || 800 };
       if (v.plan_position === "centre") c.plan_position = "centre";
       else delete c.plan_position;
       if (v.frame_mode !== "custom") delete c.frame;
@@ -6345,33 +7217,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (key !== skip) f.data = data;
       else f.data = { ...data }; // same values: ha-form keeps the field and its focus
     }
-  }
-
-  /** 0.8.2: the card as it will look on a real screen (wall panel, tablet…), scaled to fit this window. */
-  _openPreview() {
-    const size = this._pv === "custom" ? { label: "Custom", ...(this._pvc || { w: 1280, h: 800 }) } : PREVIEW_SIZES.find((p) => p.id === (this._pv || "wall")) || PREVIEW_SIZES[0];
-    const wrap = document.createElement("div");
-    wrap.className = "dfc-preview";
-    const k = Math.min(1, (window.innerWidth * 0.92) / size.w, (window.innerHeight * 0.82) / size.h);
-    wrap.innerHTML = `<style>
-      .dfc-preview { position:fixed; inset:0; z-index:10000; background: rgba(0,0,0,.6); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; font-family: var(--paper-font-body1_-_font-family, sans-serif); }
-      .dfc-preview .bar { color:#fff; display:flex; gap:12px; align-items:center; font-size:14px; }
-      .dfc-preview .bar button { border:0; border-radius:16px; padding:6px 14px; cursor:pointer; font: inherit; }
-      .dfc-preview .scr { width:${size.w * k}px; height:${size.h * k}px; overflow:hidden; border-radius:10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: var(--primary-background-color, #fafafa); }
-      .dfc-preview .in { width:${size.w}px; height:${size.h}px; transform: scale(${k}); transform-origin: 0 0; padding: 8px; box-sizing:border-box; }
-    </style><div class="bar"><b>${size.label}</b><span>${size.w} × ${size.h} px${k < 1 ? ` · shown at ${Math.round(k * 100)} %` : ""}</span><button>Close</button></div><div class="scr"><div class="in"></div></div>`;
-    const card = document.createElement("device-floorplan-card");
-    card.setConfig(this._config);
-    card.style.height = "100%";
-    card._fitHost = true; // a fixed screen: the plan fits the card's free area
-    wrap.querySelector(".in").appendChild(card);
-    card.hass = this._hass;
-    const close = () => wrap.remove();
-    wrap.querySelector(".bar button").addEventListener("click", close);
-    wrap.addEventListener("click", (e) => {
-      if (e.target === wrap) close();
-    });
-    document.body.appendChild(wrap);
   }
 
   _renderSections() {
@@ -6497,7 +7342,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const box = this.querySelector("#custom");
     if (!box) return;
     const list = this._custom();
-    box.innerHTML = list.map((o, i) => `<div class="row" data-i="${i}"><button class="hd" data-copen="${i}"><ha-icon icon="${cesc(o.icon || "mdi:layers-outline")}"></ha-icon>${cesc(o.name || "Custom")}<small style="margin-left:auto">${cesc(o.id)}</small></button>${this._copen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-cadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add overlay</button>`;
+    box.innerHTML = list.map((o, i) => `<div class="row" data-i="${i}"><button class="hd" data-copen="${i}"><ha-icon icon="${cesc(o.icon || "mdi:layers-outline")}"></ha-icon>${cesc(o.name || "Custom")}<small style="margin-left:auto">${cesc(o.mode === "manual" ? "devices you add" : `${(o.kinds || []).length} kind${(o.kinds || []).length === 1 ? "" : "s"}`)}</small><ha-icon class="cv ${this._copen === i ? "up" : ""}" icon="mdi:chevron-down"></ha-icon></button>${this._copen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-cadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add overlay</button>`;
     box.querySelector("[data-cadd]").addEventListener("click", () => {
       const used = new Set([...list.map((o) => o.id), ...OVERLAY_ORDER]);
       let n = 1;
@@ -7149,20 +7994,55 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const p0 = per();
       const auto = eng._autoReads(item, ov);
       const extras = Array.isArray(p0.extras) ? p0.extras : null;
-      const shownX = extras || auto;
-      const opt = (e, sel) => `<option value="${cesc(e)}" ${sel === e ? "selected" : ""}>${cesc(this._entName(e))}</option>`;
-      const leadSel = cands.length > 1 ? `<label class="pr"><span>Leads in ${cesc(ovLabel)}</span><select data-k="lead"><option value="">Automatic</option>${cands.map((e) => opt(e, p0.lead)).join("")}</select></label>` : "";
+      // 0.11: a camera in Live shows its picture: readings sit on the picture (no label / badge), and the
+      // camera itself is no reading.
+      const camE = ov === "live" && this._engine()._camOf(item); // current settings (a lead just picked counts)
+      const noCam = (e) => !(camE && domainOf(e) === "camera");
+      const shownX = (extras || auto).filter(noCam);
+      const leadSel = cands.length > 1 ? `<div class="leadf"></div>` : ""; // 0.11: HA's entity picker (search, full names)
       const xics = p0.extra_icons || {};
-      const xRows = shownX.map((e) => `<span class="xchip ${p0.badge === e ? "isb" : ""}"><button class="xic" data-xic="${cesc(e)}" title="Icon for this line">${xics[e] ? `<ha-icon icon="${cesc(xics[e])}"></ha-icon>` : `<ha-state-icon data-xent="${cesc(e)}"></ha-state-icon>`}</button>${cesc(this._entName(e))}<span class="lbsw" role="group" aria-label="Show as"><button class="${p0.badge === e ? "" : "on"}" data-xbdg="${cesc(e)}" data-to="label" title="A line next to the marker">Label</button><button class="${p0.badge === e ? "on" : ""}" data-xbdg="${cesc(e)}" data-to="badge" title="A small badge on the marker's icon">Badge</button></span>${extras ? `<button data-xdel="${cesc(e)}" title="Remove">✕</button>` : ""}</span>`).join("");
-      const left = cands.filter((e) => !shownX.includes(e) && e !== p0.lead);
-      sec.innerHTML = `<h5>In ${cesc(ovLabel)}</h5>${leadSel}
-        <label class="pr"><span>Show an icon</span><input type="checkbox" data-k="noicon" ${p0.noicon ? "" : "checked"}></label>
-        <div class="xs"><span class="xh">Also show${extras ? "" : auto.length ? " <small>(automatic)</small>" : ""} <small>(as a label or badge)</small></span>${xRows || `<small class="none">nothing</small>`}
-        ${left.length ? `<select data-k="xadd"><option value="">+ Add a reading…</option>${left.map((e) => opt(e, null)).join("")}</select>` : ""}
+      const xRows = shownX.map((e) => `<span class="xchip ${p0.badge === e ? "isb" : ""}"><button class="xic" data-xic="${cesc(e)}" title="Icon for this line">${xics[e] ? `<ha-icon icon="${cesc(xics[e])}"></ha-icon>` : `<ha-state-icon data-xent="${cesc(e)}"></ha-state-icon>`}</button>${cesc(this._entName(e))}${camE ? "" : `<span class="lbsw" role="group" aria-label="Show as"><button class="${p0.badge === e ? "" : "on"}" data-xbdg="${cesc(e)}" data-to="label" title="A line next to the marker">Label</button><button class="${p0.badge === e ? "on" : ""}" data-xbdg="${cesc(e)}" data-to="badge" title="A small badge on the marker's icon">Badge</button></span>`}${extras ? `<button data-xdel="${cesc(e)}" title="Remove">✕</button>` : ""}</span>`).join("");
+      const left = cands.filter((e) => !shownX.includes(e) && e !== p0.lead && noCam(e));
+      const shows = eng._qualifies(item, ov, a);
+      // 0.11: only settings that do something: none when the overlay doesn't show the device; a camera in Live
+      // shows its picture, so no icon / label / badge for it.
+      const full = shows && !camE;
+      sec.innerHTML = `<h5>In ${cesc(ovLabel)}</h5>${shows ? "" : `<p class="none">${cesc(ovLabel)} doesn't show this device.${ov === "live" || (eng._ovDef(ov) || {}).custom ? " Switch it on under <b>Shows in</b> below to add it." : ""}</p>`}${shows ? leadSel : ""}<div class="when"></div>
+        <label class="pr" ${full ? "" : "hidden"}><span>Show an icon</span><input type="checkbox" data-k="noicon" ${p0.noicon ? "" : "checked"}></label>
+        <div class="xs" ${shows ? "" : "hidden"}><span class="xh">Also show${extras ? "" : auto.length ? " <small>(automatic)</small>" : ""} <small>(${camE ? "on the picture" : "as a label or badge"})</small></span>${xRows || `<small class="none">nothing</small>`}
+        ${camE && shownX.length >= 2 ? `<small class="none">2 at most on the picture</small>` : left.length ? `<div class="xaddf"></div>` : ""}
         ${extras ? `<button class="lnk" data-xauto="1">Back to automatic</button>` : ""}</div>`;
       for (const el of sec.querySelectorAll("[data-xent]")) {
         el.hass = this._hass;
         el.stateObj = this._hass.states[el.dataset.xent];
+      }
+      // 0.11: "Show in Live when…" (any device; cameras pick their own motion / ring sensor by themselves).
+      if (ov === "live" && shows) {
+        const wbox = sec.querySelector(".when");
+        const pops = !camE || (p0.popup !== "off" && p0.popup !== false);
+        // 0.11: a camera: one choice. Then the trigger: event-type sensors first, "Show all entities" for the rest.
+        if (camE) {
+          wbox.insertAdjacentHTML("beforeend", `<div class="pr"><span>Show the picture</span></div><label class="pr rad"><input type="radio" name="cpop_${cesc(id)}" value="1" ${pops ? "checked" : ""}><span>When something happens</span></label><label class="pr rad"><input type="radio" name="cpop_${cesc(id)}" value="0" ${pops ? "" : "checked"}><span>Only with Layers → Cameras</span></label>`);
+          for (const r of wbox.querySelectorAll("input[type=radio]")) r.addEventListener("change", () => {
+            this._savePer(id, "live", { popup: r.value === "1" ? "" : "off" });
+            done();
+          });
+        }
+        if (pops) {
+          const autoT = !p0.when ? this._engine()._liveWhen(item) : null;
+          const all = this._whenAll || (p0.when && !/^(binary_sensor|event|input_boolean)\./.test(p0.when));
+          const sel = all ? { entity: {} } : { entity: { filter: [{ domain: "binary_sensor" }, { domain: "event" }, { domain: "input_boolean" }] } };
+          const lbl = `${camE ? "Triggered by" : "Show in Live when"}… (empty = ${autoT ? `automatic: ${this._entName(autoT)}` : camE ? "nothing: no sensor of its own" : "while it's on"})`;
+          wbox.appendChild(this._form([{ name: "when", selector: sel }], { when: p0.when || "" }, { when: lbl }, (v) => {
+            this._savePer(id, "live", { when: v.when || "" });
+            done();
+          }));
+          wbox.insertAdjacentHTML("beforeend", `<button class="lnk" data-whenall="1">${all ? "Show only motion, door, ring and similar sensors" : "Show all entities"}</button>`);
+          wbox.querySelector("[data-whenall]").addEventListener("click", () => {
+            this._whenAll = !all;
+            done();
+          });
+        }
       }
       const ni = sec.querySelector('[data-k="noicon"]');
       ni.addEventListener("change", () => {
@@ -7190,18 +8070,19 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         }));
         sec.querySelector(".xs").after(box);
       });
-      const leadEl = sec.querySelector('[data-k="lead"]');
-      if (leadEl) leadEl.addEventListener("change", () => {
+      const leadBox = sec.querySelector(".leadf");
+      if (leadBox) leadBox.appendChild(this._form([{ name: "lead", selector: { entity: { include_entities: cands } } }], { lead: p0.lead || "" }, { lead: `Leads in ${ovLabel} (empty = automatic)` }, (v) => {
         const x0 = per().extras;
-        this._savePer(id, ov, { lead: leadEl.value, ...(Array.isArray(x0) ? { extras: x0.filter((e) => e !== leadEl.value) } : {}) });
+        const lead = v.lead || "";
+        this._savePer(id, ov, { lead, ...(Array.isArray(x0) ? { extras: x0.filter((e) => e !== lead) } : {}) });
         done();
-      });
-      const addEl = sec.querySelector('[data-k="xadd"]');
-      if (addEl) addEl.addEventListener("change", () => {
-        if (!addEl.value) return;
-        this._savePer(id, ov, { extras: [...shownX, addEl.value] });
+      }));
+      const addBox = sec.querySelector(".xaddf");
+      if (addBox) addBox.appendChild(this._form([{ name: "xadd", selector: { entity: { include_entities: left } } }], { xadd: "" }, { xadd: "+ Add a reading" }, (v) => {
+        if (!v.xadd) return;
+        this._savePer(id, ov, { extras: [...shownX, v.xadd] });
         done();
-      });
+      }));
       for (const b of sec.querySelectorAll("[data-xdel]")) b.addEventListener("click", () => {
         this._savePer(id, ov, { extras: shownX.filter((e) => e !== b.dataset.xdel) });
         done();
@@ -7230,7 +8111,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const tsrc = robot ? dev() : { ...dev(), ...p0 };
       const tcur = (robot ? dev().tap : p0.tap || dev().tap) || "default";
       const topts = robot ? [{ value: "default", label: "Robot panel" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "Default for its kind" }, ...TAP_OPTIONS];
-      const tschema = [{ name: "icon", selector: { icon: {} } }, { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
+      const tschema = [...(ov === "live" && eng._camOf(item) ? [] : [{ name: "icon", selector: { icon: {} } }]), { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
       if (tcur === "navigate") tschema.push({ name: "nav", selector: { navigation: {} } });
       if (tcur === "popup") tschema.push({ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } });
       body.appendChild(this._form(tschema, { icon: p0.icon || dev().icon || "", tap: tcur, nav: tsrc.nav || "", popup_title: tsrc.popup_title || "", popup_card: tsrc.popup_card }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: robot ? "Tap (on every overlay)" : item.bond || item.phantom ? `Tap in ${ovLabel} (bonds and phantoms open their info card)` : `Tap in ${ovLabel}`, nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
@@ -7296,7 +8177,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       eng._ignoreAdded = false;
       const offlineOnly = o === "health" && q && eng._specsFor(item, o, true).every((x) => x.offlineOnly);
       if (q) rows.push({ o, def, mode: "hide", on: !eng._hidden(item, o), note: offlineOnly ? "only when offline" : "" });
-      else if (def.custom) rows.push({ o, def, mode: "add", on: eng._added(item, o) });
+      else if (def.custom || o === "live") rows.push({ o, def, mode: "add", on: eng._added(item, o) }); // 0.11: Live is open too
     }
     shows.innerHTML = `<h5>Shows in</h5>${rows.length ? rows.map((r) => `<div class="sw"><span><ha-icon icon="${cesc(r.def.icon)}"></ha-icon>${cesc(r.def.label)}${r.mode === "add" ? " <small>(added by you)</small>" : r.note ? ` <small>(${cesc(r.note)})</small>` : ""}</span><ha-switch data-sw="${cesc(r.o)}" data-mode="${r.mode}"></ha-switch></div>`).join("") : `<p>This device doesn't appear in any overlay on this card.</p>`}`;
     rows.forEach((r) => {
@@ -7429,12 +8310,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         const closeBtn = (it) => (sel === it.id ? `<button class="bg-c2" data-unpick="1" aria-label="Close">✕</button>` : "");
         const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}${hideBtn(it)}${closeBtn(it)}</div>`;
         const custom = def && def.custom;
-        box.innerHTML = (rows.hidden.length ? `<h6>Hidden here (${rows.hidden.length})</h6>${rows.hidden.map((it) => row(it, `<button class="lb" data-show="${cesc(it.id)}">↩ Show</button>`)).join("")}` : "")
-          + (rows.on.length ? `<h6>On this overlay (${rows.on.length})</h6>${rows.on.map((it) => row(it, "")).join("")}` : "")
-          + (rows.off.length ? (custom || ql
-            ? `<h6>Not in this overlay (${rows.off.length})</h6>${rows.off.map((it) => row(it, custom ? `<button class="lb" data-add="${cesc(it.id)}">+ Add</button>` : `<small class="na">not for ${cesc(def ? def.label : "")}</small>`)).join("")}`
-            : `<details><summary><h6 style="display:inline">Not for ${cesc(def ? def.label : "")} (${rows.off.length})</h6></summary>${rows.off.map((it) => row(it, "")).join("")}</details>`) : "")
+        // 0.11: three groups, one style: arrow, bold title with count, collapsible (remembered while editing).
+        const lbl = def ? def.label : "";
+        const og = (this._grpOpen = this._grpOpen || { on: true, hidden: true, off: false });
+        const grp = (k, title, list, btn) => (list.length ? `<details class="dgrp" data-g="${k}" ${og[k] || ql || list.some((it) => it.id === sel) ? "open" : ""}><summary>${cesc(title)} <span class="n">${list.length}</span></summary>${list.map((it) => row(it, btn(it))).join("")}</details>` : "");
+        box.innerHTML = grp("on", `On ${lbl}`, rows.on, () => "")
+          + grp("hidden", `Hidden in ${lbl}`, rows.hidden, (it) => `<button class="lb" data-show="${cesc(it.id)}">↩ Show</button>`)
+          + grp("off", `Not shown in ${lbl}`, rows.off, (it) => (custom ? `<button class="lb" data-add="${cesc(it.id)}">+ Add</button>` : ""))
           + `<p class="bg-hint" style="margin-top:10px">Devices that aren't on the plan yet: place them in the Floorplan Editor first.</p>`;
+        for (const d of box.querySelectorAll("details.dgrp")) d.addEventListener("toggle", () => (this._grpOpen[d.dataset.g] = d.open));
         for (const b of box.querySelectorAll("[data-pick]")) b.addEventListener("click", () => render(b.dataset.pick === sel ? null : b.dataset.pick));
         for (const b of box.querySelectorAll("[data-unpick]")) b.addEventListener("click", () => render(null));
         for (const b of box.querySelectorAll("[data-hide]")) b.addEventListener("click", () => {
@@ -7616,8 +8500,13 @@ class DeviceFloorplanChip extends HTMLElement {
     if (c.entity && h.states[c.entity]) {
       const grp = h.states[c.entity].attributes.entity_id;
       if (!Array.isArray(grp) || !grp.length || c.count === false) return null;
-      const all = grp.flatMap((e) => (h.states[e] && Array.isArray(h.states[e].attributes.entity_id) ? h.states[e].attributes.entity_id : [e]));
-      return { n: all.filter(isOn).length, total: all.length, word: wordOf(all) };
+      // 0.11: count the group's own members, as Home Assistant does (a nested group is one);
+      // entities of one bond (e.g. 3 bulbs in one lamp) count as one, like on the plan.
+      const all = grp;
+      const bondOf = {};
+      for (const sen of planSensors(h)) for (const [bid, bd] of Object.entries(sen.attributes.bonds || {})) for (const e of bd.entities || []) bondOf[e] = `${sen.attributes.plan_id}:${bid}`;
+      const units = [...all.reduce((m, e) => m.set(bondOf[e] || e, [...(m.get(bondOf[e] || e) || []), e]), new Map()).values()];
+      return { n: units.filter((u) => u.some(isOn)).length, total: units.length, word: wordOf(all) };
     }
     const b = this._bond();
     if (b) {

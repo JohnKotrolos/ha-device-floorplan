@@ -912,8 +912,12 @@ def build_plan_payload(
         devices[key] = item
 
     areas: dict[str, Any] = {}
+    energy_points: dict[str, Any] = {}  # 0.11: "__energy_panel" / "__energy_source", placed in the Editor
     hidden_rooms = set(plan.get("hidden_rooms") or [])
     for area_id, pos in plan.get("anchors", {}).items():
+        if area_id.startswith("__energy_"):
+            energy_points[area_id[9:]] = {"x": pos["x"], "y": pos["y"]}
+            continue
         if area_id in hidden_rooms:
             continue
         area = area_reg.async_get_area(area_id)
@@ -1011,6 +1015,7 @@ def build_plan_payload(
         "zigbee_devices": zigbee,
         "aps": aps,
         "areas": areas,
+        "energy_points": energy_points,
         "robots": _robots(hass, plan),
         # A copy: the plan's dict changes in place, and HA only writes a state whose attributes changed.
         "cleaned": {k: dict(v) for k, v in (plan.get("cleaned") or {}).items()},

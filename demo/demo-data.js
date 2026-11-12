@@ -70,7 +70,7 @@ export function makeInitial(){
  thermo('hall_therm','Hallway thermometer','hallway',null,22.1,47);
  add('bath_switch','Bathroom light switch','bathroom','network','plugs_switches',{'light.bathroom_light':{name:'Bathroom ceiling light',state:'off',attrs:{icon:'mdi:light-switch',brightness:0,supported_color_modes:['onoff'],supported_features:0}}},null,{manufacturer:'Shelly',model:'Wi-Fi relay · light channel'});
  state('sun.sun','Sun','above_horizon',{elevation:35});
- const plan={id:'demo_apartment',name:'Demo apartment',kind:'floor',floor_id:'demo_floor',level:0,image_type:'top',image_url:STATIC+'/templates/apartment-two-bedroom.webp',image_fallback_url:null,image_source:'upload',width:1367,height:806,positions,anchors:{kitchen:{x:30.5,y:22},living_room:{x:28,y:79},hallway:{x:53,y:72},bathroom:{x:52.2,y:31},bedroom:{x:79.4,y:48},bedroom_2:{x:79.3,y:77}},refs:clone(TABLE_REFERENCES),hidden_rooms:[],sort:0,bonds:{living_lights:['living_bulb_1','living_bulb_2','living_bulb_3']},bond_meta:{living_lights:{name:'Living room lights'}},phantoms:{open_plan_temperature:{name:'Kitchen & Living room',x:41.1,y:47.2,members:['kitchen_therm','living_therm'],value:'average',uses:{kitchen_therm:['sensor.kitchen_therm_temperature','sensor.kitchen_therm_humidity'],living_therm:['sensor.living_therm_temperature','sensor.living_therm_humidity']}}},anchors_centered:true,shapes:clone(DEMO_ROOM_SHAPES),device_id:'demo_plan_device',image_entity:'image.device_floorplan_demo_apartment',sensor_entity:'sensor.device_floorplan_demo_apartment'};
+ const plan={id:'demo_apartment',name:'Demo apartment',kind:'floor',floor_id:'demo_floor',level:0,image_type:'top',image_url:STATIC+'/templates/apartment-two-bedroom.webp',image_fallback_url:null,image_source:'upload',width:1367,height:806,positions,anchors:{__energy_panel:{x:46,y:66},__energy_source:{x:57,y:56},kitchen:{x:30.5,y:22},living_room:{x:28,y:79},hallway:{x:53,y:72},bathroom:{x:52.2,y:31},bedroom:{x:79.4,y:48},bedroom_2:{x:79.3,y:77}},refs:clone(TABLE_REFERENCES),hidden_rooms:[],sort:0,bonds:{living_lights:['living_bulb_1','living_bulb_2','living_bulb_3']},bond_meta:{living_lights:{name:'Living room lights'}},phantoms:{open_plan_temperature:{name:'Kitchen & Living room',x:41.1,y:47.2,members:['kitchen_therm','living_therm'],value:'average',uses:{kitchen_therm:['sensor.kitchen_therm_temperature','sensor.kitchen_therm_humidity'],living_therm:['sensor.living_therm_temperature','sensor.living_therm_humidity']}}},anchors_centered:true,shapes:clone(DEMO_ROOM_SHAPES),device_id:'demo_plan_device',image_entity:'image.device_floorplan_demo_apartment',sensor_entity:'sensor.device_floorplan_demo_apartment'};
  return {revision:5,presentation_revision:8,states,devices,plans:[plan],skipped:[],seen:devices.map(d=>d.id),main_entity:{},device_opts:{},setup_done:true,dashboards:{'':{title:'Dashboard',views:[{title:'Home',path:'home',cards:[]}]}},dashboardList:[],events:[]};
 }
 export function buildPayload(plan,db){
@@ -83,17 +83,19 @@ export function buildPayload(plan,db){
  }
  for(const [bid,all] of Object.entries(plan.bonds||{})){const mem=all.filter(id=>devices[id]);if(mem.length<2)continue;let f=devices[mem[0]],meta=plan.bond_meta?.[bid]||{};for(const id of mem)devices[id].bond=bid;bonds[bid]={...meta,members:mem,names:mem.map(id=>devices[id].name),entities:mem.map(id=>devices[id].main_entity).filter(Boolean),domain:(f.main_entity||'light.x').split('.')[0],...px(f)};}
  for(const [id,ph] of Object.entries(plan.phantoms||{})){let mem=(ph.members||[]).filter(x=>devices[x]);phantoms[id]={...clone(ph),...px(ph),members:mem,entities:[...new Set(mem.flatMap(m=>ph.uses?.[m]||devices[m].entities))]};}
- for(const [id,p] of Object.entries(plan.anchors||{})){if(!plan.hidden_rooms.includes(id))areas[id]={name:AREA_NAMES[id]||id,...px(p),...(plan.shapes?.[id]?{shape:plan.shapes[id]}:{})};}
+ const energy_points={};for(const [id,p] of Object.entries(plan.anchors||{})){if(id.startsWith('__energy_')){energy_points[id.slice(9)]={x:p.x,y:p.y};continue;}if(!plan.hidden_rooms.includes(id))areas[id]={name:AREA_NAMES[id]||id,...px(p),...(plan.shapes?.[id]?{shape:plan.shapes[id]}:{})};}
  let scales={};for(const ref of plan.refs||[]){let len=Math.hypot((ref.bx-ref.ax)*plan.width/100,(ref.by-ref.ay)*plan.height/100);scales[ref.dir]=ref.length/len;}const sx=scales.h||scales.v||null,sy=scales.v||scales.h||null;
- return {plan_id:plan.id,plan_name:plan.name,kind:plan.kind,floor_id:plan.floor_id,level:plan.level,image_type:plan.image_type,image_url:plan.image_url,image_fallback_url:plan.image_fallback_url,image_width:plan.width,image_height:plan.height,metres_per_px_x:sx,metres_per_px_y:sy,real_width_m:sx?plan.width*sx:null,real_height_m:sy?plan.height*sy:null,approx_count:Object.values(devices).filter(d=>d.approx).length,devices,entities,bonds,phantoms,zigbee_devices,areas,robots:clone(plan.robots||{}),cleaned:clone(plan.cleaned||{}),aps:devices.wifi_router?{'Demo Wi-Fi router':'wifi_router'}:{}};
+ return {plan_id:plan.id,plan_name:plan.name,kind:plan.kind,floor_id:plan.floor_id,level:plan.level,image_type:plan.image_type,image_url:plan.image_url,image_fallback_url:plan.image_fallback_url,image_width:plan.width,image_height:plan.height,metres_per_px_x:sx,metres_per_px_y:sy,real_width_m:sx?plan.width*sx:null,real_height_m:sy?plan.height*sy:null,approx_count:Object.values(devices).filter(d=>d.approx).length,devices,entities,bonds,phantoms,zigbee_devices,areas,energy_points,robots:clone(plan.robots||{}),cleaned:clone(plan.cleaned||{}),aps:devices.wifi_router?{'Demo Wi-Fi router':'wifi_router'}:{}};
 }
 
 // Upgrade existing browser demos without resetting placements, device states or dashboards.
 export function migratePresentation(db){
- if(db.presentation_revision>=8)return false;
+ if(db.presentation_revision>=9)return false;
  const previousRevision=db.presentation_revision;
- db.presentation_revision=8;
+ db.presentation_revision=9;
  const p=db.plans.find(p=>p.id==='demo_apartment');
+ // 0.11: the demo's Energy points (the card draws no flow lines without an electrical panel).
+ if(p){p.anchors=p.anchors||{};p.anchors.__energy_panel=p.anchors.__energy_panel||{x:46,y:66};p.anchors.__energy_source=p.anchors.__energy_source||{x:57,y:56};}
  // 0.9: the demo rooms come glued (else the Editor waits for Glue Rooms before Place devices).
  if(p)for(const id of Object.keys(DEMO_ROOM_SHAPES))if(p.shapes?.[id])p.shapes[id]=clone(DEMO_ROOM_SHAPES[id]);
  if(previousRevision>=7)return true;

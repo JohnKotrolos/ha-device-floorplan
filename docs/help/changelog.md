@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.11.0 · …And on the Eleventh Day, Energy Was Created
+
+### ⚡ Energy, a new overlay
+
+Built on your Home Assistant Energy settings, no extra setup.
+
+- **Today, per device and room**: every device from the Energy dashboard shows its kWh on the plan, in Home Assistant's energy colours; rooms with a drawn shape are shaded by what they used.
+- **Matches Home Assistant**: a device's energy is found through its own sensors, or the plug it's measured with. Devices with no marker show as one chip per room (tap for the list); what's on no room of this plan is listed as *Not on this plan*. A room's total shows only when it has more than one chip.
+- **Under the plan**: the time you look at, the total on the plan, solar or battery, and what the room shading means; the chips and their colours say the rest. Hovering a chip shows its name.
+- **Day scrubber**: one compact row right under the plan, from *Today* hour by hour to *Now*; drag or tap, it snaps to full hours. *Now* shows live watts. The summary below it stays on one line, so nothing moves while you drag.
+- **Flow lines** (Layers), in the style of Home Assistant's energy distribution: thin lines with a rounded corner and one travelling dot, from the electrical panel to every device and from solar or battery when you have them. The lines start at your **Energy points** (Editor, Step 3, top of *Devices to place*): **Electrical panel**, **Solar** and **Battery**, each the real meter / inverter / battery when Home Assistant's Energy names one (its device, or the sensor itself), otherwise a point you set (dashed, like phantoms). A real one added later can **Replace** the point. Lines as in Home Assistant: devices → panel, solar → panel, battery → panel when discharging, solar → battery when charging. Without an electrical panel there are no lines; admins see a hint.
+- **Sub-meters and plugs** follow Home Assistant's *Upstream device*: a plug's line runs into its sub-meter, and nothing is counted twice in totals or room shading.
+- **At *Now*, every device using power shows** (the minimum is now 0 W; set one in the card editor to hide standby). A device at 0 W never shows. The card editor shows the values in use.
+- **The electrical panel shows the total**: Home Assistant's grid total (all grid meters together), or the total of the devices on the plan when there is no grid meter. Solar and battery show theirs; a point you set is dashed.
+- Energy: the dots travel from each device to the electrical panel, as in Home Assistant.
+- A new overlay is announced once in the card (admins only) and marked ✨ new in the card editor; for Energy, the announcement points to the Energy points in the Editor.
+
+### 📹 Cameras
+
+Asked for in [#12](https://github.com/JohnKotrolos/ha-device-floorplan/issues/12): cameras in Security and Live, and any device added to Live.
+
+- **Security** shows each camera as its dot, with its picture like in Live (when its trigger fires, or with Layers → Cameras); an unavailable camera is red. *Show cameras* switches them off. Shutters are no longer a security alert: their bar shows the position.
+- **Live** shows a camera only while something happens: its own motion, person or ring sensor, or any sensor you pick under **Show in Live when…** (a doorbell with the hallway motion sensor, say). It appears as a small dot where the camera is, with its picture next to it, joined by a line; tap for the big view. **✕** closes it until the next event. For each camera you choose: *show the picture when something happens* or *only with Layers → Cameras*. The trigger list offers motion, door, ring and similar sensors first (*Show all entities* for the rest).
+- Camera pictures show up to 2 readings at the top right: a low battery automatically (in orange), or the ones you pick in Edit markers → *Also show* (on the picture; no label / badge for a camera in Live). They never get cut off; the name has the whole bottom bar.
+- With 2 or more cameras, Layers → Cameras lists each one with its own tick (per screen); triggers still pop up any camera.
+- Each camera has its own colour (dot, line, picture border), so stacked pictures are easy to match; the picture keeps the last frame while the next one loads.
+- **Cameras** (Layers in Live, off by default): all your cameras with their picture, refreshed every 10 seconds, whether or not they have a trigger. No video on the panel; unavailable cameras stay out of Live.
+
+### 🃏 Card
+
+- **Add any device to Live**: Edit markers → *Shows in* → Live. It shows while it's active, or while a sensor you pick is on (a 3D printer while its sound sensor hears it). Live and your custom overlays are open for any device; the other overlays show what fits them, and you can hide devices there.
+- **Chip counts** match Home Assistant: a light group inside your group counts as one, and bulbs bonded into one lamp count as one (a wall panel showed 10 lights on instead of 7).
+- **Appliance status** sits just above the washer / dryer, joined by a line in the status colour (one line per appliance when a pill covers two).
+- **Edit markers**: the selected marker always draws with its real name, also when it's hidden or idle in your own overlays (it showed "undefined").
+- **Edit markers** lists devices in three collapsible groups per overlay: *On*, *Hidden in*, *Not shown in*.
+- **Layers on the plan**: room-wide visuals at the bottom, markers above, windows (camera pictures, appliance status) above the markers and never pushed around by them, popups on top.
+- **Picking an entity** in Edit markers uses Home Assistant's own picker: search, full names, device and area.
+- Changing a layer's default in the card editor now also applies to screens where a viewer had switched it before.
+- **Info chips** (temperatures, ACs, batteries, energy): style Dark, Light, Auto (theme) or Custom, background and size, in their own section with **Reset Info chips**.
+- The old *Preview* button in Frame is gone (it opened behind Home Assistant's editor); a full editor with a large live preview is planned for 0.12.
+- **The preview keeps the overlay** you're working on (Home Assistant's own preview in the card editor), instead of jumping back to Live after each change.
+- **Title**: shows when you fill it in; the extra on/off switch is gone.
+- **Security**: "All secure" under the plan when nothing needs attention.
+- Card editor: space between a section's header and a box inside it.
+- **Card editor sections**: the card settings are clear sections, each with a one-line explanation, one open at a time; **Overlays** starts with your own overlays (+ New overlay).
+- Card editor: clearer wording for markers and devices an overlay doesn't show; scroll-edge fades no longer cover settings; dividers line up.
+- Shutter positions, AC activity and batteries update right away (any change of an entity redraws it).
+
+### ✏️ Floorplan Editor
+
+- **Fix proportions**: when horizontal and vertical measurements disagree, one click stretches the plan to its true shape, and **Reset proportions** undoes it. Everything placed stays in place.
+- **Energy points** (electrical panel, solar / battery): at the top of *Devices to place* in Step 3 until they're placed, then at the bottom with ✓ on plan, like any placed device. A real meter, inverter or battery looks like itself (its own icon and name, as on the plan); without one, a dashed point. Several grid meters in one board: all are listed, **Bond to the panel** seats them together (they stay full devices).
+- Floors are listed highest first, then views; a hint shows when a plan isn't linked to a Home Assistant floor (Mark rooms then lists every room).
+- A failed save shows **Not saved · Retry**, and is sent again when the connection comes back.
+
+### 🐞 Fixes from your issues
+
+- **Cameras** in Security and Live, and any device in Live (see Cameras above). [#12](https://github.com/JohnKotrolos/ha-device-floorplan/issues/12)
+- **Tap area**: every marker is at least 44 px to tap, also when it shows text only (the dishwasher's was tiny). [#9](https://github.com/JohnKotrolos/ha-device-floorplan/issues/9)
+- **Drag handles** sit above names and labels in the Editor, so a label no longer blocks placing precisely. [#5](https://github.com/JohnKotrolos/ha-device-floorplan/issues/5)
+- **Lamp colours**: a colour set in the Editor always wins; Auto uses the bulb's own colour. [#6](https://github.com/JohnKotrolos/ha-device-floorplan/issues/6)
+- **Live undo**: a light you turn off in Live stays a few seconds, faded, so one more tap turns it back on. [#4](https://github.com/JohnKotrolos/ha-device-floorplan/issues/4)
+- **Demo**: dialogs close on a tap outside [#8](https://github.com/JohnKotrolos/ha-device-floorplan/issues/8); the robot drives smoother turns instead of stiff zigzags [#7](https://github.com/JohnKotrolos/ha-device-floorplan/issues/7).
+
+### 🛡️ Reliability
+
+- A change made right before a reload is no longer lost; a new plan image replaces the old one only once it's safely saved.
+- The appliance "done" state is kept in Home Assistant, shared by every screen (it was in the browser).
+- No more background work after a card or the Editor is closed; large robot maps are read off Home Assistant's main loop.
+- Ready for upcoming Home Assistant changes to the device registry; stored lamp colours are validated.
+
+### 📝 Documentation
+
+- New [Discussions](https://github.com/JohnKotrolos/ha-device-floorplan/discussions) for help, ideas and show and tell; the issue form points there.
+- Guide: a new **Energy** page, with several meters in one board.
+- README: one-click install, reference tables (Editor, card, YAML options, card-mod names) and how the project is built.
+
+### 🎮 Demo
+
+- Energy with sample data; scale lines in the tour can be drawn anywhere.
+
 ## 0.10.3 · Counting downloads
 
 - Each release now carries a `device_floorplan.zip`, which the Marketplace (and HACS) installs from, so the Marketplace can show how many times Device Floorplan was downloaded. Nothing changes in the integration itself; updating works as usual.
