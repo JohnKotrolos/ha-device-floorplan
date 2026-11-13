@@ -276,8 +276,8 @@ Everything on the plan sits in one of five layers, each with its own rules:
 
 | Layer (bottom → top) | What's in it | How it behaves |
 |---|---|---|
-| 1. **Plan** | The picture of your floor, the night look | Doesn't react to taps |
-| 2. **Rooms** | Room shading (heatmap, energy, last cleaned), motion and presence glow, room names | Tap a room for its details |
+| 1. **Plan** | The picture of your floor | Doesn't react to taps |
+| 2. **Rooms** | Room shading (heatmap, energy, last cleaned), motion and presence glow, day/night effects, room names | Tap a room for its details |
 | 3. **Markers** | Device icons, info chips (temperatures, energy…), camera dots | Spread out automatically so none overlap |
 | 4. **Windows** | Camera pictures, appliance status ("Drying · 2 min", "Ready to unload") | Attached to their marker with a connecting line, placed after the markers; never pushed around by markers, they only avoid each other and the plan's edges |
 | 5. **Popups and menus** | Info cards, device lists, the Layers menu | Above everything; tap outside or ✕ to close |
