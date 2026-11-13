@@ -324,8 +324,8 @@ Ideas welcome in [Discussions → Ideas](https://github.com/JohnKotrolos/ha-devi
 
 Device Floorplan is built with [Claude](https://claude.ai) as a pair programmer. Claude writes most of the code and these docs; Claude is credited as co-author on the commits. I set the direction and the design rules, test every build in my own home before it ships, and decide what goes out.
 
-The test bed is a real apartment: 12 rooms on one floor, mapped in Home Assistant with hundreds of devices and about 2,500 sensors over Zigbee (ZHA), Wi-Fi, Shelly and Tuya Local: more than 20 lights, shutters, four AC units, presence and motion sensors, an alarm panel, cameras, appliances on smart plugs, a 3D printer, and an Android tablet as the wall panel. A second Home Assistant instance is used for clean installs, and robot vacuum support was tested against a Valetudo test robot.
+The test bed is a real apartment: 12 rooms on one floor, mapped in Home Assistant with hundreds of devices and about 2,500 sensors over Zigbee (ZHA), Wi-Fi, Shelly and Tuya Local: 12 lights, shutters, four AC units, presence and motion sensors, an alarm panel, cameras, appliances on smart plugs, a 3D printer, and an Android tablet as the wall panel. A second Home Assistant instance is used for clean installs, and robot vacuum support was tested against a Valetudo test robot.
 
 Every change also passes automatic checks on GitHub: Home Assistant's own validation (hassfest), the HACS check, and the Ruff and ESLint code linters. The code was reviewed independently by a second AI, and its findings were checked and fixed in 0.11.
 
-Bugs are still bugs, whoever typed them. Issues, ideas and pull requests are welcome.
+Bugs are still bugs, whoever typed them. [Issues](https://github.com/JohnKotrolos/ha-device-floorplan/issues), [ideas](https://github.com/JohnKotrolos/ha-device-floorplan/discussions/categories/ideas) and pull requests are welcome.
