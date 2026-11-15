@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.11.0";
+const VERSION = "0.12.0";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -320,6 +320,10 @@ header h1 .logo { width:28px; height:28px; }
 .plancard { flex: 1 1 auto; min-width:0; min-height:0; background: var(--df-card); border:1px solid var(--df-div); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; }
 .canvas { position:relative; flex:1 1 0; min-height:220px; background: var(--primary-background-color); border-radius:8px; overflow:hidden; }
 .viewport { position:absolute; left:50%; top:50%; transform: translate(-50%, -50%); overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; }
+/* test12 (#16): a tall plan zoomed in grows to the canvas width and scrolls up / down. */
+.vscroll { position:absolute; inset:0; overflow:hidden; }
+.vscroll.grown { overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
+.vscroll.grown > .viewport { position:relative; left:auto; top:auto; transform:none; margin:4px auto; }
 .viewport.cross { cursor: crosshair; }
 .stage { position:absolute; inset:0; transform-origin:0 0; }
 .stage img { position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; }
@@ -1103,7 +1107,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     this.work = plan ? { positions: clone(plan.positions) || {}, anchors: clone(plan.anchors) || {}, refs: clone(plan.refs) || [], hidden_rooms: clone(plan.hidden_rooms) || [], bonds: clone(plan.bonds) || {}, bond_meta: clone(plan.bond_meta) || {}, phantoms: clone(plan.phantoms) || {}, shapes: clone(plan.shapes) || {} } : null;
     this._undo = [];
     this._redo = [];
-    Object.assign(this.s, { sel: null, memberView: null, stack: null, itip: null, placing: null, placingRoom: null, fan: null, m1: null, m2: null, mh: null, ask: false, z: 1, tx: 0, ty: 0, refSel: null, menu: null, layersOpen: false, imgFailed: null });
+    Object.assign(this.s, { sel: null, memberView: null, stack: null, itip: null, placing: null, placingRoom: null, fan: null, m1: null, m2: null, mh: null, ask: false, z: 1, g: 1, tx: 0, ty: 0, refSel: null, menu: null, layersOpen: false, imgFailed: null });
     if (!this.s.dialog) this.s.form = null;
     if (plan) {
       let dirty = false;
@@ -1473,7 +1477,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._toast("Glue the Rooms first (step 2)", false);
       return;
     }
-    Object.assign(this.s, { tool, m1: null, m2: null, mh: null, ask: false, placing: null, placingRoom: null, pop: null, refSel: null, fan: null, z: 1, tx: 0, ty: 0 });
+    Object.assign(this.s, { tool, m1: null, m2: null, mh: null, ask: false, placing: null, placingRoom: null, pop: null, refSel: null, fan: null, z: 1, g: 1, tx: 0, ty: 0 });
     this._render();
   }
 
@@ -1494,6 +1498,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const focused = this.shadowRoot.activeElement;
     const focusId = focused && focused.id;
     const caret = focused && focused.selectionStart;
+    const vsTop = (this.shadowRoot.getElementById("vscroll") || {}).scrollTop || 0; // test12: keep a tall plan's scroll
     this._app.innerHTML = this._html();
     this._vp = this.shadowRoot.querySelector(".viewport");
     if (this._vp) {
@@ -1501,6 +1506,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this._ro.disconnect();
       this._ro.observe(this._vp.parentElement);
       this._sizeViewport();
+      if (vsTop) this._vp.parentElement.scrollTop = vsTop;
       const img = this.shadowRoot.getElementById("planimg");
       const plan = this._plan();
       if (img && plan && plan.image_fallback_url && this.s.imgFailed !== plan.image_url) {
@@ -1532,7 +1538,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     const ratio = plan.width && plan.height ? plan.width / plan.height : 1.6;
     const availW = Math.max(120, canvas.clientWidth - 8);
     const availH = Math.max(120, canvas.clientHeight - 8);
-    const w = Math.min(availW, availH * ratio);
+    const w0 = Math.min(availW, availH * ratio);
+    // test12 (#16): a plan narrower than the canvas (a tall plan) may grow up to the canvas width when zoomed in
+    // (s.g); it then scrolls up / down. Room for the scrollbar is kept. Wide plans: gMax = 1, as before.
+    this._gMax = Math.max(1, (availW - 16) / w0);
+    const g = Math.min(this.s.g || 1, this._gMax);
+    this.s.g = g;
+    canvas.classList.toggle("grown", g > 1.001);
+    const w = w0 * g;
     this._vp.style.width = `${Math.round(w)}px`;
     this._vp.style.height = `${Math.round(w / ratio)}px`;
     const prevW = this._vpW;
@@ -1822,7 +1835,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!plan) return "";
     const names = this.s.names === "always" ? "names-always" : this.s.names === "off" ? "names-off" : "";
     const cross = this.s.placing || this.s.placingRoom || this.s.placingBox || this.s.tool === "measure";
-    const grab = this.s.z > 1 ? "zoomed" : "";
+    const grab = this.s.z > 1 || (this.s.g || 1) > 1 ? "zoomed" : "";
     if (!plan.image_url) {
       // No image yet: offer the same choices as when creating a plan (no viewport,
       // so nothing can swallow the clicks; this was the 0.3 "Upload does nothing" bug).
@@ -1834,11 +1847,11 @@ class DeviceFloorplanPanel extends HTMLElement {
     const fadeRefs = this._layer("refs") === "faded" ? "fade-refs" : "";
     return `<section class="plancard" aria-label="Floorplan">
       <div class="canvas" id="canvas">
-        <div class="viewport ${cross ? "cross" : ""} ${grab} ${names}" data-vp>
+        <div class="vscroll" id="vscroll"><div class="viewport ${cross ? "cross" : ""} ${grab} ${names}" data-vp>
           <div class="stage" id="stage">${src ? `<img src="${esc(src)}" alt="" draggable="false" id="planimg">` : ""}
             <svg class="ov ${fadeRefs}" viewBox="0 0 1000 1000" preserveAspectRatio="none" id="ovsvg">${this._svgOverlay()}</svg></div>
           <div class="layer" id="layer">${this._overlayHtml()}</div>
-        </div>
+        </div></div>
         ${this._canvasCtlHtml()}${this._shapeBoxHtml()}
       </div>
       ${this.s.imgFailed === plan.image_url && plan.image_fallback_url ? `<div class="warnbox" style="margin:0">The original image (${esc(plan.image_url)}) was not found, so the saved copy is shown. <button class="link" data-act="replaceimg">Choose the image again</button></div>` : ""}
@@ -1876,7 +1889,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const phBtn = s.tool === "place" ? `<button class="ovbtn ${String(s.sel || "").startsWith("ph:") ? "on" : ""}" data-act="phnew" aria-label="New phantom" title="New phantom: one combined value from several devices"><ha-icon icon="dfp:phantom-plus"></ha-icon></button>` : "";
     const layers = `<div class="ovctl layerctl">${this._extraCtlHtml ? this._extraCtlHtml() : ""}${phBtn}<div class="lwrap"><button class="ovbtn ${s.layersOpen ? "open" : ""}" data-act="layers" aria-label="Layers" title="Layers" aria-expanded="${s.layersOpen}">${SVG.layers}</button>
       ${s.layersOpen ? `<div class="layerpop" role="dialog" aria-label="Layers"><h4>Show on the plan</h4>${row("refs", "Measurements")}${row("rooms", "Rooms")}${row("devices", "Devices")}${row("bonds", "Bonds")}${row("phantoms", "Phantoms")}${this._extraLayerRows ? this._extraLayerRows(row) : ""}${s.tool === "place" ? row("others", "Devices outside the filter") : ""}</div>` : ""}</div></div>`;
-    const zoom = `<div class="ovctl zoomctl"><div class="zoom"><button data-act="zoomout" aria-label="Zoom out">−</button><span id="zl">${Math.round(s.z * 100)}%</span><button data-act="zoomin" aria-label="Zoom in">+</button><button class="fit" data-act="zoomfit">Fit</button></div></div>`;
+    const zoom = `<div class="ovctl zoomctl"><div class="zoom"><button data-act="zoomout" aria-label="Zoom out">−</button><span id="zl">${Math.round((s.g || 1) * s.z * 100)}%</span><button data-act="zoomin" aria-label="Zoom in">+</button><button class="fit" data-act="zoomfit">Fit</button></div></div>`;
     return scale + layers + zoom;
   }
 
@@ -2365,9 +2378,11 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
     }
     const zl = this.shadowRoot.getElementById("zl");
-    if (zl) zl.textContent = `${Math.round(z * 100)}%`;
-    // Keep the length boxes fully inside the plan (they used to be cut off at the edges).
-    const vr = r;
+    if (zl) zl.textContent = `${Math.round((this.s.g || 1) * z * 100)}%`;
+    // Keep the length boxes fully inside the plan (they used to be cut off at the edges); test12: inside the part
+    // of the plan that is on screen (a tall plan scrolls).
+    const cr = this._vp.parentElement.getBoundingClientRect();
+    const vr = { left: Math.max(r.left, cr.left), right: Math.min(r.right, cr.right), top: Math.max(r.top, cr.top), bottom: Math.min(r.bottom, cr.bottom) };
     for (const id of ["mbox", "refpop"]) {
       const el = this.shadowRoot.getElementById(id);
       if (!el) continue;
@@ -2402,9 +2417,54 @@ class DeviceFloorplanPanel extends HTMLElement {
     this._layout();
   }
 
-  _zoomTo(nz, vx = 50, vy = 50) {
+  /** The zoom shown to the user: the plan's growth (tall plans) × the zoom inside it. */
+  _zt() {
+    return (this.s.g || 1) * this.s.z;
+  }
+
+  /** Zoom to `total` (as shown in the % box) around a point of the plan's box (vx / vy in %; default: the middle
+   *  of what is on screen). test12 (#16): a tall plan first grows to the canvas width (it scrolls up / down), only
+   *  then zooms inside its box as before. Plans as wide as the canvas: exactly as before. */
+  _zoomTo(total, vx, vy) {
     const s = this.s;
-    nz = clamp(Math.round(nz * 1000) / 1000, 0.25, 6);
+    total = clamp(Math.round(total * 1000) / 1000, 0.25, 6);
+    const sc = this._vp && this._vp.parentElement;
+    if (sc && this._gMax > 1.001) {
+      const r = this._vp.getBoundingClientRect();
+      const cr = sc.getBoundingClientRect();
+      if (vx == null) vx = ((Math.max(r.left, cr.left) + Math.min(r.right, cr.right)) / 2 - r.left) / r.width * 100;
+      if (vy == null) vy = ((Math.max(r.top, cr.top) + Math.min(r.bottom, cr.bottom)) / 2 - r.top) / r.height * 100;
+      const sx = r.left + (vx / 100) * r.width;
+      const sy = r.top + (vy / 100) * r.height;
+      const px = (vx - s.tx) / s.z;
+      const py = (vy - s.ty) / s.z;
+      const ng = total <= 1 ? 1 : Math.min(this._gMax, total);
+      if (Math.abs(ng - (s.g || 1)) > 0.001) {
+        Object.assign(s, { g: ng, z: 1, tx: 0, ty: 0 });
+        this._sizeViewport();
+        // Keep the spot that was under the pointer there.
+        const r2 = this._vp.getBoundingClientRect();
+        sc.scrollTop += r2.top + (py / 100) * r2.height - sy;
+      }
+      const r3 = this._vp.getBoundingClientRect();
+      vx = ((sx - r3.left) / r3.width) * 100;
+      vy = ((sy - r3.top) / r3.height) * 100;
+      total /= ng;
+      if (total > 1) {
+        const lim = (v) => clamp(v, 100 * (1 - total), 0);
+        Object.assign(s, { z: total, tx: lim(vx - px * total), ty: lim(vy - py * total) });
+      } else {
+        const c = (100 - 100 * total) / 2;
+        Object.assign(s, { z: total, tx: c, ty: c });
+      }
+      this._layout();
+      clearTimeout(this._zoomT);
+      this._zoomT = setTimeout(() => this._render(), 160);
+      return;
+    }
+    const nz = total;
+    if (vx == null) vx = 50;
+    if (vy == null) vy = 50;
     if (nz <= 1) {
       const c = (100 - 100 * nz) / 2;
       Object.assign(s, { z: nz, tx: c, ty: c });
@@ -2855,13 +2915,22 @@ class DeviceFloorplanPanel extends HTMLElement {
     }
     const hint = st === "unplaced" || st === "hiddenroom" ? `<div style="font-size:12px;color:var(--df-sec)">Click on the plan to put it there, drag it from the list, use Auto-place, or skip it if you don't want it on the plan.</div>` : "";
     const lightSec = onPlan && this._lightSectionHtml ? this._lightSectionHtml(d) : "";
+    // 0.11.1 test9: "Acts as" for any placed device that switches something (it was only on split spots): a plug
+    // Home Assistant shows as a light → Switch, and the card stops treating it as a lamp (Lights, glow).
+    let actsAs = "";
+    const pos0 = onPlan && this.work && this.work.positions[d.id];
+    const mainE = this.mainEntity[d.id] || d.main_entity || "";
+    const mainD = mainE.split(".")[0];
+    if (pos0 && ["light", "switch", "fan"].includes(mainD) && (!pos0.as || ["light", "switch", "fan"].includes(pos0.as)) && !this._applType(d.id)) {
+      actsAs = `<label class="fl">Acts as<select data-act="splitas"><option value="">${esc(mainD)} (as in Home Assistant)</option>${[["light", "Light"], ["switch", "Switch"], ["fan", "Fan"]].map(([k, l]) => `<option value="${k}" ${pos0.as === k ? "selected" : ""}>${l}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">What it is on the card: a Light glows and is in Lights; a Switch or Fan shows its icon while on.</div>`;
+    }
     const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
     const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
     return `<div class="details">${back}<div class="top"><span class="ico" style="width:36px;height:36px">${this._iconHtml(d)}</span>
       <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -4319,7 +4388,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         e.preventDefault();
         const vx = ((e.clientX - r.left) / r.width) * 100;
         const vy = ((e.clientY - r.top) / r.height) * 100;
-        this._zoomTo(s.z * Math.exp(-e.deltaY * k * 0.01), vx, vy);
+        this._zoomTo(this._zt() * Math.exp(-e.deltaY * k * 0.01), vx, vy);
         return;
       }
       if (s.z <= 1) return; // nothing to pan: let the page scroll
@@ -5573,8 +5642,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "zoomout": {
         // Zoom around what you're working on (measuring point, selected marker), else the centre.
         const f = this._focusPoint();
-        const nz = Math.round(s.z * 4) / 4 + (act === "zoomin" ? 0.25 : -0.25);
-        this._zoomTo(nz, f ? s.tx + f.x * s.z : 50, f ? s.ty + f.y * s.z : 50);
+        const nz = Math.round(this._zt() * 4) / 4 + (act === "zoomin" ? 0.25 : -0.25);
+        this._zoomTo(nz, f ? s.tx + f.x * s.z : undefined, f ? s.ty + f.y * s.z : undefined);
         break;
       }
       case "zoomfit":
@@ -5933,7 +6002,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this._pointers.size === 2) {
       const [a, b] = [...this._pointers.values()];
-      this._pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: s.z };
+      this._pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: this._zt() };
       this._gesture = null;
       return;
     }
@@ -6026,7 +6095,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
     else if (cl) this._gesture = { kind: "cluster", id: cl.dataset.cluster, start, moved: false };
-    else this._gesture = { kind: "bg", start, moved: false, tx: s.tx, ty: s.ty };
+    else this._gesture = { kind: "bg", start, moved: false, tx: s.tx, ty: s.ty, st: this._vp.parentElement.scrollTop };
     try {
       this._vp.setPointerCapture(e.pointerId);
     } catch (_e) {
@@ -6287,6 +6356,10 @@ class DeviceFloorplanPanel extends HTMLElement {
         s.ty = lim(g.ty + ((e.clientY - g.start.y) / r.height) * 100);
         this._vp.classList.add("panning");
         this._layout();
+      } else if ((s.g || 1) > 1) {
+        // test12: a grown tall plan: dragging scrolls it up / down (touch screens have no wheel).
+        this._vp.parentElement.scrollTop = g.st - (e.clientY - g.start.y);
+        this._vp.classList.add("panning");
       }
     }
   }
@@ -6753,7 +6826,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (!mod && !e.altKey && ["+", "=", "-", "_", "0"].includes(e.key)) {
       e.preventDefault();
       if (e.key === "0") this._zoomTo(1);
-      else this._zoomTo(s.z * (e.key === "-" || e.key === "_" ? 1 / 1.25 : 1.25));
+      else this._zoomTo(this._zt() * (e.key === "-" || e.key === "_" ? 1 / 1.25 : 1.25));
       return;
     }
     if (arrows[e.key] && !(s.sel && this.work.positions[s.sel]) && s.z > 1) {

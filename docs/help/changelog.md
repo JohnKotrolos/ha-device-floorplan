@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.12.0 · Your home, now, REPLAYED!
+
+### ⏪ Home Replay (new)
+
+- **Go back in time on the plan**: a round button beside Layers (or in the Overlay Bar) turns the Overlay Bar into the replay rail. Lights, doors, motion, temperatures, the robot and people play back where they happened. Play, pause, speed, 6 to 48 hours; **← Now** returns to the present.
+- **Each overlay has its own timeline**: Live events; Lights: how many lights were on; Comfort: the average room temperature (in the heatmap's colours, from the same sensors as the chips) with heating and cooling; Security: openings, motion, the doorbell; Health: offline devices and low batteries; Cleaning: robot runs; Network: devices that dropped off; your own overlays: what ran and what happened.
+- **Drag the timeline**: slowly for minute by minute, fast to jump in whole steps; hour marks show where it snaps. ◀ ▶ jump to the next moment of this overlay.
+- **The time pill** shows the replayed day and time; tap it to type an exact day and time.
+- **Floors**: changing floor during Replay loads that floor at once and keeps the time.
+- **Network in Replay**: online and offline per device for every protocol; a signal ring only where the signal was recorded; no links (they are only known for now).
+- Nothing is switched in the past: a tap tells you how to get back to Now. Cameras don't show in Replay.
+
+### 🖊️ Card Editor
+
+- **One Card Editor window**, from Home Assistant's card editor and from ✎: card settings, a live preview, and every marker of the overlay to pick, hide or tune.
+- **Hide a shortcut** from the Overlay Bar without deleting it (*Show in the Overlay Bar*).
+- **Home Replay button**: beside Layers (default), in the Overlay Bar, or hidden.
+- **Round buttons** (floors · Layers · Replay): next to a side Overlay Bar they move to the plan's other side, in mirrored order, so the rail keeps its full height.
+- **"Acts as"** (light, switch, fan) for any device, in the Floorplan Editor.
+- **Bonded lamps** switch together with one tap; a long press lists every member.
+- **Camera windows** can be moved and resized; a camera strip layout is available.
+
+### 📡 Network
+
+- **A calmer map**: hubs, coordinators and access points full size, routers a bit smaller, end devices small (the touch area stays).
+- **Wi-Fi signal as bars** on the mark; **Matter devices** get the Matter mark.
+- **Bluetooth proxies** (ESPHome, Shelly, …) show under Bluetooth like an access point; Bluetooth sensors and beacons as end devices.
+
+### ⚡ Energy
+
+- **The last 24 hours** under the plan again, hour by hour, stacked by source in Home Assistant's Energy colours; tap an hour to see it on the plan. Battery in the legend.
+
+### 🧭 Floorplan Editor
+
+- **Tall (portrait) plans**: zooming in widens the plan to the full width and it scrolls up and down (wheel, trackpad or drag) [#16](https://github.com/JohnKotrolos/ha-device-floorplan/discussions/16).
+
+### 🐞 Fixes
+
+- Temperature and humidity sensors without a device class are recognised (°C / °F, a % sensor named "humid…").
+- A device with any camera counts as a camera.
+- A device whose sensor has no reading (*unknown*) is no longer shown as offline; offline means unavailable.
+- The ✨ *New overlay* banner saves *Add to this card* / *Not now* (and says so when it can't).
+
 ## 0.11.0 · …And on the Eleventh Day, Energy Was Created
 
 ### ⚡ Energy, a new overlay

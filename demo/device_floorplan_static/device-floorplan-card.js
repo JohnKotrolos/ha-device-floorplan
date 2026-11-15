@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.11.0).
+ * Device Floorplan – dashboard card (v0.12.0).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.11.0";
+const CARD_VERSION = "0.12.0";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -149,6 +149,7 @@ const CONN_ORDER = ["zigbee", "zwave", "matter", "network", "bluetooth", "radio"
 const ROLES = {
   coordinator: { label: "Coordinator", color: "#f5a623", shape: "diamond" },
   ap: { label: "Router / access point", color: "#f5a623", shape: "diamond" },
+  btproxy: { label: "Bluetooth proxy", color: "#f5a623", shape: "diamond" }, // test12: Bluetooth's access point
   router: { label: "Router / repeater", color: "#3b82f6", shape: "square" },
   hub: { label: "Hub / bridge", color: "#3b82f6", shape: "square" },
   end: { label: "End device", color: "#43a047", shape: "round" },
@@ -165,6 +166,7 @@ const LQI_BANDS = [
 ];
 // 0.7.3: Wi-Fi / LAN topology, one colour per access point.
 const AP_COLORS = ["#29b6f6", "#ab47bc", "#26a69a", "#ffa726", "#ec407a", "#9ccc65"];
+const DFC_BRAND = {}; // test11: brand marks asked from Home Assistant once per page
 const lqiColor = (v) => (LQI_BANDS.find((b) => v >= b.min) || LQI_BANDS[3]).color;
 
 const CLIMATE_MODES = {
@@ -230,6 +232,75 @@ function entName(hass, e) {
   return e;
 }
 /** 0.8.2: screen sizes for the card editor's preview (CSS pixels). */
+// 0.11.1 Home Replay
+const RP_RANGES = [6, 12, 24, 48]; // hours
+// test10: Energy is out again: it is hourly amounts, with its own hours under the plan (the last 24 hours).
+const RP_SKIP = new Set(["plan", "energy"]); // test11: Network replays too (online / offline, signal where recorded)
+const CAM_SIZES = { s: [120, 0.22], m: [160, 0.3], l: [240, 0.42] }; // max px, max share of the plan width
+const rpClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+/** 0.11.1 test8: the replay timeline. One rule: it shows only what the overlay itself shows, in three forms
+ *  with one meaning each: bars = how much happened in a slot, spans = how long something ran, a line = a measured
+ *  value. Kinds (and colours): lt lights, dv devices, op doors / windows / shutters / locks / doorbell, mv motion,
+ *  off a device went offline, bat a battery went low. */
+const RP_COL = {
+  lt: "var(--dfc-accent)", dv: "color-mix(in srgb, var(--dfc-accent) 55%, #9aa4ae)", op: "var(--warning-color, #f0a020)", mv: "#9aa4ae",
+  off: "#9aa4ae", bat: "var(--warning-color, #f0a020)",
+};
+// Home Assistant's own Energy colours (the hour bars, the legend and the flow lines use the same).
+const E_COL = { grid: "var(--energy-grid-consumption-color, #488fc2)", solar: "var(--energy-solar-color, #ff9800)", battery_out: "var(--energy-battery-out-color, #4db6ac)" };
+const RP_ON = new Set(["on", "open", "opening", "unlocked", "playing", "detected"]);
+// States in which a device is running (a span): the same words the card treats as busy elsewhere.
+const RP_RUN = new Set(["on", "playing", "cleaning", "returning", "mowing", "heating", "cooling", "drying", "running", "printing", "washing", "spinning", "rinsing", "streaming", "recording"]);
+/** The kind of a single event (a bar), or null. */
+function rpKind(e, st) {
+  const d = domainOf(e);
+  const dc = st && st.attributes ? st.attributes.device_class : null;
+  if (d === "light") return "lt";
+  if (["switch", "fan", "media_player", "climate", "vacuum", "lawn_mower"].includes(d)) return "dv";
+  if (["cover", "lock"].includes(d) || (d === "binary_sensor" && OPEN_DC.has(dc)) || (d === "event" && dc === "doorbell")) return "op";
+  if (d === "binary_sensor" && MOTION_DC.has(dc)) return "mv";
+  return null;
+}
+/** Is this row a "running" state? Climate counts only while it really heats / cools when it says so. */
+function rpRunning(e, r) {
+  const d = domainOf(e);
+  if (d === "climate") {
+    const act = r.a && r.a.hvac_action;
+    if (act) return ["heating", "cooling", "drying", "fan"].includes(act);
+    return !["off", "unavailable", "unknown"].includes(r.s);
+  }
+  if (d === "event") return false;
+  return RP_RUN.has(String(r.s).toLowerCase());
+}
+/** start → stop intervals of one entity while running (clipped to [t0, t1]). */
+function rpSpans(e, rows, t0, t1) {
+  const out = [];
+  let from = null;
+  for (let i = 0; i < rows.length; i++) {
+    const on = rpRunning(e, rows[i]);
+    const t = Math.max(t0, rows[i].t);
+    if (on && from == null) from = t;
+    if (!on && from != null) {
+      if (t > from) out.push([from, t]);
+      from = null;
+    }
+  }
+  if (from != null && t1 > from) out.push([from, t1]);
+  return out;
+}
+/** The value of a row list at time t (last row at or before t). */
+function rpAt(rows, t) {
+  let lo = 0, hi = rows.length - 1, i = -1;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1;
+    if (rows[m].t <= t) {
+      i = m;
+      lo = m + 1;
+    } else hi = m - 1;
+  }
+  return i < 0 ? null : rows[i];
+}
+
 const lsGet = (k) => {
   try {
     return JSON.parse(localStorage.getItem(k) || "null");
@@ -252,6 +323,16 @@ const TOGGLE_DOMAINS = new Set(["light", "switch", "fan", "input_boolean", "cove
 
 const cesc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const live = (st) => !!st && st.state !== "unavailable" && st.state !== "unknown";
+/** 0.12: a device is offline when its entities are "unavailable" (all of them). "unknown" is online without a
+ *  reading (a sensor that hasn't reported), not offline. `mainOnly`: only the main entity counts (Replay: only its
+ *  history is loaded). */
+const devOffline = (hass, item, mainOnly = false) => {
+  const off = (st) => !!st && st.state === "unavailable";
+  const main = hass.states[item.main_entity];
+  if (mainOnly) return off(main);
+  const sts = (item.entities || []).map((e) => hass.states[e]).filter(Boolean);
+  return sts.length ? sts.every(off) : off(main);
+};
 /** Re-render a shadow root but keep what other cards put in it (card-mod's <card-mod> style). */
 function setShadow(el, html) {
   const keep = [...el.shadowRoot.children].filter((n) => n.localName === "card-mod");
@@ -806,8 +887,10 @@ function kindOf(eid, st) {
     return "binary";
   }
   if (d === "sensor") {
-    if (dc === "temperature") return "temperature";
-    if (dc === "humidity") return "humidity";
+    // test9: sensors without a device class: °C / °F is a temperature; a % sensor named "humid…" is humidity.
+    const u = st && st.attributes ? st.attributes.unit_of_measurement : null;
+    if (dc === "temperature" || (!dc && (u === "°C" || u === "°F"))) return "temperature";
+    if (dc === "humidity" || (!dc && u === "%" && /humid/i.test(`${eid} ${st.attributes.friendly_name || ""}`))) return "humidity";
     if (dc === "battery") return "battery";
     if (dc === "signal_strength" || /_(linkquality|lqi|rssi|signal_strength|wifi_signal)$/.test(eid)) return "signal";
     return "sensor";
@@ -928,7 +1011,14 @@ svg.lines path.eln { fill:none; stroke-width:1.5; stroke-linecap:round; }
 .m.camdot::before { inset:-14px; }
 .wins { position:absolute; inset:0; pointer-events:none; z-index:4; }
 .cwin { position:absolute; pointer-events:auto; border:2px solid #fff; border-radius:10px; overflow:hidden; background:#222; box-shadow: 0 4px 14px rgba(0,0,0,.4); cursor:pointer; }
-.cwin img { width:100%; height:100%; object-fit:cover; display:block; }
+.cwin img { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+.cwin.dr { cursor:grab; touch-action:none; }
+.cwin.drag { cursor:grabbing; z-index:3; box-shadow: 0 10px 28px rgba(0,0,0,.5); transform: scale(1.03); }
+.lines .wguide { stroke: var(--dfc-accent); stroke-width:1; stroke-dasharray: 4 4; opacity:.8; }
+.lines .sl { opacity:0; transition: opacity .2s; }
+.lines .sl.on { opacity:1; }
+.lines .film { fill:#16181c; opacity:.92; }
+.lines .holes { stroke: rgba(255,255,255,.35); stroke-width:3; stroke-dasharray: 5 7; stroke-linecap:round; }
 .cwin .cnm { position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; gap:6px; padding:2px 6px; font-size:11px; color:#fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); white-space:nowrap; }
 .cwin .cnm .cn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .cwin .crd { position:absolute; top:4px; right:4px; display:flex; gap:4px; }
@@ -958,22 +1048,118 @@ svg.lines path.elbow { fill:none; stroke:#26a69a; stroke-width:2; }
 .heatleg.eleg i.eshade { width:22px; border-radius:3px; background: linear-gradient(90deg, color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 15%, transparent), var(--energy-grid-consumption-color, #488fc2)); }
 .heatleg.eleg i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
 .escrub { position:relative; margin: 8px 12px 0; }
-.escrub .etrack { display:grid; align-items:end; height:28px; gap:2px; }
-.escrub .etrack i { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-style:normal; font-size:10px; color: var(--secondary-text-color); }
-.escrub .etrack i.hr { border-left: 1px solid var(--divider-color, rgba(0,0,0,.12)); }
-.escrub .etrack i.hr b { width: 70%; max-width: 12px; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 55%, transparent); }
-.escrub .etrack i.hr small { position:absolute; top:0; left:2px; font-size:9px; line-height:1; opacity:.8; }
-.escrub .etrack i.hr.later b { background: var(--divider-color, rgba(0,0,0,.12)); }
-.escrub .etrack i.on { color: var(--primary-text-color); font-weight:600; }
-.escrub .etrack i.hr.on { background: color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 14%, transparent); border-radius:3px; }
-.escrub .etrack i.hr.on b { background: var(--energy-grid-consumption-color, #488fc2); }
-.escrub .etrack i.end { justify-content:center; font-size:10px; overflow:hidden; border-radius:8px; background: var(--secondary-background-color, rgba(0,0,0,.05)); }
+/* test10: Energy's hours under the plan again: the last 24 hours, a stacked bar each, labels below. */
+.escrub .etrack { display:grid; align-items:stretch; height:46px; gap:2px; cursor:grab; touch-action: pan-y; user-select:none; }
+.escrub .etrack i { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; font-style:normal; font-size:10px; color: var(--secondary-text-color); }
+.escrub .etrack i.hr { border-left: 1px solid var(--divider-color, rgba(0,0,0,.12)); padding-bottom:13px; box-sizing:border-box; }
+.escrub .etrack i.hr b { width: 72%; max-width: 18px; border-radius: 2px 2px 0 0; opacity:.75; }
+.escrub .etrack i.hr small { position:absolute; bottom:1px; left:2px; font-size:9px; line-height:1; opacity:.8; white-space:nowrap; }
+.escrub .etrack i.hr.day { border-left-color: var(--primary-text-color); }
+.escrub .etrack i.hr.day small { font-weight:700; opacity:1; color: var(--primary-text-color); }
+.escrub .etrack.pick i.hr b { opacity:.3; }
+.escrub .etrack i.hr.on { background: color-mix(in srgb, var(--energy-grid-consumption-color, #488fc2) 14%, transparent); border-radius:3px; color: var(--primary-text-color); }
+.escrub .etrack.pick i.hr.on b { opacity:1; }
+.escrub .etrack i.end { justify-content:center; text-align:center; line-height:1.1; padding:0 4px; font-size:11px; font-weight:600; overflow:hidden; border-radius:8px; background: var(--secondary-background-color, rgba(0,0,0,.05)); }
 .escrub .etrack i.end.on { background: var(--energy-grid-consumption-color, #488fc2); color:#fff; }
-.escrub .etrack { cursor:grab; touch-action: pan-y; user-select:none; }
 .escrub .erange { position:absolute; left:0; top:0; width:100%; height:100%; margin:0; opacity:0; pointer-events:none; }
+.rpbar { margin: 10px 12px 2px; }
+.rpbar .rprail { border-radius:22px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 80%, transparent); }
+.ovbar { --rpb: 34px; }
+.ovbar.sz-s { --rpb: 28px; }
+.ovbar.sz-l { --rpb: 42px; }
+.rprail { display:flex; align-items:center; gap:6px; padding:6px 10px; color: var(--bfg, var(--secondary-text-color)); flex:1; min-width:0; min-height:0; box-sizing:border-box; --rpb: inherit; }
+.rprail.v { flex-direction:column; padding:8px 4px; gap:6px; width:100%; }
+.rprail button { border:0; background:transparent; color: inherit; font: inherit; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.rprail .rpnow { gap:2px; font-size:12px; font-weight:600; color: var(--bon-fg, var(--primary-text-color)); padding:4px 6px; border-radius:12px; --mdc-icon-size:16px; }
+.rprail.v .rpnow { flex-direction:column; }
+.rprail .rpplay { width:var(--rpb); height:var(--rpb); flex:none; border-radius:50%; background: var(--dfc-accent); color:#fff; --mdc-icon-size: calc(var(--rpb) * .6); }
+.rppn { display:inline-flex; gap:0; }
+.rppn button { width: calc(var(--rpb) * .8); height: calc(var(--rpb) * .8); border-radius:50%; --mdc-icon-size: calc(var(--rpb) * .5); }
+.rprail button:hover { background: var(--btile, rgba(0,0,0,.06)); }
+.rprail .rpplay:hover { background: var(--dfc-accent); filter: brightness(1.08); }
+.rptl { flex:1; min-width:80px; display:flex; flex-direction:column; }
+.rpend { font-size:10px; opacity:.8; }
+.rpscale { display:flex; justify-content:space-between; font-size:10px; opacity:.8; margin: 0 2px; }
+.rprail select { font: inherit; font-size:11px; font-weight:600; padding:2px 4px; border-radius:10px; border:1px solid var(--bline, rgba(0,0,0,.15)); background: transparent; color: inherit; cursor:pointer; max-width:100%; }
+.rprail select option { color:#111; }
+.rptrack { position:relative; cursor:pointer; touch-action:none; user-select:none; }
+.rptrack.h { height:30px; margin: 0 4px; }
+/* test9: on a side rail the track takes the rail's whole width: the line at the outer edge, the rest for the bars. */
+.rptrack.v { align-self:stretch; flex:1; min-height:100px; margin: 0 5px; }
+.rptrack.v.ln { margin-top:10px; }
+.rpline { position:absolute; border-radius:2px; background: var(--bline, rgba(0,0,0,.15)); }
+.rptrack.h .rpline { left:0; right:0; bottom:6px; height:3px; }
+.rptrack.v .rpline { top:0; bottom:0; left:4px; width:3px; }
+.rpline b { position:absolute; display:block; border-radius:2px; background: var(--dfc-accent); }
+.rptrack.h .rpline b { left:0; top:0; bottom:0; }
+.rptrack.v .rpline b { left:0; right:0; bottom:0; }
+.rpbars { position:absolute; pointer-events:none; }
+.rptrack.h .rpbars { left:0; right:0; top:2px; bottom: calc(12px + var(--lanes, 0) * 6px); }
+.rptrack.v .rpbars { top:0; bottom:0; left: calc(14px + var(--lanes, 0) * 6px); right:0; }
+.rpbars i { position:absolute; border-radius:1px; opacity:.85; }
+.rptrack.h .rpbars i { bottom:0; width: var(--w); height: var(--h); }
+.rptrack.v .rpbars i { left:0; height: var(--w); width: var(--h); }
+/* Spans (how long something ran): one thin lane per device, beside the line. */
+.rpspans { position:absolute; inset:0; pointer-events:none; }
+.rpspans s { position:absolute; display:block; border-radius:2px; opacity:.9; pointer-events:auto; }
+.rptrack.h .rpspans s { height:4px; bottom: calc(11px + var(--lane) * 6px); }
+.rptrack.v .rpspans s { width:4px; left: calc(14px + var(--lane) * 6px); }
+/* The line (a measured value: Comfort's average indoor temperature) over the bars area, with its range. */
+.rpln { position:absolute; overflow:visible; pointer-events:none; }
+.rptrack.h .rpln { left:0; right:0; top:2px; bottom:12px; width:100%; height: calc(100% - 14px); }
+.rptrack.v .rpln { top:0; bottom:0; left:14px; width: calc(100% - 14px); height:100%; }
+.rpln polyline { fill:none; stroke: var(--state-climate-heat-color, #ff8100); stroke-width:1.6; vector-effect: non-scaling-stroke; stroke-linejoin:round; }
+.rpmm { position:absolute; font-size:9px; opacity:.8; white-space:nowrap; pointer-events:none; }
+.rptrack.h .rpmm { right:0; top:-10px; }
+.rptrack.v .rpmm { top:-12px; left:50%; transform:translateX(-50%); }
+/* test9: hour marks on the line (where a fast drag glues to). */
+.rpticks u { position:absolute; display:block; background: var(--bline, rgba(0,0,0,.2)); pointer-events:none; text-decoration:none; }
+.rpticks u.d { background: currentColor; opacity:.7; }
+.rptrack.h .rpticks u { bottom:2px; width:1px; height:11px; }
+.rptrack.v .rpticks u { left:0; height:1px; width:11px; }
+.rprail.ld .rpbars { opacity:.35; }
+.rpthumb { position:absolute; width:14px; height:14px; border-radius:50%; background: var(--card-background-color, #fff); border:3px solid var(--dfc-accent); box-sizing:border-box; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.rptrack.h .rpthumb { bottom:1px; margin-left:-7px; }
+.rptrack.v .rpthumb { left:-1px; margin-bottom:-7px; }
+.rpthumb em { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); font-style:normal; font-size:11px; font-weight:600; color:#fff; background: var(--dfc-accent); padding:1px 6px; border-radius:6px; white-space:nowrap; pointer-events:none; opacity:0; transition: opacity .15s; }
+/* test9: on a side rail the bubble is drawn on the card (.rpbub), beside the rail: the plan can't cover it. */
+.rptrack.v .rpthumb em { display:none; }
+.rpbub { position:absolute; z-index:8; transform:translateY(-50%); font-size:11px; font-weight:600; color:#fff; background: var(--dfc-accent); padding:2px 7px; border-radius:6px; white-space:nowrap; pointer-events:none; box-shadow: 0 1px 4px rgba(0,0,0,.3); font-variant-numeric: tabular-nums; }
+.rpbub[hidden] { display:none; }
+.rprail.v select { -webkit-appearance:none; appearance:none; width:100%; box-sizing:border-box; text-align:center; text-align-last:center; padding:3px 0; }
+.rprail.act .rpthumb em { opacity:1; }
+.rpovw { position:relative; display:inline-flex; }
+.rpov { color: var(--warning-color, #f0a020) !important; }
+.rpmenu { position:absolute; z-index:9; right:0; top: calc(100% + 6px); min-width:180px; background: var(--card-background-color, #fff); color: var(--primary-text-color); border-radius:12px; box-shadow: 0 8px 24px rgba(0,0,0,.35); padding:6px; display:flex; flex-direction:column; }
+.lcorner.bottom-left .rpmenu, .lcorner.bottom-right .rpmenu { top:auto; bottom: calc(100% + 6px); }
+.lcorner.top-left .rpmenu, .lcorner.bottom-left .rpmenu { right:auto; left:0; }
+.rpmenu button { display:flex; align-items:center; gap:10px; border:0; background:transparent; font: inherit; font-size:14px; padding:8px 10px; border-radius:8px; color: inherit; cursor:pointer; --mdc-icon-size:20px; text-align:left; }
+.rpmenu button.on { background: color-mix(in srgb, var(--dfc-accent) 16%, transparent); color: var(--dfc-accent); font-weight:600; }
+.ovbar.rpmode { overflow:visible; }
+/* 0.11.1 test8: the time bubble shows in full over the plan; a side rail grows to hold all its controls. */
+.dockrow.rpm { z-index:7; overflow:visible; }
+.dock-left .dockrow.rpm, .dock-right .dockrow.rpm { min-height: min-content; max-height:none; }
+.rptrack.v .rpbars i { min-height:1px; }
+.rptrack.v { --rpgd: to right; }
+/* Right-hand rail: a mirror of the left (line on the outer side, bars and the bubble towards the plan). */
+.dock-right .rptrack.v { --rpgd: to left; }
+.dock-right .rptrack.v .rpline { left:auto; right:4px; }
+.dock-right .rptrack.v .rpbars { left:0; right: calc(14px + var(--lanes, 0) * 6px); }
+.dock-right .rptrack.v .rpspans s { left:auto; right: calc(14px + var(--lane) * 6px); }
+.dock-right .rptrack.v .rpln { left:0; transform: scaleX(-1); }
+.dock-right .rptrack.v .rpticks u { left:auto; right:0; }
+.dock-right .rptrack.v .rpbars i { left:auto; right:0; }
+.dock-right .rptrack.v .rpthumb { left:auto; right:-1px; }
+/* 0.11.1 test8: the replay time in the Replay look (teal), small, on the row of the round buttons. */
+.rppill { position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:6; display:flex; align-items:center; gap:5px; height:22px; box-sizing:border-box; padding:0 8px; border-radius:11px; background: var(--card-background-color, #fff); border:1px solid color-mix(in srgb, var(--dfc-accent) 55%, transparent); color: var(--dfc-accent); font: inherit; font-size:12px; font-weight:600; font-variant-numeric: tabular-nums; white-space:nowrap; cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.12); --mdc-icon-size:14px; }
+.rppill span { border-bottom:1px dotted currentColor; line-height:1.15; }
+/* test9: with the round buttons on the plan the pill sits beside them (their row), not over the plan's own pills. */
+.lcorner .rppill { top:7px; left:auto; right: calc(100% + 8px); transform:none; }
+.lcorner.top-left .rppill, .lcorner.bottom-left .rppill { right:auto; left: calc(100% + 8px); }
+.box.rpon { outline: 2px solid color-mix(in srgb, var(--dfc-accent) 45%, transparent); outline-offset: 4px; border-radius: 6px; }
 .heatleg.eleg .ewhen { color: var(--primary-text-color); }
-.heatleg.eleg { flex-wrap:nowrap; gap:14px; padding-top:2px; white-space:nowrap; overflow-x:auto; scrollbar-width:none; }
-.heatleg.eleg::-webkit-scrollbar { display:none; }
+.heatleg.eleg { flex-wrap:wrap; gap:4px 14px; padding-top:2px; }
+.heatleg.eleg .cl { white-space:nowrap; }
 .heatleg.secok { color: var(--success-color, #43a047); font-weight:600; }
 .heatleg.secok ha-icon { --mdc-icon-size:18px; margin-right:4px; }
 .heatleg.eleg ha-icon { --mdc-icon-size:16px; margin-right:3px; }
@@ -1065,6 +1251,13 @@ ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color,
 .m.net.diamond .ic ha-icon { transform: rotate(-45deg); }
 .m.net.square .ic { border-radius: 7px; }
 .m.net.unavailable .ic { opacity:.8; }
+.m.net.szm .ic { width: max(14px, calc(var(--dfc-size) * .85)); height: max(14px, calc(var(--dfc-size) * .85)); --mdc-icon-size: calc(var(--dfc-size) * .47); border-width:2px; }
+.m.net.szs .ic { width: max(14px, calc(var(--dfc-size) * .6)); height: max(14px, calc(var(--dfc-size) * .6)); --mdc-icon-size: max(9px, calc(var(--dfc-size) * .36)); border-width:2px; }
+.m.net.szs::before { content:""; position:absolute; inset:-6px; } /* small mark, same touch area */
+.m.net.szs.square .ic { border-radius:5px; }
+.m.net img.nbm { width: var(--mdc-icon-size); height: var(--mdc-icon-size); object-fit:contain; filter: brightness(0) invert(1); }
+.m.net b.nbm { font: 800 calc(var(--mdc-icon-size) * .9)/1 system-ui, sans-serif; letter-spacing:-.5px; }
+.m.net.diamond .ic .nbm { transform: rotate(-45deg); }
 .chip { position:absolute; transform: translate(-50%, -50%); border:0; cursor:pointer; font: inherit; padding: 6px 12px; border-radius: 12px; background: var(--dfc-chipbg); color: var(--dfc-chipfg); box-shadow: 0 2px 8px rgba(0,0,0,.28); display:flex; flex-direction:column; align-items:center; gap:1px; line-height:1.2; text-align:center; border: 1px solid var(--dfc-chipborder); backdrop-filter: blur(4px); -webkit-tap-highlight-color: transparent; z-index:1; }
 .chip .l1 { font-size: calc(var(--dfc-chipsize, 34px) * .42); font-weight:500; white-space:nowrap; }
 .chip .l2 { font-size: calc(var(--dfc-chipsize, 34px) * .38); opacity:.9; white-space:nowrap; }
@@ -1244,13 +1437,16 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .lmenu h4 { margin: 2px 10px 6px; font-size:13px; font-weight:500; color: var(--secondary-text-color); }
 .lmenu button { display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent; color:inherit; font: inherit; padding: 7px 10px; border-radius: 8px; cursor:pointer; text-align:left; --mdc-icon-size: 20px; }
 .lmenu button:hover { background: var(--secondary-background-color); }
+.lmenu button.dis { opacity:.45; cursor:default; }
+.lmenu button.dis:hover { background:transparent; }
 .lmenu button ha-icon.eye { color: var(--secondary-text-color); }
 .lmenu button.on ha-icon.eye { color: var(--dfc-accent); }
 .lmenu .sl { padding: 6px 10px 2px; display:flex; flex-direction:column; gap:4px; font-size:13px; }
 .lmenu .sl div { display:flex; justify-content:space-between; }
 .lmenu input[type=range] { width:100%; accent-color: var(--dfc-accent); }
 .lmenu hr { border:0; border-top:1px solid var(--divider-color); margin: 6px 4px; }
-.admin { position:absolute; right:12px; top:12px; z-index:4; border:0; border-radius:14px; padding: 5px 10px; font: inherit; font-size:12px; cursor:pointer; background: var(--dfc-accent); color: var(--text-primary-color, #fff); box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.main:has(.lcorner.top-left) > .admin { left:auto; right:12px; }
+.admin { position:absolute; left:12px; top:12px; z-index:4; max-width: calc(100% - 140px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:0; border-radius:14px; padding: 5px 10px; font: inherit; font-size:12px; cursor:pointer; background: var(--dfc-accent); color: var(--text-primary-color, #fff); box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .msg { padding: 24px 16px; color: var(--secondary-text-color); font-size: 14px; text-align:center; }
 .empty { position:absolute; left:50%; top:50%; transform: translate(-50%,-50%); font-size:13px; color: var(--secondary-text-color); background: var(--card-background-color); padding: 8px 12px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.2); pointer-events:none; max-width: 80%; text-align:center; z-index:2; }
 .pop.ip { background: transparent; padding:0; display:block; }
@@ -1318,6 +1514,7 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .fbtn .badge { position:absolute; right:-5px; bottom:-5px; min-width:18px; height:18px; padding:0 4px; box-sizing:border-box; border-radius:4px; background: var(--card-background-color, #fff); color: var(--primary-text-color, #000); border: 1px solid var(--divider-color, rgba(0,0,0,.2)); box-shadow:0 1px 3px rgba(0,0,0,.2); font-size:11px; font-weight:700; line-height:16px; text-align:center; }
 .fcorner { position:absolute; right:12px; bottom:12px; z-index:5; }
 .lgroup { display:flex; align-items:center; gap:8px; flex:none; }
+.lgroup.rev { flex-direction:row-reverse; }
 .dock-left .lslot .lgroup, .dock-right .lslot .lgroup { flex-direction:column; }
 .fwrap { position:relative; width:36px; height:36px; flex:none; display:block; }
 .fwrap .rail { position:absolute; left:0; top:0; z-index:7; }
@@ -1434,7 +1631,9 @@ class DeviceFloorplanCard extends HTMLElement {
 
   set hass(hass) {
     const first = !this._hass;
-    this._hass = hass;
+    this._live = hass;
+    // 0.11.1 Home Replay: while replaying, the card sees Home Assistant as it was at the replay time.
+    this._hass = this._rpT() != null ? this._rpHass() : hass;
     if (first) this._subscribe();
     this._update();
   }
@@ -1510,7 +1709,11 @@ class DeviceFloorplanCard extends HTMLElement {
     const ed = document.createElement("device-floorplan-card-editor");
     ed._hass = this._hass;
     ed._config = { ...this._raw };
-    ed._built = true;
+    // 0.11.1: the same Card Editor as in Home Assistant's card editor (settings, preview, markers).
+    ed.hidden = true;
+    document.body.appendChild(ed);
+    ed._render();
+    ed.hidden = false;
     this._penOrig = this._raw;
     let t = null;
     const flush = async () => {
@@ -1531,7 +1734,10 @@ class DeviceFloorplanCard extends HTMLElement {
       clearTimeout(t);
       t = setTimeout(flush, 700);
     };
-    ed._openBig({ direct: true, onClose: () => t && flush() });
+    ed._openBig({ direct: true, onClose: () => {
+      if (t) flush();
+      ed.remove();
+    } });
   }
 
   getCardSize() {
@@ -1557,19 +1763,40 @@ class DeviceFloorplanCard extends HTMLElement {
       });
       // 0.7.5: tap = info card, hold = the marker's action. On touch screens hold, then slide = explore:
       // the name and state of whatever is under the finger, like a mouse hover; lifting does nothing.
-      // 0.11 Energy: drag over the day; every column (Today, the hours, Now) is one magnetic step.
+      // 0.11.1: the camera strip shows a frame's line while the pointer is on it.
+      root.addEventListener("pointerover", (e) => {
+        const w = e.target.closest && e.target.closest(".cwin");
+        const k = w ? w.dataset.wk : null;
+        if (k === (this._winHover || null)) return;
+        this._winHover = k;
+        for (const pth of root.querySelectorAll("path.sl")) pth.classList.toggle("on", pth.dataset.wl === k || pth.classList.contains("ev"));
+      });
+      // 0.11.1: camera windows move by dragging (before the hold / explore handler below).
+      root.addEventListener("pointerdown", (e) => {
+        const win = e.target.closest && e.target.closest(".cwin.dr");
+        if (!win || e.button > 0 || e.target.closest("[data-camx]")) return;
+        e.stopImmediatePropagation();
+        this._winDragStart(e, win);
+      });
+      // 0.11.1 Home Replay: its buttons act on finger down.
+      root.addEventListener("pointerdown", (e) => {
+        const c = e.target.closest && e.target.closest("[data-rpgo],[data-rpov],[data-rp]");
+        if (!c || e.button > 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this._rpCtl(c);
+      });
+      // test10 Energy: tap or drag over the last 24 hours; every column (Last 24 h, the hours, Now) is one step.
       root.addEventListener("pointerdown", (e) => {
         const tr = e.target.closest && e.target.closest(".etrack");
         if (!tr) return;
-        const cols = [...tr.children].map((c) => c.getBoundingClientRect());
+        const cols = [...tr.children].map((c) => [c.getBoundingClientRect().right, c.dataset.at]);
         const pick = (x) => {
-          let i = cols.findIndex((r) => x < r.right + 1);
-          if (i < 0) i = cols.length - 1;
-          const at = i === 0 ? "today" : i === cols.length - 1 || i - 1 > new Date().getHours() ? "now" : i - 1;
-          if (at !== this._eAt) {
-            this._eAt = at;
-            this._update(true);
-          }
+          const c = cols.find(([r]) => x < r + 1) || cols[cols.length - 1];
+          const at = c[1] === "day" || c[1] === "now" ? c[1] : Number(c[1]);
+          if (at === this._eSel()) return;
+          this._eAt = at;
+          this._update(true);
         };
         pick(e.clientX);
         const mv = (ev) => pick(ev.clientX);
@@ -1577,6 +1804,49 @@ class DeviceFloorplanCard extends HTMLElement {
           window.removeEventListener("pointermove", mv);
           window.removeEventListener("pointerup", up);
           window.removeEventListener("pointercancel", up);
+        };
+        window.addEventListener("pointermove", mv);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", up);
+      });
+      // 0.11.1 Home Replay: drag along the 24 hours (the plan follows; the end is Live).
+      root.addEventListener("pointerdown", (e) => {
+        const tr = e.target.closest && e.target.closest(".rptrack");
+        if (!tr) return;
+        e.preventDefault();
+        this._rpStop();
+        this._rp.drag = true;
+        // Measured once: every step redraws the card (the grabbed line is replaced, a removed one measures 0).
+        const r = tr.getBoundingClientRect();
+        const vert = tr.classList.contains("v"); // a side rail: Now at the top
+        // test9: a slow drag moves minute by minute; a fast one glues to the step of the chosen speed (one second
+        // of play: 3600× = whole hours, 900× = quarters). The thumb stays under the finger; the time snaps.
+        let lp = null;
+        let lt = 0;
+        let vel = 0;
+        const off = new Date().getTimezoneOffset() * 60000;
+        const pick = (x, y) => {
+          const f = Math.max(0, Math.min(1, vert ? (r.bottom - y) / r.height : (x - r.left) / r.width));
+          const p = vert ? y : x;
+          const tn = performance.now();
+          if (lp != null && tn > lt) vel = vel * 0.6 + (Math.abs(p - lp) / (tn - lt)) * 400; // px / s, smoothed
+          lp = p;
+          lt = tn;
+          const step = vel > 140 ? Math.max(60000, this._rp.speed * 1000) : 60000;
+          const raw = Date.now() - this._rpSpan() * (1 - f);
+          this._rp.dragPct = f * 100;
+          this._rpSeek(f >= 0.995 ? Date.now() : Math.round((raw - off) / step) * step + off);
+        };
+        this._rpLoad().then(() => this._rp.t != null && this._rpSeek(this._rp.t));
+        pick(e.clientX, e.clientY);
+        const mv = (ev) => pick(ev.clientX, ev.clientY);
+        const up = () => {
+          window.removeEventListener("pointermove", mv);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+          this._rp.drag = false;
+          this._rp.dragPct = null;
+          this._update(true);
         };
         window.addEventListener("pointermove", mv);
         window.addEventListener("pointerup", up);
@@ -1660,6 +1930,8 @@ class DeviceFloorplanCard extends HTMLElement {
     clearInterval(this._nightT);
     this._netTimer(false); // 0.11: no Network polling after the card is gone
     clearTimeout(this._trigT);
+    if (this._rp) this._rpStop();
+    if (this._rpPop) this._rpPop();
     window.removeEventListener("device-floorplan-action", this._onExternal);
     window.removeEventListener("location-changed", this._onLocation);
     window.removeEventListener("popstate", this._onLocation);
@@ -1760,6 +2032,8 @@ class DeviceFloorplanCard extends HTMLElement {
     if (this._config.remember_floor !== false) lsSet(`dfc_floor_${this._lsKey()}`, id);
     if (render) this._update(true);
     else this._key = null;
+    // test11: Replay holds the history of what is on screen: the new floor's loads at once (time and play stay).
+    if (this._rpIn()) setTimeout(() => this._rpLoad(), 0);
   }
 
   /** Floors stacked like a building: highest on top. */
@@ -1811,6 +2085,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "security" && name === "all") return this._ov("security").show_quiet === true;
     if (ov === "energy") return { fill: true, flow: this._ov("energy").flow !== false }[name] ?? true;
     if ((ov === "live" || ov === "security") && name === "cams") return false;
+    if (name === "replay") return false; // 0.11.1 Home Replay (cards without a rail): off until a viewer turns it on
     return true;
   }
 
@@ -1827,10 +2102,31 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   /** Where the Layers button is: a corner of the plan (default top right), the overlay bar, or hidden. */
-  _layersPos() {
+  /** Where the round buttons (floors · Layers · Replay) sit. test10: beside a side Overlay Bar they are always on
+   *  the plan's other side: a corner on the bar's side moves across (saved or not), so the bar keeps its whole
+   *  height and left and right are mirrors of each other. evenHidden: the corner even when Layers is hidden. */
+  _layersPos(evenHidden = false) {
     const v = this._config.layers_button;
-    if (["top-right", "top-left", "bottom-left", "bottom-right", "bar", "hidden"].includes(v)) return v;
-    return this._ov("network").layers === false ? "hidden" : "top-right";
+    let pos = ["top-right", "top-left", "bottom-left", "bottom-right", "bar", "hidden"].includes(v) ? v : this._ov("network").layers === false ? "hidden" : "top-right";
+    if (pos === "hidden" && evenHidden) pos = "top-right";
+    const bp = String((this._config.buttons || {}).position || "");
+    const side = /right$/.test(bp) ? "right" : /left$/.test(bp) ? "left" : "";
+    if (side && pos.endsWith(`-${side}`)) pos = pos.replace(`-${side}`, side === "right" ? "-left" : "-right");
+    return pos;
+  }
+
+  /** test10: where the Home Replay button is: "layers" (a round button beside Layers, the default), "bar" (the
+   *  Overlay Bar's last button) or "hidden". Without a bar it is beside Layers, so it can't get lost. */
+  _rpBtnPos(dockShown) {
+    const c = this._config;
+    if (c.replay === false || c.replay_button === "hidden" || !this._rpOvs().length) return "hidden";
+    return c.replay_button === "bar" && dockShown ? "bar" : "layers";
+  }
+
+  /** The round Replay button. In Replay it turns into the overlay that is replayed (with the list of the others). */
+  _rpRoundBtn() {
+    const on = !!(this._rp && this._rp.mode);
+    return (on && this._rpOvBtn()) || `<button class="layers rpr ${on ? "on" : ""}" data-rpgo="1" title="${on ? "Close Home Replay" : "Home Replay"}" aria-label="Home Replay" aria-pressed="${on}"><ha-icon icon="mdi:history"></ha-icon></button>`;
   }
 
   _defaultOverlay() {
@@ -1865,7 +2161,7 @@ class DeviceFloorplanCard extends HTMLElement {
       f = e >= 0 ? 0 : e <= -6 ? 1 : -e / 6;
       // #121: no warm dusk stage unless asked for.
       if (n.warm_dusk && f > 0 && f < 1) tint = sun.attributes.rising ? "dawn" : "dusk";
-    } else if (mode === "times") f = timesFactor(n.start, n.end, new Date());
+    } else if (mode === "times") f = timesFactor(n.start, n.end, new Date(this._now()));
     return { f: Math.round(f * 20) / 20, tint, mode };
   }
 
@@ -1877,7 +2173,9 @@ class DeviceFloorplanCard extends HTMLElement {
     for (const item of this._items(a)) {
       if (item.phantom) continue;
       // #84: lamps get a bulb by default; anything else with a light only when a shape was chosen.
-      const lamp = item.group === "lights" || item.as === "light" || ((!item.group || item.standalone) && domainOf(item.main_entity || "") === "light");
+      // test9: "Acts as" (Floorplan Editor) decides when set: a plug Home Assistant shows as a light is no lamp.
+      const asK = ["light", "switch", "fan"].includes(item.as) ? item.as : null;
+      const lamp = asK ? asK === "light" : item.group === "lights" || ((!item.group || item.standalone) && domainOf(item.main_entity || "") === "light");
       const chosen = item.light && item.light.type;
       if (!lamp && (!chosen || item.light.type === "none")) continue;
       const pool = item.bond ? item.entities : (item.allEntities || item.entities || []).concat(item.main_entity ? [item.main_entity] : []);
@@ -1951,7 +2249,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const prev = this._applPrev[key];
     // 0.8.1: when it finished (older saves: true = now), so "Done" clears by itself after 30 min (setting).
     if (phase === "done" || (prev && prev !== "idle" && prev !== "done" && prev !== "unavailable" && phase === "idle")) {
-      if (typeof this._applDone[key] !== "number") this._applDone[key] = phase === "done" && S(ap.status) ? Math.min(Date.now(), new Date(S(ap.status).last_changed).getTime() || Date.now()) : Date.now();
+      if (typeof this._applDone[key] !== "number") this._applDone[key] = phase === "done" && S(ap.status) ? Math.min(this._now(), new Date(S(ap.status).last_changed).getTime() || this._now()) : this._now();
     }
     if (active) delete this._applDone[key];
     if (ap.door && S(ap.door) && S(ap.door).state === "on" && !active) delete this._applDone[key];
@@ -1960,13 +2258,13 @@ class DeviceFloorplanCard extends HTMLElement {
     if (prev === undefined) {
       const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
       this._applChg[key] = since ? new Date(since.last_changed).getTime() : 0;
-    } else if (prev !== phase) this._applChg[key] = Date.now();
+    } else if (prev !== phase) this._applChg[key] = this._now();
     this._applPrev[key] = phase;
     this._applSave();
     const doneFor = this._per(ap.item, "live").done_for || "30";
     let doneLeft = 0;
     if (this._applDone[key] && doneFor !== "unloaded") {
-      doneLeft = Number(this._applDone[key]) + Number(doneFor) * 60000 - Date.now();
+      doneLeft = Number(this._applDone[key]) + Number(doneFor) * 60000 - this._now();
       if (doneLeft <= 0 && (phase === "done" || phase === "idle")) {
         phase = "idle"; // cleared by time; the record stays until the next cycle so it doesn't come back
         doneLeft = 0;
@@ -1979,7 +2277,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (active && rem && live(rem)) {
       const v = rem.state;
       let min = null;
-      if ((rem.attributes || {}).device_class === "timestamp" || /^\d{4}-\d{2}-\d{2}T/.test(v)) min = Math.round((new Date(v).getTime() - Date.now()) / 60000);
+      if ((rem.attributes || {}).device_class === "timestamp" || /^\d{4}-\d{2}-\d{2}T/.test(v)) min = Math.round((new Date(v).getTime() - this._now()) / 60000);
       else if (/^\d+:\d{2}(:\d{2})?$/.test(v)) {
         const [h, m] = v.split(":").map(Number);
         min = h * 60 + m;
@@ -1990,7 +2288,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (active && !time && pr && live(pr) && num(pr.state)) time = `${Math.round(Number(pr.state))}% done`;
     if (active && !time) {
       const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
-      if (since) time = `${Math.max(0, Math.round((Date.now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
+      if (since) time = `${Math.max(0, Math.round((this._now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
     }
     const pretty = (t) => String(t).replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
     const word = phase === "unavailable" ? "Status unavailable" : phase === "done" ? "Finished" : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? "Door open" : "Paused") : phase === "error" ? "Error" : phase === "idle" ? "Idle"
@@ -2045,7 +2343,7 @@ class DeviceFloorplanCard extends HTMLElement {
       if (mode === "never") return false;
       if (o.st.doneLeft > 0) next = next ? Math.min(next, o.st.doneLeft) : o.st.doneLeft; // redraw when "Done" clears
       if (["done", "attention", "error"].includes(o.st.phase) || mode === "always") return true;
-      const left = o.st.chg + PILL_MS - Date.now();
+      const left = o.st.chg + PILL_MS - this._now();
       if (left > 0) next = next ? Math.min(next, left) : left;
       return left > 0;
     };
@@ -2345,7 +2643,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const opts = (this._config.live || {});
     if ((opts.motion_as || "pulse") === "icons") return "";
     const areas = a.areas || {};
-    const now = Date.now();
+    const now = this._now();
     this._pulseT = this._pulseT || {};
     this._pulseOn = this._pulseOn || {};
     const rooms = {};
@@ -2629,7 +2927,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const seen = new Set();
     for (const it of items) {
       const mainSt = h.states[it.main_entity];
-      if (it.main_entity && !it.bond && mainSt && !live(mainSt)) {
+      if (it.main_entity && !it.bond && mainSt && devOffline(h, it)) {
         health = true;
         if ((it.conns || []).length) net = true;
       }
@@ -2981,7 +3279,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _ageTxt(t) {
-    const ms = Date.now() - new Date(t).getTime();
+    const ms = this._now() - new Date(t).getTime();
     if (!t || !(ms >= 0)) return "";
     const m = Math.round(ms / 60000);
     if (m < 60) return m < 2 ? "just now" : `${m} min`;
@@ -3206,20 +3504,36 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     }
     const placed = [];
-    const ww = Math.min(160, W * 0.3);
-    const wh = ww * 0.5625;
-    for (const win of box.querySelectorAll(".cwin")) {
+    // 0.11.1: windows may sit in the frame around the plan (Frame: space around it), not only on the plan.
+    const fe = box.parentElement && box.parentElement.classList.contains("fr") ? box.parentElement.getBoundingClientRect() : br;
+    const lim = { x0: fe.left - br.left, y0: fe.top - br.top, x1: fe.right - br.left, y1: fe.bottom - br.top };
+    // 0.11.1: one size for every camera window of the card (S / M / L); "strip": all in one row like film.
+    const camCfg = this._config.cameras || {};
+    const [cmax, cshare] = CAM_SIZES[camCfg.cam_size] || CAM_SIZES.m;
+    let ww = Math.min(cmax, W * cshare);
+    let wh = ww * 0.5625;
+    const wins = [...box.querySelectorAll(".cwin")];
+    if (camCfg.cam_layout === "strip" && wins.length) return out + this._placeStrip(box, wins, W, H, lim, ww);
+    for (const win of wins) {
       const dot = box.querySelector(`[data-k="${CSS.escape(win.dataset.wk)}"]`);
       if (!dot) continue;
       const cx = parseFloat(dot.style.left) || 0;
       const cy = parseFloat(dot.style.top) || 0;
-      const left = cx > W * 0.62;
+      // 0.11.1: a window moved by hand stays where it was put (centre, % of the plan); the line follows.
+      const pos = this._winPos(win.dataset.wk);
+      let left = cx > W * 0.62;
       let up = cy > wh + 40;
       let x = left ? cx - 28 - ww : cx + 28;
       let y = up ? cy - 40 - wh : cy + 40;
-      for (let i = 0; i < 6 && placed.some((p) => x < p.x + p.w + 8 && x + ww + 8 > p.x && y < p.y + p.h + 8 && y + wh + 8 > p.y); i++) y += up ? -(wh + 8) : wh + 8;
-      x = Math.max(2, Math.min(W - ww - 2, x));
-      y = Math.max(2, Math.min(H - wh - 2, y));
+      if (pos) {
+        x = (pos.x / 100) * W - ww / 2;
+        y = (pos.y / 100) * H - wh / 2;
+        left = x + ww / 2 < cx;
+      } else for (let i = 0; i < 6 && placed.some((p) => x < p.x + p.w + 8 && x + ww + 8 > p.x && y < p.y + p.h + 8 && y + wh + 8 > p.y); i++) y += up ? -(wh + 8) : wh + 8;
+      win.classList.toggle("dr", this._winDraggable());
+      win.classList.toggle("drag", !!(this._winDrag && this._winDrag.key === win.dataset.wk));
+      x = Math.max(lim.x0 + 2, Math.min(lim.x1 - ww - 2, x));
+      y = Math.max(lim.y0 + 2, Math.min(lim.y1 - wh - 2, y));
       up = y + wh / 2 < cy;
       placed.push({ x, y, w: ww, h: wh });
       Object.assign(win.style, { left: `${x}px`, top: `${y}px`, width: `${ww}px`, height: `${wh}px` });
@@ -3231,16 +3545,165 @@ class DeviceFloorplanCard extends HTMLElement {
       const sx = ex < cx ? -1 : 1;
       out += `<path class="elbow" style="stroke:${win.dataset.c || "#26a69a"}" d="M${cx},${cy} L${cx},${ey - sy * r} Q${cx},${ey} ${cx + sx * r},${ey} L${ex},${ey}"/>`;
     }
+    // Snap guides while dragging (same height / same column as another window).
+    const g = this._winDrag && this._winDrag.guide;
+    if (g && g.y != null) out += `<line class="wguide" x1="0" y1="${(g.y / 100) * H}" x2="${W}" y2="${(g.y / 100) * H}"/>`;
+    if (g && g.x != null) out += `<line class="wguide" x1="${(g.x / 100) * W}" y1="0" x2="${(g.x / 100) * W}" y2="${H}"/>`;
     return out;
+  }
+
+  /** 0.11.1: the camera strip: every window in one row (film), in the frame space below or above the plan when
+   *  there is room (else along the plan's bottom), ordered like their cameras left → right so lines stay short.
+   *  Each frame and its dot share the camera's colour; a line only on hover or while the camera has an event. */
+  _placeStrip(box, wins, W, H, lim, ww0) {
+    const gap = 8;
+    const below = lim.y1 - H;
+    const above = -lim.y0;
+    const room = Math.max(below, above);
+    const items = wins.map((win) => {
+      const dot = box.querySelector(`[data-k="${CSS.escape(win.dataset.wk)}"]`);
+      return { win, cx: dot ? parseFloat(dot.style.left) || 0 : 0, cy: dot ? parseFloat(dot.style.top) || 0 : 0, dot: !!dot };
+    }).sort((a, b) => a.cx - b.cx);
+    const n = items.length;
+    const availW = lim.x1 - lim.x0 - 16;
+    let ww = Math.min(ww0, (availW - (n - 1) * gap) / n);
+    let wh = ww * 0.5625;
+    const inFrame = room >= 48;
+    if (inFrame && wh > room - 20) {
+      wh = room - 20;
+      ww = wh / 0.5625;
+    }
+    const band = wh + 16;
+    const y = inFrame ? (below >= above ? H + (below - wh) / 2 : lim.y0 + (above - wh) / 2) : H - wh - 10;
+    const total = n * ww + (n - 1) * gap;
+    let x = lim.x0 + (lim.x1 - lim.x0 - total) / 2;
+    const x0 = x - 10;
+    // The film: a dark band with sprocket holes along both edges.
+    let out = `<rect class="film" x="${x0}" y="${y - 8}" width="${total + 20}" height="${band}" rx="8"/><line class="holes" x1="${x0 + 8}" y1="${y - 4}" x2="${x0 + total + 12}" y2="${y - 4}"/><line class="holes" x1="${x0 + 8}" y1="${y + wh + 4}" x2="${x0 + total + 12}" y2="${y + wh + 4}"/>`;
+    const lines = [];
+    for (const it of items) {
+      const key = it.win.dataset.wk;
+      Object.assign(it.win.style, { left: `${x}px`, top: `${y}px`, width: `${ww}px`, height: `${wh}px` });
+      it.win.classList.remove("dr", "drag");
+      if (it.dot) {
+        const sp = this._specs && this._specs.get(key);
+        const on = (sp && sp.trig) || this._winHover === key;
+        const ex = x + ww / 2;
+        const ey = y > it.cy ? y - 8 : y + wh + 8; // the band's edge facing the camera
+        const my = (it.cy + ey) / 2;
+        lines.push(`<path class="elbow sl ${on ? "on" : ""} ${sp && sp.trig ? "ev" : ""}" data-wl="${cesc(key)}" style="stroke:${it.win.dataset.c || "#26a69a"}" d="M${it.cx},${it.cy} L${it.cx},${my} L${ex},${my} L${ex},${ey}"/>`);
+      }
+      x += ww + gap;
+    }
+    out += lines.join("");
+    return out;
+  }
+
+  /** 0.11.1: where a camera window was put by hand (its centre, % of the plan), if it was. */
+  _winPos(key) {
+    if (this._winDrag && this._winDrag.key === key) return this._winDrag;
+    const sp = this._specs && this._specs.get(key);
+    const w = sp && sp.item && this._dev(sp.item.id).win;
+    return w && Number.isFinite(w.x) && Number.isFinite(w.y) ? w : null;
+  }
+
+  /** Camera windows can be moved in the Card Editor, and on the dashboard by admins (saved in the card). */
+  _winDraggable() {
+    if ((this._config.cameras || {}).cam_layout === "strip") return false; // the strip places them itself
+    if (this._onWinMove) return true;
+    return !this.preview && !this._editMode && !!(this._hass && this._hass.user && this._hass.user.is_admin);
+  }
+
+  /** Drag a camera window: it snaps to the height or the column of another window; dropped on its own camera dot,
+   *  it goes back to its automatic spot. */
+  _winDragStart(e, win) {
+    const box = this.shadowRoot.querySelector(".box");
+    const sp = this._specs && this._specs.get(win.dataset.wk);
+    if (!box || !sp) return;
+    const br = box.getBoundingClientRect();
+    const wr = win.getBoundingClientRect();
+    const key = win.dataset.wk;
+    const fe = box.parentElement && box.parentElement.classList.contains("fr") ? box.parentElement.getBoundingClientRect() : br;
+    const pxX = (v) => ((v - br.left) / br.width) * 100;
+    const pxY = (v) => ((v - br.top) / br.height) * 100;
+    const lim = { x0: pxX(fe.left), x1: pxX(fe.right), y0: pxY(fe.top), y1: pxY(fe.bottom) };
+    // The other windows' centres (fixed while dragging), in %.
+    const others = [...box.querySelectorAll(".cwin")].filter((w) => w.dataset.wk !== key).map((w) => {
+      const r = w.getBoundingClientRect();
+      return { x: ((r.left + r.width / 2 - br.left) / br.width) * 100, y: ((r.top + r.height / 2 - br.top) / br.height) * 100 };
+    });
+    const dx = e.clientX - (wr.left + wr.width / 2);
+    const dy = e.clientY - (wr.top + wr.height / 2);
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let moved = false;
+    let raf = 0;
+    const SNAP = 1.6; // % of the plan
+    const mv = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      moved = true;
+      let x = ((ev.clientX - dx - br.left) / br.width) * 100;
+      let y = ((ev.clientY - dy - br.top) / br.height) * 100;
+      const guide = {};
+      const nx = others.reduce((b, o) => (Math.abs(o.x - x) < Math.abs((b ?? 1e9) - x) ? o.x : b), null);
+      const ny = others.reduce((b, o) => (Math.abs(o.y - y) < Math.abs((b ?? 1e9) - y) ? o.y : b), null);
+      if (nx != null && Math.abs(nx - x) < SNAP) x = guide.x = nx;
+      if (ny != null && Math.abs(ny - y) < SNAP * (br.width / br.height)) y = guide.y = ny;
+      this._winDrag = { key, x: Math.max(lim.x0, Math.min(lim.x1, x)), y: Math.max(lim.y0, Math.min(lim.y1, y)), guide };
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        this._layout();
+      });
+    };
+    const up = (ev) => {
+      window.removeEventListener("pointermove", mv);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (!moved) return;
+      this._winMoved = Date.now(); // the click after a drag doesn't open the camera
+      const d = this._winDrag;
+      this._winDrag = null;
+      const dn = this.shadowRoot.querySelector(`.box [data-k="${CSS.escape(key)}"]`); // fresh: the card may have redrawn
+      const dr = dn && dn.getBoundingClientRect();
+      const home = dr && Math.hypot(ev.clientX - (dr.left + dr.width / 2), ev.clientY - (dr.top + dr.height / 2)) < 30;
+      this._winSave(sp.item.id, home ? null : { x: Math.round(d.x * 10) / 10, y: Math.round(d.y * 10) / 10 });
+    };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  }
+
+  async _winSave(id, pos) {
+    if (this._onWinMove) return this._onWinMove(id, pos);
+    const raw = { ...(this._raw || {}) };
+    const devs = { ...(raw.devices || {}) };
+    const d = { ...(devs[id] || {}) };
+    if (pos) d.win = pos;
+    else delete d.win;
+    if (Object.keys(d).length) devs[id] = d;
+    else delete devs[id];
+    raw.devices = devs;
+    if (!Object.keys(devs).length) delete raw.devices;
+    this._penOrig = this._raw;
+    this.setConfig(raw); // it stays at once; saved to the dashboard below
+    this._update(true);
+    try {
+      await this._saveToDashboard(raw);
+    } catch (err) {
+      this._toast(err && err.message === "yaml" ? "This dashboard is kept in YAML: the camera spot lasts until the page reloads." : "Couldn't save the camera spot to the dashboard.");
+    }
   }
 
   /** 0.11: the device's camera entity, if it has one. */
   _camOf(item) {
     // A device is a camera only when its main entity is one: a tablet's or a robot's map "camera" doesn't count.
     // Or when you pick the camera as what leads in Live (a doorbell whose main entity is its button).
+    // test9: any camera entity of the device counts (a doorbell whose main entity is its button), never a map;
+    // what you picked to lead in Live still wins (pick something else and the device is no camera there).
     const lead = (this._dev(item.id).per || {}).live?.lead;
-    const e = lead && domainOf(lead) === "camera" ? lead : item.main_entity;
-    return e && domainOf(e) === "camera" && this._hass.states[e] && !/map|valetudo|xiaomi_cloud_map/i.test(e) ? e : null;
+    const ok = (e) => !!e && domainOf(e) === "camera" && !!this._hass.states[e] && !/map|valetudo|xiaomi_cloud_map/i.test(e);
+    if (lead && this._hass.states[lead]) return ok(lead) ? lead : null;
+    return [item.main_entity, ...(item.entities || [])].find(ok) || null;
   }
 
   /** What brings a device into Live: the picked trigger, else (cameras) its own motion / person / ring sensor. */
@@ -3271,7 +3734,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _trigOn(e) {
     const st = this._hass.states[e];
     if (!st) return false;
-    const now = Date.now();
+    const now = this._now();
     let left = 0;
     if (domainOf(e) === "event") left = 60000 - (now - Date.parse(st.state));
     else if (["on", "open", "detected", "home", "playing", "cleaning", "heating", "cooling", "running", "printing", "recording", "streaming"].includes(st.state)) return true;
@@ -3473,7 +3936,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const opts = this._lights();
       const fits = (e) => {
         const k = kindOfE(e);
-        return k === "light" || (opts.switches !== false && (k === "switch" || k === "fan") && (item.group === "lights" || item.actsAs === "light"));
+        return k === "light" || (opts.switches !== false && (k === "switch" || k === "fan") && (item.actsAs ? item.actsAs === "light" : item.group === "lights"));
       };
       const lead = item.bond && !this._per(item, ov).lead ? (fits(item.main_entity) ? item.main_entity : null) : this._leadFor(item, ov, fits);
       if (!lead) return [];
@@ -3721,8 +4184,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const bats = allowed.filter((eid) => kindOf(eid, hass.states[eid]) === "battery" && live(hass.states[eid]) && num(hass.states[eid].state));
       if (bats.length) bat = bats.sort((x, y) => Number(hass.states[x].state) - Number(hass.states[y].state))[0];
     }
-    const mainSt = hass.states[item.main_entity];
-    const unavailable = item.bond ? (item.entities || []).some((e) => !live(hass.states[e])) : item.main_entity && !live(mainSt);
+    const unavailable = item.bond ? (item.entities || []).some((e) => (hass.states[e] || {}).state === "unavailable") : item.main_entity && devOffline(hass, item, this._rpT() != null);
     const pos = item.box || item;
     if (bat) {
       const st = hass.states[bat];
@@ -3746,8 +4208,8 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!this._hass || this._eBusy) return;
     if (!force && this._eData && this._eData.day === day && now - this._eData.t < 300000) return;
     this._eBusy = true;
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    // test10: the last 24 hours (rolling, ending with the current hour), hour by hour.
+    const start = new Date(Math.floor(now / 3600000) * 3600000 - 24 * 3600000);
     this._hass
       .callWS({ type: "energy/get_prefs" })
       .then(async (prefs) => {
@@ -3767,14 +4229,14 @@ class DeviceFloorplanCard extends HTMLElement {
         if (ids.length) {
           stats = await this._hass.callWS({ type: "recorder/statistics_during_period", start_time: start.toISOString(), end_time: new Date().toISOString(), statistic_ids: ids, period: "hour", types: ["change"] });
         }
-        const hours = {};
+        const hours = {}; // statistic → { hour start (ms): kWh }
         for (const id of ids) {
-          const arr = new Array(24).fill(0);
+          const by = {};
           for (const r of stats[id] || []) {
-            const h = new Date(typeof r.start === "number" ? r.start : r.start).getHours();
-            if (h >= 0 && h < 24) arr[h] += Math.max(0, Number(r.change) || 0);
+            const ts = Math.floor(new Date(r.start).getTime() / 3600000) * 3600000;
+            if (Number.isFinite(ts)) by[ts] = (by[ts] || 0) + Math.max(0, Number(r.change) || 0);
           }
-          hours[id] = arr;
+          hours[id] = by;
         }
         this._eData = { day, t: Date.now(), devs, srcs, hours };
         this._eErr = null;
@@ -3789,11 +4251,16 @@ class DeviceFloorplanCard extends HTMLElement {
       });
   }
 
-  /** What the scrubber shows: "today" (kWh), "now" (W) or an hour 0..23 (kWh in that hour). */
+  /** What Energy shows: "day" (kWh of the last 24 hours, rolling), "now" (live W), or one of those hours
+   *  (its start, ms: kWh in that hour). */
   _eSel() {
-    const h = new Date().getHours();
-    const v = this._eAt ?? "today";
-    return typeof v === "number" && v > h ? "today" : v;
+    const v = this._eAt;
+    if (v === "now") return "now";
+    if (typeof v === "number") {
+      const cur = Math.floor(Date.now() / 3600000) * 3600000;
+      if (v <= cur && v >= cur - 23 * 3600000) return v;
+    }
+    return "day";
   }
 
   /** Value of one statistic (+ its power sensor) for the current selection: { v, unit }. */
@@ -3803,8 +4270,9 @@ class DeviceFloorplanCard extends HTMLElement {
       const w = powerW(this._hass.states[rate]);
       return { v: w == null ? 0 : w, unit: "W", live: w != null };
     }
-    const arr = (this._eData && this._eData.hours[stat]) || [];
-    const v = sel === "today" ? arr.reduce((x, y) => x + y, 0) : arr[sel] || 0;
+    const by = (this._eData && this._eData.hours[stat]) || {};
+    const from = Math.floor(Date.now() / 3600000) * 3600000 - 23 * 3600000;
+    const v = sel === "day" ? Object.entries(by).reduce((x, [ts, y]) => (Number(ts) >= from ? x + y : x), 0) : by[sel] || 0;
     return { v, unit: "kWh" };
   }
 
@@ -4056,34 +4524,707 @@ class DeviceFloorplanCard extends HTMLElement {
     const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>Rooms: darker = more energy</span>` : "";
     const sol = this._eSum("solar");
     const grid = this._eSum("grid");
-    const sumTxt = `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>${it("mdi:flash", "On the plan", this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", "Not on this plan", this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
-    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}`;
+    const batt = this._eSum("battery_out");
+    const sumTxt = `${this._eSel() === "day" ? "" : `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>`}${it("mdi:flash", "On the plan", this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", "Not on this plan", this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
+    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", "Battery", this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
     const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.</span>` : "";
     return `${this._eScrubHtml()}<div class="heatleg eleg">${sumTxt}${srcTxt}${top}${hint}</div>`;
   }
 
-  /** The day scrubber: hour ticks with a mini bar each, snapping to full hours; Today ← → Now. */
-  _eScrubHtml() {
-    const h = new Date().getHours();
-    const totals = new Array(h + 1).fill(0);
-    for (const d of this._eData.devs) {
-      const arr = this._eData.hours[d.stat_consumption] || [];
-      for (let i = 0; i <= h; i++) totals[i] += arr[i] || 0;
+  // ------------------------------------------------------------- Home Replay (0.11.1)
+  /** The card's clock: the replay time while replaying, else now (night look, motion, "ago", timers). */
+  _now() {
+    return this._rpT() ?? Date.now();
+  }
+
+  _rpT() {
+    return this._rp && this._rp.t != null ? this._rp.t : null;
+  }
+
+  /** Replay is in use: open (rail / bar) or at a past time. */
+  _rpIn() {
+    return !!(this._rp && (this._rp.mode || this._rp.t != null));
+  }
+
+  /** Replay is open (the rail or the bar), at a past time or at Now. */
+  _rpOn() {
+    return !!(this._rp && (this._rp.mode || this._rp.t != null));
+  }
+
+  /** A replay control was pressed (on finger down, so a redraw while playing can't swallow it). */
+  _rpCtl(t) {
+    if (t.closest("[data-rpgo]")) {
+      const bar = this.shadowRoot.querySelector(".ovbar");
+      if (bar) this._railBox = { w: bar.offsetWidth, h: bar.offsetHeight }; // the replay rail keeps this size
+      // test10: without a rail the round button also closes Replay; on Energy / Network (no replay) it replays Live.
+      if (this._rp && this._rp.mode && !this._dockShown) return this._rpOpen(false);
+      if (RP_SKIP.has(this._overlay)) this._setOverlay(this._rpOvs()[0] || "live");
+      return this._rpOpen(true);
     }
-    const max = Math.max(...totals, 1e-9);
+    const rpo = t.closest("[data-rpov]");
+    if (rpo) {
+      this._rp.menu = false;
+      return this._setOverlay(rpo.dataset.rpov);
+    }
+    const rpb = t.closest("[data-rp]");
+    if (!rpb) return;
+    const a = rpb.dataset.rp;
+    if (a === "exit") return this._rpOpen(false);
+    if (a === "pill") return this._rpAsk();
+    if (a === "menu") {
+      this._rp.menu = !this._rp.menu;
+      return this._update(true);
+    }
+    if (a === "prev" || a === "next") return this._rpJump(a === "prev" ? -1 : 1);
+    return this._rpPlay();
+  }
+
+  _rpSpan() {
+    return ((this._rp && this._rp.range) || 24) * 3600000;
+  }
+
+  _rpState() {
+    return (this._rp = this._rp || { t: null, mode: false, speed: Number(lsGet("dfc_rp_speed")) || 900, range: RP_RANGES.includes(Number(lsGet("dfc_rp_range"))) ? Number(lsGet("dfc_rp_range")) : 24 });
+  }
+
+
+  /** The history of everything the current overlay reads (plus the sun and every light, for the night look),
+   *  for the chosen range; loaded again for another overlay or range, or after 5 min. */
+  _rpLoad() {
+    const rp = this._rpState();
+    if (rp.loading) return rp.loading;
+    const key = `${this._overlay}|${rp.range}|${this._floor || ""}`; // test11: the floor too (each floor has its own devices)
+    if (rp.data && rp.key === key && Date.now() - rp.at < 300000) return Promise.resolve();
+    const real = this._live || this._hass;
+    const want = new Set([...(this._watch || []), "sun.sun"]);
+    for (const item of this._items(this._a || {})) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") want.add(e);
+    const ents = [...want].filter((e) => real.states[e]);
+    const start = new Date(Date.now() - this._rpSpan()).toISOString();
+    // Sensors only need their state (their unit etc. come from now); everything else with attributes.
+    const q = (ids, full) => (ids.length ? real.callWS({ type: "history/history_during_period", start_time: start, entity_ids: ids, minimal_response: !full, no_attributes: !full, significant_changes_only: false }) : Promise.resolve({}));
+    rp.loading = Promise.all([q(ents.filter((e) => domainOf(e) !== "sensor"), true), q(ents.filter((e) => domainOf(e) === "sensor"), false)])
+      .then(([x, y]) => {
+        const data = {};
+        for (const [e, rows] of Object.entries({ ...x, ...y })) data[e] = rows.map((r) => ({ t: (r.lu || r.lc) * 1000, s: r.s, a: r.a })).filter((r) => r.t).sort((m, n) => m.t - n.t);
+        rp.data = data;
+        rp.own = new Set(this._watch || []); // the overlay's own entities (not the lights loaded for the night look)
+        rp.model = null;
+        rp.key = key;
+      })
+      .catch(() => {
+        rp.data = rp.data || {};
+      })
+      .finally(() => {
+        rp.at = Date.now();
+        rp.snap = null;
+        rp.loading = null;
+        if (rp.t != null) this._hass = this._rpHass();
+        this._update(true);
+      });
+    this._update(true);
+    return rp.loading;
+  }
+
+  /** Home Assistant at the replay time: every entity's state from its history (now's for the rest). */
+  _rpHass() {
+    const rp = this._rp;
+    const real = this._live;
+    if (rp.snap && rp.snapT === rp.t && rp.snapBase === real) return rp.snap;
+    const states = { ...real.states };
+    let sig = "";
+    for (const [e, rows] of Object.entries(rp.data || {})) {
+      if (!rows.length) continue;
+      let lo = 0, hi = rows.length - 1, i = 0;
+      while (lo <= hi) {
+        const m = (lo + hi) >> 1;
+        if (rows[m].t <= rp.t) {
+          i = m;
+          lo = m + 1;
+        } else hi = m - 1;
+      }
+      sig += `${i},`;
+      const r = rows[i];
+      const cur = real.states[e];
+      const iso = new Date(r.t).toISOString();
+      states[e] = { ...(cur || { entity_id: e }), state: r.s, attributes: r.a || (cur && cur.attributes) || {}, last_changed: iso, last_updated: iso };
+    }
+    // Nothing is switched in the past: a tap says how to get back.
+    const callService = () => {
+      this._toast("Replay: tap ← Now to switch devices");
+      return Promise.resolve();
+    };
+    rp.snap = { ...real, states, callService };
+    rp.sig = sig;
+    rp.snapT = rp.t;
+    rp.snapBase = real;
+    return rp.snap;
+  }
+
+  _rpSeek(t, light = false) {
+    const rp = this._rp;
+    if (!rp) return;
+    if (t >= Date.now() - 20000) return this._rpLive();
+    const enter = rp.t == null;
+    rp.t = Math.max(Date.now() - this._rpSpan(), t);
+    if (enter) this._pulseT = {}; // motion pulses start fresh in the past
+    const sig = rp.sig;
+    this._hass = this._rpHass();
+    // 0.11.1: while playing, nothing on the plan changed → only the thumb, the time and the pill move.
+    if (light && !enter && rp.sig === sig && this._rpMove()) return;
+    this._update(true);
+  }
+
+  /** Move the thumb, the fill and the times in place (no redraw). False if the controls aren't there. */
+  _rpMove() {
+    const sr = this.shadowRoot;
+    const tr = sr && sr.querySelector(".rptrack");
+    if (!tr) return false;
+    const rp = this._rp;
+    const span = this._rpSpan();
+    const T = rp.t ?? Date.now();
+    const pct = this._rpPct(T, Date.now() - span, span).toFixed(2);
+    const vert = tr.classList.contains("v");
+    const th = tr.querySelector(".rpthumb");
+    const fill = tr.querySelector(".rpline b");
+    if (th) th.style[vert ? "bottom" : "left"] = `${pct}%`;
+    if (fill) fill.style[vert ? "height" : "width"] = `${pct}%`;
+    const em = tr.querySelector(".rpthumb em");
+    rp.lab = this._rpLabel();
+    if (em) em.textContent = rp.lab;
+    const pill = sr.querySelector(".rppill span");
+    if (pill && rp.t != null) pill.textContent = this._rpPillTxt();
+    this._rpBub();
+    return true;
+  }
+
+  /** test9: where the thumb is on the line (%). While dragging: under the finger. */
+  _rpPct(T, t0, span) {
+    const rp = this._rp;
+    if (rp.drag && rp.dragPct != null) return rp.dragPct;
+    return Math.max(0, Math.min(100, ((T - t0) / span) * 100));
+  }
+
+  /** The time at the thumb, in words: the clock (+ the line's value). */
+  _rpLabel() {
+    const rp = this._rp;
+    if (rp.t == null) return "Now";
+    const T = rp.t;
+    const m = this._rpModel();
+    let lab = rpClock(T);
+    if (m.line) {
+      const span = this._rpSpan();
+      const v = m.line[Math.min(m.n - 1, Math.max(0, Math.floor(((T - (Date.now() - span)) / span) * m.n)))];
+      if (v != null) lab += ` · ${Math.round(v * 10) / 10}${m.unit || ""}`;
+    }
+    return lab;
+  }
+
+  /** The pill on the plan: the day and the time. */
+  _rpPillTxt() {
+    const T = this._rp.t;
+    return `${this._rpWhen(T).day} ${rpClock(T)}`;
+  }
+
+  _rpPill() {
+    return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="Tap to go to a day and time" aria-label="Replay time: ${cesc(this._rpPillTxt())}. Tap to go to a day and time"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
+  }
+
+  /** test9: on a side rail the time bubble is drawn on the card itself, level with the thumb and right beside it
+   *  (as a part of the rail the plan covered it). Shown while playing or dragging. */
+  _rpBub() {
+    const sr = this.shadowRoot;
+    const b = sr && sr.querySelector(".rpbub");
+    const rp = this._rp;
+    if (!b || !rp) return;
+    const th = sr.querySelector(".rptrack.v .rpthumb");
+    const card = sr.querySelector("ha-card");
+    const rail = sr.querySelector(".dockrow");
+    if (!th || !card || !rail || !(rp.play || rp.drag)) {
+      b.hidden = true;
+      return;
+    }
+    const c = card.getBoundingClientRect();
+    const t = th.getBoundingClientRect();
+    const r = rail.getBoundingClientRect();
+    const left = r.left - c.left <= c.right - r.right; // the rail is on the card's left
+    b.textContent = rp.lab || "";
+    b.style.top = `${t.top + t.height / 2 - c.top}px`;
+    // test10: right beside the handle (over the bars), not beyond the rail.
+    b.style.left = left ? `${t.right - c.left + 6}px` : "";
+    b.style.right = left ? "" : `${c.right - t.left + 6}px`;
+    b.hidden = false;
+  }
+
+  /** test9: tap the time pill → a small entry (day, time with optional seconds) → Replay goes there, paused.
+   *  The entry lives outside the card's own drawing, so the card can keep redrawing under it. */
+  _rpAsk() {
+    const rp = this._rp;
+    if (!rp || this._rpPop) return;
+    // test10: the entry opens on the pill's own place (measured before the card redraws); with nothing to
+    // measure, at the top centre of the card. Never in a corner of the page.
+    const box = (x) => {
+      const r = x && x.getBoundingClientRect();
+      return r && r.width > 0 && r.height > 0 ? r : null;
+    };
+    const pr = box(this.shadowRoot.querySelector(".rppill"));
+    const cr = box(this.shadowRoot.querySelector("ha-card")) || box(this);
+    this._rpStop();
+    this._update(true);
+    const now = Date.now();
+    const t0 = now - this._rpSpan();
+    const T = rp.t ?? now;
+    const p2 = (v) => String(v).padStart(2, "0");
+    const days = [];
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    while (days.length < 4) {
+      days.push(d.getTime());
+      if (d.getTime() <= t0) break;
+      d.setDate(d.getDate() - 1);
+    }
+    const cur = new Date(T);
+    const curDay = new Date(T).setHours(0, 0, 0, 0);
+    const el = document.createElement("div");
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "Go to a day and time");
+    el.style.cssText = "position:fixed;z-index:10001;display:flex;align-items:center;gap:6px;padding:8px;border-radius:12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#111);box-shadow:0 8px 24px rgba(0,0,0,.35);font:14px var(--paper-font-body1_-_font-family, Roboto, sans-serif)";
+    const fld = "font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:6px 8px;min-height:36px;box-sizing:border-box";
+    el.innerHTML = `<select aria-label="Day" style="${fld}">${days.map((x) => `<option value="${x}" ${x === curDay ? "selected" : ""}>${cesc(this._rpWhen(x + 43200000).day)}</option>`).join("")}</select><input type="time" step="1" aria-label="Time (seconds optional)" value="${p2(cur.getHours())}:${p2(cur.getMinutes())}:00" style="${fld}"><button data-go="1" style="font:inherit;font-weight:600;border:0;border-radius:8px;padding:0 14px;min-height:36px;cursor:pointer;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)">Go</button><button data-x="1" aria-label="Close" style="font:inherit;border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;cursor:pointer">✕</button>`;
+    // Inside an open dialog (the Card Editor) the entry must live in that dialog to be reachable.
+    let host = this;
+    while (host && !(host instanceof HTMLDialogElement && host.open)) host = host.parentNode || host.host;
+    (host || document.body).appendChild(el);
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const cx = pr ? pr.left + pr.width / 2 : cr ? cr.left + cr.width / 2 : window.innerWidth / 2;
+    const cy = pr ? pr.top + pr.height / 2 : (cr ? cr.top : 0) + 14 + h / 2;
+    const lo = Math.max(8, cr ? cr.left + 6 : 8);
+    const hi = Math.max(lo, Math.min(window.innerWidth - 8, cr ? cr.right - 6 : window.innerWidth) - w);
+    const x = Math.min(hi, Math.max(lo, cx - w / 2));
+    const y = Math.max(8, Math.min(window.innerHeight - h - 8, cy - h / 2));
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    // A page that moves fixed elements (a transformed container): put it where it was meant to be.
+    const ar = el.getBoundingClientRect();
+    if (Math.abs(ar.left - x) > 1 || Math.abs(ar.top - y) > 1) {
+      el.style.left = `${2 * x - ar.left}px`;
+      el.style.top = `${2 * y - ar.top}px`;
+    }
+    const outside = (e) => !e.composedPath().includes(el) && close();
+    const close = () => {
+      document.removeEventListener("pointerdown", outside, true);
+      el.remove();
+      this._rpPop = null;
+    };
+    const go = () => {
+      const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(el.querySelector("input").value || "");
+      if (!m) return;
+      const t = new Date(Number(el.querySelector("select").value));
+      t.setHours(Number(m[1]), Number(m[2]), Number(m[3] || 0), 0);
+      let at = t.getTime();
+      close();
+      if (at >= Date.now() - 20000) {
+        this._toast("That time is still to come: showing Now");
+        return this._rpLive();
+      }
+      const start = Date.now() - this._rpSpan();
+      if (at < start) {
+        at = start + 1000;
+        this._toast(`Before the loaded ${rp.range} h: showing their start`);
+      }
+      this._rpLoad().then(() => this._rpSeek(at));
+    };
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-go]")) go();
+      else if (e.target.closest("[data-x]")) close();
+    });
+    for (const ev of ["keydown", "keyup", "keypress"]) el.addEventListener(ev, (e) => {
+      e.stopPropagation();
+      if (ev !== "keydown") return;
+      if (e.key === "Enter") go();
+      if (e.key === "Escape") close();
+    });
+    setTimeout(() => document.addEventListener("pointerdown", outside, true), 0);
+    this._rpPop = close;
+    el.querySelector("input").focus();
+  }
+
+  _rpStop() {
+    const rp = this._rp;
+    if (!rp) return;
+    clearInterval(rp.timer);
+    rp.timer = null;
+    rp.play = false;
+  }
+
+  /** To Now: the real Home Assistant (Replay stays open, at its end). */
+  _rpLive(draw = true) {
+    const rp = this._rpState();
+    this._rpStop();
+    if (rp.t != null) this._pulseT = {};
+    rp.t = null;
+    if (this._live) this._hass = this._live;
+    if (draw) this._update(true);
+  }
+
+  /** Replay on / off (the rail button; ← Now closes it). */
+  _rpOpen(on) {
+    const rp = this._rpState();
+    this._rpLive(false);
+    rp.mode = on;
+    rp.menu = false;
+    if (this._rpPop) this._rpPop();
+    if (!this._dockShown) this._setLayer(this._overlay, "replay", on, false);
+    if (on) this._rpLoad();
+    this._update(true);
+  }
+
+  /** Play / pause. From Now it starts at the beginning of the range; the end is Now again. */
+  _rpPlay() {
+    const rp = this._rp;
+    if (!rp) return;
+    if (rp.play) {
+      this._rpStop();
+      return this._update(true);
+    }
+    rp.play = true;
+    this._update(true);
+    this._rpLoad().then(() => {
+      if (!rp.play) return;
+      let last = performance.now();
+      this._rpSeek(rp.t ?? Date.now() - this._rpSpan());
+      clearInterval(rp.timer);
+      rp.timer = setInterval(() => {
+        const n = performance.now();
+        const next = (rp.t ?? Date.now()) + (n - last) * rp.speed;
+        last = n;
+        if (!this.isConnected || rp.t == null) return this._rpStop();
+        this._rpSeek(next, true);
+      }, 200);
+    });
+  }
+
+  /** Previous / next moment worth seeing on this overlay's timeline (an event, a run starting, a busy hour);
+   *  past the last one: Now. */
+  _rpJump(dir) {
+    this._rpStop();
+    const go = () => {
+      const rp = this._rp;
+      const T = rp.t ?? Date.now();
+      const t0 = Date.now() - this._rpSpan();
+      const ts = this._rpModel().jumps.filter((t) => t > t0);
+      if (dir < 0) {
+        const p = ts.filter((t) => t < T - 60000).pop();
+        this._rpSeek(p ?? t0);
+      } else {
+        const n = ts.find((t) => t > T + 60000);
+        if (n != null) this._rpSeek(n);
+        else this._rpLive();
+      }
+    };
+    this._rpLoad().then(go);
+  }
+
+  /** Overlays Replay can play back (the ones on the rail, without Network). */
+  _rpOvs() {
+    return this._overlays().filter((o) => !RP_SKIP.has(o));
+  }
+
+  _rpWhen(T) {
+    const d = new Date(T);
+    const now = new Date();
+    const y = new Date(now.getTime() - 86400000);
+    const day = d.toDateString() === now.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString([], { weekday: "short" });
+    return { day, clock: rpClock(T) };
+  }
+
+  /** 0.11.1 test8: what this overlay's timeline shows (REPLAY-TIMELINE): { n, bars: [{kind: amount}], spans:
+   *  [{lane, from, to, k}], line: [value | null] (per slot), jumps: [t] }. Bars and the line use n slots over the
+   *  range; Energy one slot per hour. Cached until the data, the overlay, the range or the minute changes. */
+  _rpModel() {
+    const rp = this._rpState();
+    const ov = this._overlay;
+    const span = this._rpSpan();
+    const now = Date.now();
+    const ck = `${ov}|${rp.range}|${rp.at || 0}|${this._eData ? this._eData.t : 0}|${Math.floor(now / 60000)}`;
+    if (rp.model && rp.model.ck === ck) return rp.model;
+    const t0 = now - span;
+    const real = this._live || this._hass;
+    const states = (real && real.states) || {};
+    const data = rp.data || {};
+    const own = rp.own || new Set(this._watch || []);
+    const ents = Object.keys(data).filter((e) => own.has(e) && data[e].length);
+    const m = { ck, n: 96, bars: [], spans: [], line: null, jumps: [] };
+    const slot = (t) => Math.min(m.n - 1, Math.max(0, Math.floor(((t - t0) / span) * m.n)));
+    const bin = () => (m.bars = Array.from({ length: m.n }, () => ({})));
+    const add = (t, k, v = 1) => {
+      if (t <= t0) return;
+      const b = m.bars[slot(t)];
+      b[k] = (b[k] || 0) + v;
+    };
+    const kindsOf = { live: ["lt", "dv", "op", "mv"], security: ["op", "mv"] };
+    const events = (ks) => {
+      bin();
+      for (const e of ents) {
+        const k = rpKind(e, states[e]);
+        if (!k || !ks.includes(k)) continue;
+        const rows = data[e];
+        for (let i = 1; i < rows.length; i++) {
+          const on = domainOf(e) === "event" ? rows[i].s !== rows[i - 1].s && rows[i].s !== "unavailable" : rows[i].s !== rows[i - 1].s && RP_ON.has(rows[i].s);
+          if (on && rows[i].t > t0) {
+            add(rows[i].t, k);
+            m.jumps.push(rows[i].t);
+          }
+        }
+      }
+    };
+    const runs = (list) => {
+      let lane = 0;
+      for (const e of list) {
+        const sp = rpSpans(e, data[e], t0, now);
+        if (!sp.length) continue;
+        const k = domainOf(e) === "light" ? "lt" : "dv";
+        for (const [a, b] of sp) {
+          m.spans.push({ lane, from: a, to: b, k, e });
+          m.jumps.push(a);
+        }
+        lane++;
+      }
+      m.lanes = lane;
+    };
+    if (ov === "lights") {
+      // How many lights (and light switches) were on in each slot.
+      bin();
+      const lights = ents.filter((e) => ["light", "switch"].includes(domainOf(e)));
+      for (const e of lights) {
+        for (const [a, b] of rpSpans(e, data[e], t0, now)) {
+          for (let i = slot(a); i <= slot(b - 1); i++) m.bars[i].lt = (m.bars[i].lt || 0) + 1;
+          m.jumps.push(a);
+        }
+      }
+      m.linear = true;
+    } else if (ov === "comfort") {
+      // A line: the average indoor temperature; spans: ACs / heating really running.
+      // test9: the same temperatures as the chips and the heatmap on the plan (each sensor once), not every
+      // temperature entity of the devices (chip / device temperatures made the average too warm).
+      const shown = new Set();
+      for (const sp of (this._specs || new Map()).values()) for (const e of sp.heatEnts || sp.ents || []) shown.add(String(e).split("#")[0]);
+      const temps = ents.filter((e) => shown.has(e) && domainOf(e) === "sensor" && kindOf(e, states[e]) === "temperature");
+      const clim = ents.filter((e) => domainOf(e) === "climate");
+      const src = [...temps.map((e) => [e, (r) => (num(r.s) ? Number(r.s) : NaN)]), ...clim.filter((e) => shown.has(e)).map((e) => [e, (r) => (r.a && num(r.a.current_temperature) ? Number(r.a.current_temperature) : NaN)])];
+      if (src.length) {
+        m.line = Array.from({ length: m.n }, (_, i) => {
+          const t = t0 + ((i + 0.5) / m.n) * span;
+          const vs = src.map(([e, f]) => {
+            const row = rpAt(data[e], t);
+            return row ? f(row) : NaN;
+          }).filter((v) => Number.isFinite(v));
+          return vs.length ? vs.reduce((x, y) => x + y, 0) / vs.length : null;
+        });
+        const u = ((states[src[0][0]] || {}).attributes || {}).unit_of_measurement;
+        m.unit = u || (temps.length ? "" : "°");
+      }
+      runs(clim);
+    } else if (ov === "health") {
+      // A device going offline (grey), a battery dropping under the low level (orange).
+      bin();
+      const low = Number(this._ov("health").low ?? 20);
+      for (const e of ents) {
+        const rows = data[e];
+        const bat = domainOf(e) === "sensor" && ((states[e] || {}).attributes || {}).device_class === "battery";
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i].t <= t0) continue;
+          if (rows[i].s === "unavailable" && rows[i - 1].s !== "unavailable") {
+            add(rows[i].t, "off");
+            m.jumps.push(rows[i].t);
+          } else if (bat && Number(rows[i].s) < low && !(Number(rows[i - 1].s) < low) && Number.isFinite(Number(rows[i].s))) {
+            add(rows[i].t, "bat");
+            m.jumps.push(rows[i].t);
+          }
+        }
+      }
+    } else if (ov === "network") {
+      // test11: how many devices were offline in each slot (their own entity unavailable); a jump at each drop.
+      // A device offline for the whole range is left out.
+      bin();
+      const mains = new Set(this._items(this._a || {}).map((it) => it.main_entity).filter(Boolean));
+      for (const e of ents) {
+        if (!mains.has(e)) continue;
+        const rows = data[e];
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i].s !== "unavailable") continue;
+          const a = Math.max(t0, rows[i].t);
+          let j = i;
+          while (j + 1 < rows.length && rows[j + 1].s === "unavailable") j++;
+          const b = j + 1 < rows.length ? rows[j + 1].t : now;
+          i = j;
+          if (b <= t0 || (a <= t0 && b >= now)) continue; // offline the whole range: nothing happened (it is red on the plan)
+          for (let k = slot(a); k <= slot(b - 1); k++) m.bars[k].off = (m.bars[k].off || 0) + 1;
+          if (rows[j].t > t0 || a > t0) m.jumps.push(a);
+        }
+      }
+      m.linear = true;
+    } else if (ov === "cleaning") {
+      runs(ents.filter((e) => ["vacuum", "lawn_mower"].includes(domainOf(e))));
+    } else if (kindsOf[ov]) {
+      events(kindsOf[ov]);
+    } else {
+      // Your own overlays: things that run as spans, single events (doors, motion, doorbell) as bars.
+      const evk = ents.filter((e) => ["binary_sensor", "cover", "lock", "event"].includes(domainOf(e)));
+      events(["op", "mv"]);
+      runs(ents.filter((e) => !evk.includes(e) && ["light", "switch", "fan", "media_player", "climate", "vacuum", "lawn_mower", "sensor", "select", "input_select"].includes(domainOf(e)) && data[e].some((x) => rpRunning(e, x))));
+    }
+    m.jumps.sort((x, y) => x - y);
+    rp.model = m;
+    return m;
+  }
+
+  /** The timeline (horizontal or vertical): this overlay's bars, spans and line beside the line of time
+   *  (REPLAY-TIMELINE), the line filled up to the thumb; the time shows on the thumb while dragging / playing. */
+  _rpTrack(vert) {
+    const rp = this._rp;
+    const span = this._rpSpan();
+    const now = Date.now();
+    const t0 = now - span;
+    const live = rp.t == null;
+    const T = live ? now : rp.t;
+    const pct = this._rpPct(T, t0, span);
+    const m = this._rpModel();
+    const N = m.n;
+    const side = vert ? "bottom" : "left";
+    const order = ["lt", "dv", "op", "mv", "off", "bat"];
+    const tot = (m.bars || []).map((b) => Object.values(b).reduce((x, y) => x + y, 0));
+    const max = Math.max(1e-9, ...tot, 0);
+    const bars = (m.bars || []).map((bn, i) => {
+      if (!tot[i]) return "";
+      let acc = 0;
+      const stops = order.filter((k) => bn[k]).map((k) => {
+        const from = (acc / tot[i]) * 100;
+        acc += bn[k];
+        return `${RP_COL[k]} ${from.toFixed(0)}% ${((acc / tot[i]) * 100).toFixed(0)}%`;
+      }).join(", ");
+      // Amounts (lights on) grow in a straight line; event counts with the square root (one still shows).
+      const h = Math.max(14, (m.linear ? tot[i] / max : Math.sqrt(tot[i] / max)) * 100).toFixed(0);
+      return `<i style="${side}:${((i / N) * 100).toFixed(2)}%;--h:${h}%;--w:calc(100% / ${N} - 1px);background:linear-gradient(${vert ? "var(--rpgd)" : "to top"}, ${stops})"></i>`;
+    }).join("");
+    // Spans: one lane per device that ran (up to 4), a band from start to stop.
+    const lanes = Math.min(4, m.lanes || 0);
+    const spans = m.spans.filter((x) => x.lane < 4).map((x) => {
+      const a = Math.max(0, ((x.from - t0) / span) * 100);
+      const len = Math.max(0.6, ((x.to - x.from) / span) * 100);
+      const nm = cesc(entName(this._live || this._hass, x.e));
+      return `<s title="${nm} · ${rpClock(x.from)}–${rpClock(x.to)}" style="${side}:${a.toFixed(2)}%;${vert ? "height" : "width"}:${len.toFixed(2)}%;--lane:${x.lane};background:${RP_COL[x.k]}"></s>`;
+    }).join("");
+    // The line: a measured value (Comfort: average indoor temperature), scaled between its own min and max.
+    let line = "";
+    if (m.line && m.line.some((v) => v != null)) {
+      const vs = m.line.filter((v) => v != null);
+      const lo = Math.min(...vs);
+      const hi = Math.max(...vs);
+      const rng = hi - lo || 1;
+      const pts = m.line.map((v, i) => (v == null ? null : [((i + 0.5) / N) * 100, 100 - ((v - lo) / rng) * 80 - 10])).filter(Boolean);
+      const xy = pts.map(([a, b]) => (vert ? `${100 - b},${100 - a}` : `${a},${b}`)).join(" ");
+      const f = (v) => String(Math.round(v * 10) / 10);
+      // test9: the line in the Comfort heatmap's own colours (cool where it was cooler, warm where warmer), on the
+      // heatmap's scale when it is shown, so the rail and the plan mean the same by a colour.
+      const hm = this._heat && this._heat.hi > this._heat.lo ? this._heat : { lo, hi: lo + rng };
+      const stops = [0, 0.25, 0.5, 0.75, 1].map((k) => `<stop offset="${k}" stop-color="rgb(${heatRgb(Math.max(0, Math.min(1, (lo + k * rng - hm.lo) / (hm.hi - hm.lo)))).map(Math.round).join(",")})"/>`).join("");
+      const gr = vert ? 'x1="10" y1="0" x2="90" y2="0"' : 'x1="0" y1="90" x2="0" y2="10"';
+      line = `<svg class="rpln" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="rpg" gradientUnits="userSpaceOnUse" ${gr}>${stops}</linearGradient></defs><polyline points="${xy}" style="stroke:url(#rpg)"/></svg><span class="rpmm" title="Average room temperature (${cesc(m.unit || "°")}), lowest–highest">${cesc(f(lo))}–${cesc(f(hi))}°</span>`;
+    }
+    // Hour marks on the line (every hour up to 24 h, every 2 h beyond): where a fast drag glues to.
+    let ticks = "";
+    const h1 = new Date(t0);
+    h1.setMinutes(0, 0, 0);
+    for (let t = h1.getTime() + 3600000; t < now; t += 3600000) {
+      const hh = new Date(t).getHours();
+      if (rp.range > 24 && hh % 2) continue;
+      ticks += `<u class="${hh === 0 ? "d" : ""}" style="${side}:${(((t - t0) / span) * 100).toFixed(2)}%"></u>`;
+    }
+    const lab = (rp.lab = this._rpLabel());
+    return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="Replay time" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
+  }
+
+  /** 0.11.1: the replay rail: the overlay rail itself turned into Replay, same size, shape and colours
+   *  (← Now · play · previous / next · timeline · speed · range); vertical in a side rail. The overlay to
+   *  replay is picked beside Layers; the time is the pill on the plan (and on the thumb while it moves). */
+  _rpRail(vert) {
+    const rp = this._rpState();
+    const now = `<button class="rpnow" data-rp="exit" title="Back to now"><ha-icon icon="mdi:arrow-left"></ha-icon><span>Now</span></button>`;
+    const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? "Pause" : "Play"}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
+    const pn = `<span class="rppn"><button data-rp="prev" aria-label="Previous event"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="Next event"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
+    const speed = `<select class="rpspeed" aria-label="Speed">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
+    const range = `<select class="rprange" aria-label="Range">${RP_RANGES.map((v) => `<option value="${v}" ${v === rp.range ? "selected" : ""}>${v}h</option>`).join("")}</select>`;
+    const cls = `rprail ${vert ? "v" : "h"} ${rp.play || rp.drag ? "act" : ""} ${rp.loading ? "ld" : ""}`;
+    return vert
+      ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">Now</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
+      : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>Now</span></span></span>${speed}${range}</div>`;
+  }
+
+  /** 0.11.1: in Replay, beside Layers: the overlay that is replayed (its icon), with the list of the others. */
+  _rpOvBtn() {
+    if (!this._rp || !this._rp.mode || !this._dockShown) return "";
+    const ovs = this._rpOvs();
+    if (ovs.length < 2) return "";
+    const labels = this._config.overlay_names || {};
+    const cur = this._ovDef(this._overlay) || {};
+    const menu = this._rp.menu ? `<div class="rpmenu">${ovs.map((o) => `<button data-rpov="${cesc(o)}" class="${o === this._overlay ? "on" : ""}"><ha-icon icon="${cesc(this._ovDef(o).icon)}"></ha-icon>${cesc(labels[o] || this._ovDef(o).label)}</button>`).join("")}</div>` : "";
+    return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="Overlay to replay" aria-label="Overlay to replay"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
+  }
+
+  /** Without a rail: the same controls as a bar under the plan (Layers → Home Replay). */
+  _rpHtml() {
+    return `<div class="rpbar">${this._rpRail(false)}</div>`;
+  }
+
+  /** test10: the last 24 hours, hour by hour (the current hour last), each split by source (grid, solar,
+   *  battery; without sources: the devices' total). */
+  _eHours() {
+    const H = 3600000;
+    const cur = Math.floor(Date.now() / H) * H;
+    const ed = this._eData;
+    const srcs = ed ? ed.srcs.filter((x) => E_COL[x.kind]) : [];
+    return Array.from({ length: 24 }, (_, i) => {
+      const ts = cur - (23 - i) * H;
+      const parts = {};
+      const add = (k, v) => v > 0 && (parts[k] = (parts[k] || 0) + v);
+      if (ed && srcs.length) for (const x of srcs) add(x.kind, (ed.hours[x.stat] || {})[ts] || 0);
+      else if (ed) for (const d of ed.devs) add("grid", (ed.hours[d.stat_consumption] || {})[ts] || 0);
+      return { ts, parts, tot: Object.values(parts).reduce((x, y) => x + y, 0) };
+    });
+  }
+
+  /** test10: Energy's own hours are back under the plan (they were in Home Replay in test8 / test9): a bar per
+   *  hour of the last 24 hours, stacked in the Energy colours; "Last 24 h" (their sum) and "Now" (live W) at the
+   *  ends. Tap or drag: the plan and the legend show that hour; the day change is marked. */
+  _eScrubHtml() {
+    const hrs = this._eHours();
+    const max = Math.max(...hrs.map((h) => h.tot), 1e-9);
     const sel = this._eSel();
-    const n = 26; // Today, 00..23 (later hours greyed), Now
-    const idx = sel === "today" ? 0 : sel === "now" ? n - 1 : sel + 1;
-    const hrs = Array.from({ length: 24 }, (_, i) => (i <= h ? totals[i] : null));
-    const cols = [`<i class="end ${idx === 0 ? "on" : ""}">Today</i>`, ...hrs.map((v, i) => `<i class="hr ${idx === i + 1 ? "on" : ""} ${v == null ? "later" : ""}" title="${String(i).padStart(2, "0")}:00${v == null ? "" : ` · ${cesc(fmtKwh(v))}`}"><b style="height:${v == null ? 2 : Math.round(4 + 22 * (v / max))}px"></b>${i % 6 === 0 ? `<small>${String(i).padStart(2, "0")}</small>` : ""}</i>`), `<i class="end ${idx === n - 1 ? "on" : ""}">Now</i>`].join("");
-    return `<div class="escrub"><div class="etrack" style="grid-template-columns:2.4fr repeat(24, minmax(0, 1fr)) 2fr">${cols}</div><input type="range" class="erange" min="0" max="${n - 1}" step="1" value="${idx}" aria-label="Energy: time of day" aria-valuetext="${cesc(this._eWhen())}"></div>`;
+    const p2 = (h) => String(h).padStart(2, "0");
+    const cols = hrs.map((h) => {
+      const d = new Date(h.ts);
+      const hh = d.getHours();
+      let acc = 0;
+      const stops = Object.keys(E_COL).filter((k) => h.parts[k]).map((k) => {
+        const from = (acc / h.tot) * 100;
+        acc += h.parts[k];
+        return `${E_COL[k]} ${from.toFixed(0)}% ${((acc / h.tot) * 100).toFixed(0)}%`;
+      }).join(", ");
+      const lab = hh === 0 ? d.toLocaleDateString([], { weekday: "short" }) : hh % 3 === 0 ? p2(hh) : "";
+      return `<i class="hr ${sel === h.ts ? "on" : ""} ${hh === 0 ? "day" : ""}" data-at="${h.ts}" title="${cesc(`${this._rpWhen(h.ts).day} ${p2(hh)}:00–${p2((hh + 1) % 24)}:00 · ${fmtKwh(h.tot)}`)}"><b style="height:${h.tot ? Math.round(3 + 27 * (h.tot / max)) : 2}px;background:${stops ? `linear-gradient(to top, ${stops})` : "var(--divider-color, rgba(0,0,0,.15))"}"></b>${lab ? `<small>${cesc(lab)}</small>` : ""}</i>`;
+    }).join("");
+    const idx = sel === "day" ? 0 : sel === "now" ? 25 : 1 + hrs.findIndex((h) => h.ts === sel);
+    return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">Last 24 h</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">Now</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="Energy: the last 24 hours, hour by hour" aria-valuetext="${cesc(this._eWhen())}"></div>`;
   }
 
   /** What the scrubber points at, in words. */
   _eWhen() {
     const sel = this._eSel();
     const p = (h) => String(h).padStart(2, "0");
-    return sel === "today" ? "Today" : sel === "now" ? "Now (live)" : `${p(sel)}:00–${p(sel + 1)}:00`;
+    if (sel === "day" || sel === "now") return sel === "day" ? "Last 24 h" : "Now (live)";
+    const h = new Date(sel).getHours();
+    return `${this._rpWhen(sel).day} ${p(h)}:00–${p((h + 1) % 24)}:00`;
   }
 
   /** Network (#49): connection icon, role colour/shape, LQI as the ring; values only in the popup. */
@@ -4100,12 +5241,21 @@ class DeviceFloorplanCard extends HTMLElement {
     const show = this._netShow();
     const visible = conns.filter((c) => show.includes(c));
     if (!visible.length) return [];
-    const conn = CONN_ORDER.find((c) => visible.includes(c));
-    const z = conns.includes("zigbee") && item.ieee ? cx.zha[ieeeKey(item.ieee)] : null;
-    const mainSt = hass.states[item.main_entity];
-    const unavailable = (z && !z.available) || (!z && item.main_entity && !live(mainSt) && !item.bond);
+    // test12: a Bluetooth proxy (ESPHome, Shelly, …) shows as Bluetooth whenever Bluetooth is shown.
+    const btp = !!item.bt_proxy && visible.includes("bluetooth");
+    const conn = btp ? "bluetooth" : CONN_ORDER.find((c) => visible.includes(c));
+    // test11, Replay: only what was recorded counts. ZHA's LQI and "available" are now-values, so the role stays,
+    // the device's own entity says online / offline, and the ring comes from a recorded signal sensor only.
+    const past = this._rpT() != null;
+    const z0 = conns.includes("zigbee") && item.ieee ? cx.zha[ieeeKey(item.ieee)] : null;
+    const z = z0 && past ? { ...z0, lqi: null, rssi: null, available: true } : z0;
+    const unavailable = (z && !z.available) || ((!z || past) && item.main_entity && devOffline(hass, item, past) && !item.bond);
     const isAp = Object.values((this._a && this._a.aps) || {}).includes(item.id);
     let role = z && z.role ? z.role : isAp ? "ap" : cx.hubs.has(item.id) ? "hub" : conns.includes("zigbee") ? "end" : "device";
+    if (btp && !["coordinator", "router", "hub"].includes(role)) role = "btproxy";
+    else if (conn === "bluetooth" && role === "device") role = "end"; // test12: a Bluetooth sensor / beacon is an end device
+    // test11: size by role (the role it has when online): hubs as before, routers a bit smaller, the rest small.
+    const sz = ["coordinator", "ap", "hub", "btproxy"].includes(role) ? "" : role === "router" ? "szm" : "szs";
     if (unavailable) role = "unavailable";
     if (!z && conns.includes("zigbee") && !unavailable && !cx.hubs.has(item.id) && !isAp) role = Object.keys(cx.zha || {}).length ? "unknown" : "end";
     if ((this._net.roles || []).includes(role)) return [];
@@ -4129,7 +5279,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.7.3: what the router says (access point, cable or Wi-Fi, network).
     const rs = item.router && hass.states[item.router];
     const rt = rs ? { eid: item.router, ap: rs.attributes.connected_to || "", lan: /lan|ethernet|cable/i.test(rs.attributes.connection_type || "") && !/wlan|wifi|wi-fi|wireless/i.test(rs.attributes.connection_type || ""), ssid: rs.attributes.ssid || "", ip: rs.attributes.ip || "", home: rs.state === "home" } : null;
-    return [{ key: item.id, type: "net", item, name, conns, conn, role, ring, z, sigEid, rt, unavailable, ents: [item.main_entity].filter(Boolean), icon: CONNS[conn].icon, value: label, ieee: z ? item.ieee : null, x: pos.x, y: pos.y }];
+    return [{ key: item.id, type: "net", item, name, conns, conn, role, ring, z, sigEid, rt, unavailable, ents: [item.main_entity].filter(Boolean), icon: conn === "network" && !(rt && rt.lan) ? { good: "mdi:wifi-strength-4", fair: "mdi:wifi-strength-2", poor: "mdi:wifi-strength-1" }[tone] || CONNS[conn].icon : CONNS[conn].icon, sz, tone, value: label, ieee: z ? item.ieee : null, x: pos.x, y: pos.y }];
   }
 
   /** 0.8.1: devices of the other floors (where they sit there), by device id, ZHA IEEE and access point. */
@@ -4294,7 +5444,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!matches.length) {
       if (!added || !item.main_entity) return [];
       const k = this._mainKind(item);
-      return [this._withExtras(this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], k, {}), item, ov)];
+      return [this._withExtras(this._valueChip(item, name, item.main_entity) || this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], k, {}), item, ov)];
     }
     if (q) return [{ key: item.id }];
     const [leadKey, lead] = matches[0];
@@ -4315,7 +5465,7 @@ class DeviceFloorplanCard extends HTMLElement {
       spec = (this._healthSpecs(item, name, [lead], { low: 20 }, false) || [])[0];
     } else {
       const k = item.bond && lead === item.main_entity ? this._mainKind(item) : kindOf(lead, st);
-      spec = this._liveSpec(item, name, lead, st, k, {});
+      spec = this._valueChip(item, name, lead) || this._liveSpec(item, name, lead, st, k, {});
       if (k === "light" && this._glowOnly(ov)) {
         if (!spec.on) return [];
         spec.glow = true;
@@ -4367,6 +5517,15 @@ class DeviceFloorplanCard extends HTMLElement {
     const showVal = look.markers !== "icon" && opts.values !== false;
     const bondAll = item.bond && (!eid || eid === item.main_entity);
     return { key: item.id, type: "marker", item, name, ents: bondAll ? item.entities : [eid], eid, st, kind, on, dim, unavail, color, value: showVal ? value : "", icon: this._dev(item.id).icon || (bondAll ? item.icon : null), x: item.x, y: item.y };
+  }
+
+  /** test9: a device that only measures (nothing to switch or run) shows its value as a chip, the Comfort look,
+   *  in every overlay it is in; a device you control keeps its icon. */
+  _valueChip(item, name, e) {
+    if (!e || item.bond || domainOf(e) !== "sensor") return null;
+    if (!(item.group === "sensors" || (item.standalone && domainOf(item.main_entity || "") === "sensor"))) return null;
+    const line = this._fmtNum(e);
+    return { ...this._chipSpec(item, name, { lines: [line], ents: [e], kind: "reading" }), rd: { t: line, h: "" } };
   }
 
   _chipSpec(item, name, { lines, ents, kind, icon, cls = "" }) {
@@ -4436,6 +5595,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const nNew = this._hass.states["sensor.device_floorplan_new_devices"];
     parts.push(nNew ? nNew.state : "");
     parts.push(`e${this._eAt ?? ""}|${this._eData ? this._eData.t : ""}`);
+    if (this._rp) parts.push(`rp${this._rp.t}|${this._rp.drag ? 1 : 0}|${this._rp.mode ? 1 : 0}|${this._rp.menu ? 1 : 0}|${this._rp.play ? 1 : 0}|${this._rp.loading ? 1 : 0}|${this._rp.speed}|${this._rp.range}|${this._rp.at || 0}`);
     const key = parts.join(";");
     if (!force && key === this._key) return;
     this._key = key;
@@ -4516,8 +5676,10 @@ class DeviceFloorplanCard extends HTMLElement {
       if (!this._layerOn("comfort", "clim", this._layerDefault("comfort", "clim"))) specs = specs.filter((sp) => sp.kind !== "climate");
     }
     if (ov === "energy") specs = specs.concat(this._eRoomSpecs(a));
+    // 0.11.1 test8: no cameras in Replay (there is no recorded video to replay), in every overlay.
+    if (this._rpOn()) specs = specs.filter((sp) => !sp.cam);
     this._specs = new Map(specs.map((s) => [s.key, s]));
-    this._ghosts = ov === "network" ? this._netGhosts(specs) : [];
+    this._ghosts = ov === "network" && !this._rpIn() ? this._netGhosts(specs) : [];
     const watch = new Set();
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
@@ -4547,30 +5709,41 @@ class DeviceFloorplanCard extends HTMLElement {
     this._watch = [...watch].sort();
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     const nNew = Number((this._hass.states["sensor.device_floorplan_new_devices"] || {}).state) || 0;
-    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint ? `<button class="admin" data-new="1" title="Only admins see this">${nNew} new · Place them</button>` : "";
+    // 0.11.1: top left, away from Layers and the floor button; on a narrow card a short badge.
+    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint && !this._pick ? `<button class="admin" data-new="1" title="${nNew} new devices · only admins see this">${this._narrow ? `${nNew} new` : `${nNew} new · Place them`}</button>` : "";
     const names = look.names === "always" ? "names-always" : look.names === "off" ? "names-off" : "";
     const dock = this._overlays();
     const labels = c.overlay_names || {};
     const vertical = btn.position === "left" || btn.position === "right";
-    const dockShown = (dock.length > 1 || btn.shortcuts.length > 0) && btn.position !== "hidden";
+    const dockShown = (dock.length > 1 || btn.shortcuts.some((x) => !x.hidden)) && btn.position !== "hidden";
+    this._dockShown = dockShown;
+    const rpRail = dockShown && this._rp && this._rp.mode;
     // Layers live in the floor rail when there is one, else in the button bar, never on the plan
     // (#63, #75); without a bar, in the legend row.
-    const lpos = this._layersPos();
-    const layersOn = lpos !== "hidden";
+    const rpPos = this._rpBtnPos(dockShown);
+    const layersOn = this._layersPos() !== "hidden";
+    // test10: the round group is floors · Layers · Replay; with Layers hidden the Replay button keeps the corner.
+    const lpos = layersOn || rpPos === "layers" ? this._layersPos(true) : "hidden";
+    const grpOn = lpos !== "hidden";
     const floors = this._floorStack();
     const multi = floors.length > 1;
-    const layersInBar = layersOn && lpos === "bar";
+    const layersInBar = grpOn && lpos === "bar";
     // 0.7.5: a Layers corner on the bar's side shares that row / column (at its own end); "bar" = right after
     // the overlay buttons. Either way it sits outside the scrolling overlay buttons.
     const bp = btn.position;
-    const touch = dockShown && layersOn && lpos !== "bar"
+    const touch = dockShown && grpOn && lpos !== "bar"
       && ((bp === "top" && lpos.startsWith("top")) || (bp === "bottom" && lpos.startsWith("bottom")) || (bp === "left" && lpos.endsWith("left")) || (bp === "right" && lpos.endsWith("right")));
     const atStart = touch && (vertical ? lpos.startsWith("top") : lpos.endsWith("left"));
     // Layers on the plan when it does not share the overlay buttons row.
-    const lCorner = layersOn && !(layersInBar && dockShown) && !touch;
+    const lCorner = grpOn && !(layersInBar && dockShown) && !touch;
     const cornerPos = ["top-left", "bottom-right", "bottom-left"].includes(lpos) ? lpos : "top-right";
     // 0.8.1: with several floors the floor button sits right next to Layers, on its right (one group, wherever Layers is).
-    const lg = () => (multi ? `<span class="lgroup">${this._layersBtn(true)}<span class="fwrap">${this._floorHtml(floors)}</span></span>` : this._layersBtn(true));
+    // test10: one order, counted from the plan's outer edge inwards: floors · Layers · Replay (so a group on the
+    // left is the mirror of one on the right).
+    const lg = () => {
+      const parts = [rpPos === "layers" ? this._rpRoundBtn() : this._rpOvBtn(), layersOn ? this._layersBtn(true) : "", multi ? `<span class="fwrap">${this._floorHtml(floors)}</span>` : ""].filter(Boolean);
+      return parts.length > 1 ? `<span class="lgroup ${lpos.endsWith("left") ? "rev" : ""}">${parts.join("")}</span>` : parts[0] || "";
+    };
     const lgShown = () => lCorner || touch || (layersInBar && dockShown);
     const slot = (on) => `<span class="lslot ${on ? "" : "lvoid"}">${on ? lg() : ""}</span>`;
     const autoSt = dockShown && btn.auto ? this._autoStatus() : {};
@@ -4581,13 +5754,15 @@ class DeviceFloorplanCard extends HTMLElement {
         const oa = btn.actions[o] || {};
         return { g: OVERLAYS[o] ? 0 : 1, html: this._barBtn({ cls: o === ov ? "on" : "", attrs: `data-ov="${cesc(o)}" ${oa.hold_action ? 'data-bh="1"' : ""} aria-pressed="${o === ov}"`, icon: d.icon, label: labels[o] || d.label, st: this._btnStatus(oa.status, autoSt[o]) }) };
       }),
-      ...btn.shortcuts.map((sc, i) => ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || "Shortcut", st: this._btnStatus(sc.status, null) }) })),
+      ...btn.shortcuts.map((sc, i) => sc.hidden ? null : ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || "Shortcut", st: this._btnStatus(sc.status, null) }) })).filter(Boolean),
+      // 0.11.1: Replay is a mode, not an overlay: last, after a divider.
+      ...(rpPos === "bar" ? [{ g: 3, html: this._barBtn({ cls: "rpgo", attrs: 'data-rpgo="1"', icon: "mdi:history", label: "Replay" }) }] : []),
     ];
     const barHtml = barItems.map((x, i) => (i && x.g !== barItems[i - 1].g ? '<i class="bsep" aria-hidden="true"></i>' : "") + x.html).join("");
     const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? "Scroll back" : "More buttons"}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
     const barBg = btn.bar === "contrast" ? (this._hass.themes && this._hass.themes.darkMode ? "light" : "dark") : btn.bar;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}">${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -4596,7 +5771,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const pos = btn.position === "hidden" ? "bottom" : btn.position;
     const scale = this._scale || 1;
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
-    const boxCls = `${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
+    const boxCls = `${this._rpT() != null ? "rpon" : ""} ${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
     const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
     setShadow(this, `${style}<ha-card class="ov-${cesc(ov || "")} dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
@@ -4605,10 +5780,14 @@ class DeviceFloorplanCard extends HTMLElement {
           ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
-          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}
-        </div>${lCorner ? `<div class="lcorner ${cornerPos}">${lg()}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${this._newOvHtml()}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
-      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}</ha-card>`);
+          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
+        </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}</div></div>${people.row}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${this._newOvHtml()}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
+    if (rpRail && vertical) {
+      this._rpBub();
+      requestAnimationFrame(() => this._rpBub()); // again once the rail has its final height
+    }
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
       el.stateObj = this._hass.states[el.dataset.ent];
@@ -4618,6 +5797,13 @@ class DeviceFloorplanCard extends HTMLElement {
       img._dfErr = true;
       img.addEventListener("error", () => {
         this._imgFailed = true;
+        this._update(true);
+      }, { once: true });
+    }
+    for (const bm of this.shadowRoot.querySelectorAll("img.nbm")) {
+      bm.addEventListener("error", () => {
+        if (DFC_BRAND.matter.bad) return;
+        DFC_BRAND.matter.bad = true; // no image: our "M"
         this._update(true);
       }, { once: true });
     }
@@ -5050,12 +6236,30 @@ class DeviceFloorplanCard extends HTMLElement {
     }).join("");
   }
 
+  /** test11: the Matter mark = Home Assistant's own brand image (2026.3+: its local brands API, else the brands
+   *  site), drawn white like the other marks; our "M" until it is there and when it can't load. */
+  _matterMark() {
+    const b = (DFC_BRAND.matter = DFC_BRAND.matter || {});
+    if (!b.asked && this._live) {
+      b.asked = true;
+      const done = (url) => {
+        b.url = url;
+        this._update(true);
+      };
+      this._live.callWS({ type: "brands/access_token" })
+        .then((r) => done(`/api/brands/integration/matter/icon.png?placeholder=no&token=${encodeURIComponent((r && r.token) || r)}`))
+        .catch(() => done("https://brands.home-assistant.io/matter/icon.png"));
+    }
+    return b.url && !b.bad ? `<img class="nbm" src="${cesc(b.url)}" alt="" data-brand="matter">` : `<b class="nbm">M</b>`;
+  }
+
   _markerHtml(s) {
     if (s.cam && (this._overlay === "live" || this._overlay === "security")) return this._camHtml(s);
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
-      const cls = ["m", edgeCls(s.x, s.y, this._em), "net", r.shape, s.role, this._hl === s.key ? "hl" : ""].join(" ");
-      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon></span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      const cls = ["m", edgeCls(s.x, s.y, this._em), "net", r.shape, s.role, s.sz || "", this._hl === s.key ? "hl" : ""].join(" ");
+      const mark = s.conn === "matter" ? this._matterMark() : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`;
+      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic">${mark}</span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     const icon = s.icon
       ? `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`
@@ -5136,7 +6340,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.11: Cameras, and with 2+ cameras one tick per camera (this screen only; triggers still pop up).
     const camItems = (ov === "live" || ov === "security") && this._a ? this._items(this._a).filter((it) => this._camOf(it)) : [];
     const camsOn = camItems.length && this._layerOn(ov, "cams", false);
-    const snaps = camItems.length ? lay("cams", "mdi:cctv", "Cameras") + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
+    const snaps = camItems.length && this._rpOn() ? `<button class="dis" disabled title="No camera video in Replay"><ha-icon class="eye" icon="mdi:eye-off-outline"></ha-icon><ha-icon icon="mdi:cctv-off"></ha-icon>Cameras (not in Replay)</button>` : camItems.length ? lay("cams", "mdi:cctv", "Cameras") + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
     const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", "Room shading")}${lay("flow", "mdi:transit-connection-variant", "Flow lines")}` : "";
     const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
@@ -5251,10 +6455,13 @@ ${reset}
     const raw = { ...(this._raw || {}) };
     if (add) raw.overlays = [...(raw.overlays || []), o];
     else raw.dismissed_overlays = [...new Set([...(raw.dismissed_overlays || []), o])];
+    // test12: the save finds this card in the dashboard by its config (it was only set by Edit markers, so the
+    // banner never saved). When it still can't save (YAML dashboard, card not found), say so.
+    this._penOrig = this._raw;
     try {
       await this._saveToDashboard(raw);
     } catch (_e) {
-      /* YAML dashboards can't be saved from here: it still applies until the page reloads */
+      this._toast(add ? `Couldn't save to the dashboard: add ${OVERLAYS[o].label} in the card's settings (Overlays)` : "Couldn't save to the dashboard: it shows again after a reload");
     }
     this.setConfig(raw);
     if (add) this._overlay = o;
@@ -5368,6 +6575,7 @@ ${reset}
       set("--dfc-bar-len", len);
     }
     const nav = bar.querySelector("nav.dock");
+    if (!nav) return; // the replay rail has no overlay buttons to scroll
     const upd = () => {
       const v = nav.getAttribute("aria-orientation") === "vertical";
       const pos = v ? nav.scrollTop : nav.scrollLeft;
@@ -5549,6 +6757,7 @@ ${reset}
   /** Zigbee links (all ZHA neighbours, coloured by LQI) and hub/bridge links (Matter bridges, hubs). */
   _linkLines(W, H) {
     if (this._overlay !== "network" || !this._specs) return "";
+    if (this._rpIn()) return ""; // test11: links are only known for now, so Replay draws none
     const specs = [...this._specs.values()].filter((s) => s.type === "net");
     let out = "";
     const P = (s) => [(s.x / 100) * W, (s.y / 100) * H];
@@ -5627,7 +6836,7 @@ ${reset}
 
   /** Marker editing: ✕ on the selected marker hides it in this overlay (#108). */
   _xb(s) {
-    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="Hide in this overlay">✕</span>` : "";
+    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="Hide it here (in this overlay only)">✕</span>` : "";
   }
 
   _penHtml() {
@@ -5638,6 +6847,11 @@ ${reset}
 
   _onClick(e) {
     const t = e.target;
+    // 0.11.1: the click that ends a camera window drag does nothing (wherever it lands after a redraw).
+    if (this._winMoved && Date.now() - this._winMoved < 500) {
+      this._winMoved = 0;
+      return;
+    }
     // Edit markers: the info card preview is only a preview, its buttons are not run.
     if (this._pick && t.closest(".pop.prev")) {
       if (t.closest("[data-close]")) {
@@ -5827,7 +7041,17 @@ ${reset}
       const name = ly.dataset.lay;
       const dflt = name === "rooms" ? this._roomsDefault(ov) : this._layerDefault(ov, name);
       this._setLayer(ov, name, !this._layerOn(ov, name, dflt), dflt);
+      if (name === "replay") return this._rpOpen(this._layerOn(ov, "replay", false)); // no rail: Replay from Layers
       return this._update(true);
+    }
+    // 0.11.1 Home Replay: the rail button, ← Now, play, previous / next, the overlay to replay.
+    if (t.closest("[data-rpgo],[data-rpov],[data-rp]")) {
+      if (e.detail === 0) this._rpCtl(t); // keyboard (Enter / Space): a click without a pointer
+      return;
+    }
+    if (this._rp && this._rp.menu) {
+      this._rp.menu = false;
+      this._update(true);
     }
     if (t.closest(".lmenu")) return;
     if (this._menu) {
@@ -5871,7 +7095,7 @@ ${reset}
     const itg = t.closest("[data-itg]");
     if (itg) {
       const s0 = this._specs && this._specs.get(itg.dataset.itg);
-      if (s0) this._toggle({ ...s0, ents: this._infoToggles(s0) });
+      if (s0) this._toggle({ ...s0, ents: this._infoToggles(s0.item.bond ? { ...s0, ents: s0.item.entities || [] } : s0) });
       return;
     }
     const ip = t.closest("[data-press]");
@@ -5912,6 +7136,8 @@ ${reset}
       this._popup = { type: "elist", key: s.key };
       return this._update(true);
     }
+    // 0.11.1: a bond of lights is one lamp: tap switches all its bulbs (unless a tap is set for it).
+    if (s.type !== "net" && this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return this._toggle({ ...s, ents: s.item.entities });
     // 0.7.5: bonds and phantoms (several things in one marker) open the info card; a single device does its tap action.
     if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom)) {
       this._popup = { type: "info", key: s.key };
@@ -5960,13 +7186,22 @@ ${reset}
 
   _onInput(e) {
     const t = e.target;
-    // 0.11 Energy: the day scrubber (whole steps = magnetic full hours).
+    // test10 Energy: the hours by keyboard (the hidden slider over the bars).
     if (t && t.classList && t.classList.contains("erange")) {
       const i = Number(t.value);
-      const n = Number(t.max) + 1;
-      // Hours still to come snap to Now.
-      this._eAt = i === 0 ? "today" : i === n - 1 || i - 1 > new Date().getHours() ? "now" : i - 1;
+      this._eAt = i <= 0 ? "day" : i >= 25 ? "now" : this._eHours()[i - 1].ts;
       return this._update(true);
+    }
+    if (t && t.classList && t.classList.contains("rpspeed")) {
+      this._rp.speed = Number(t.value) || 900;
+      lsSet("dfc_rp_speed", this._rp.speed);
+      return this._update(true);
+    }
+    if (t && t.classList && t.classList.contains("rprange")) {
+      this._rp.range = Number(t.value) || 24;
+      lsSet("dfc_rp_range", this._rp.range);
+      if (this._rp.t != null && this._rp.t < Date.now() - this._rpSpan()) this._rpLive(false);
+      return this._rpLoad();
     }
     if (t && t.dataset && t.dataset.covpos) {
       clearTimeout(this._covT);
@@ -6001,8 +7236,8 @@ ${reset}
     if (!s) return;
     const multi = s.phantom || s.item.bond || s.item.phantom;
     if (this._pick) {
-      const tap = multi ? "info card" : { "more-info": "details", toggle: "switch on / off", readings: "graphs", none: "nothing", network: "network info" }[this._tapAction(s)] || this._tapAction(s);
-      return this._toast(`Tap → ${tap} · long press → ${s.phantom ? "graphs" : "details"} (not run while editing)`);
+      const tap = this._lampBond(s.item) ? "switch all" : multi ? "info card" : { "more-info": "details", toggle: "switch on / off", readings: "graphs", none: "nothing", network: "network info" }[this._tapAction(s)] || this._tapAction(s);
+      return this._toast(`Tap → ${tap} · long press → ${s.phantom ? "graphs" : this._lampBond(s.item) ? "info card" : "details"} (not run while editing)`);
     }
     this._details(s);
   }
@@ -6010,6 +7245,11 @@ ${reset}
   /** Home Assistant's details of a marker: graphs for a phantom, the leading entity's dialog otherwise. */
   _details(s) {
     if (s.phantom) return s.type === "chip" ? this._openReadings(s) : this._openList(s);
+    // 0.11.1: a lamp bond's long press opens its info card (its tap switches it).
+    if (s.type !== "net" && this._lampBond(s.item)) {
+      this._popup = { type: "info", key: s.key };
+      return this._update(true);
+    }
     this._moreInfo(s.eid || (s.ents || [])[0]);
   }
 
@@ -6130,6 +7370,12 @@ ${reset}
     return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
   }
 
+  /** 0.11.1: a bond whose members are all lights acts as one lamp. */
+  _lampBond(item) {
+    const e = (item && item.bond && item.entities) || [];
+    return e.length > 1 && e.every((x) => domainOf(x) === "light");
+  }
+
   /** Entities the info card can switch (lights, switches, fans, helpers). */
   _infoToggles(s) {
     const ents = [...new Set(s.ents || [])].filter((e) => ["light", "switch", "fan", "input_boolean"].includes(domainOf(e)) && this._hass.states[e] && !this._aux(e));
@@ -6187,9 +7433,11 @@ ${reset}
       lead = s.eid || (s.ents || [])[0];
       const picked = Array.isArray(this._per(item, this._overlay).extras) ? this._per(item, this._overlay).extras : null;
       reads = picked || [...(s.ents || []), ...(s.also || []), ...(item.entities || [])];
-      if (s.phantom) lead = null; // a phantom has no one leading entity: all its sensors are listed
-      toggles = this._infoToggles(s);
-      open = `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
+      // 0.11.1: a bond lists every member (its leading one too); each row opens that member's details.
+      if (s.phantom || item.bond) lead = null; // a phantom has no one leading entity: all its sensors are listed
+      if (item.bond && !picked) reads = [...(item.entities || []), ...(s.also || [])];
+      toggles = this._infoToggles(item.bond ? { ...s, ents: item.entities || [] } : s);
+      open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
       anchor = `[data-k="${CSS.escape(s.key)}"]`;
       if (toggles.length) {
         const anyOn = toggles.some((e) => (hass.states[e] || {}).state === "on");
@@ -6497,6 +7745,13 @@ ${reset}
   _setOverlay(o) {
     if (o === "plan" || o === "people") o = "live"; // 0.7.4: Plan is gone, 0.8.2: People too (people are in Live)
     if (!this._ovDef(o)) return;
+    // 0.11.1: in Replay another overlay keeps the replay time (its history is loaded); Energy / Network end Replay.
+    const rpKeep = this._rp && this._rp.mode && this._dockShown && !RP_SKIP.has(o);
+    if (this._rp && !rpKeep) {
+      if (this._rp.mode) this._rp.mode = false;
+      this._rpLive(false);
+    }
+    if (rpKeep) setTimeout(() => this._rpLoad(), 0); // after the render: the new overlay's entities
     this._overlay = o;
     if (this.preview || this._fitHost) EDIT_OV = o;
     this._popup = null;
@@ -6523,6 +7778,27 @@ function stableJson(v) {
   return JSON.stringify(v);
 }
 const ED_CSS = `
+.dfe .dhome { display:flex; flex-direction:column; gap:10px; margin: 4px 0 14px; }
+.dfe .dh { display:flex; align-items:center; gap:8px; font-size:15px; }
+.dfe .dh ha-icon { color: var(--primary-color); }
+.dfe .dh .dv { font-size:12px; color: var(--secondary-text-color); padding:1px 7px; border-radius:10px; background: var(--secondary-background-color, #eee); }
+.dfe .dh a { margin-left:auto; font-size:13px; color: var(--primary-color); text-decoration:none; }
+.dfe .dsum { margin:0; display:flex; gap:8px; align-items:flex-start; font-size:13px; color: var(--secondary-text-color); --mdc-icon-size:18px; }
+.dfe .dsum ha-icon, .dfe .dtip ha-icon { flex:none; width:24px; display:inline-flex; justify-content:center; }
+/* 0.11.1 test8: one way in. Home Assistant's editor shows only the home; the settings live in the Card Editor. */
+.dfe details.dall { display:none; }
+.dfe-big .bg-set details.dall { display:block; }
+.dfe .dcol h3 { margin: 6px 0 2px; display:flex; align-items:center; gap:8px; font-size:16px; font-weight:600; --mdc-icon-size:20px; }
+.dfe .dcol h3 ha-icon { color: var(--primary-color); }
+.dfe .dcol p { margin: 0 0 6px; font-size:12px; line-height:1.4; color: var(--secondary-text-color); }
+.dfe .dtip { margin:0; display:flex; gap:8px; align-items:flex-start; font-size:13px; color: var(--secondary-text-color); --mdc-icon-size:18px; }
+.dfe details.dall > summary { cursor:pointer; font-weight:500; padding:10px 0; border-top:1px solid var(--divider-color, #ddd); list-style:none; display:flex; align-items:center; gap:6px; }
+.dfe details.dall > summary::before { content:"▸"; transition: transform .15s; }
+.dfe details.dall[open] > summary::before { transform: rotate(90deg); }
+.dfe .dtabs { display:flex; gap:4px; margin: 4px 0 12px; border-bottom:1px solid var(--divider-color, #ddd); }
+.dfe .dtabs button { border:0; background:transparent; font: inherit; font-size:14px; padding:8px 14px; cursor:pointer; color: var(--secondary-text-color); border-bottom:2px solid transparent; margin-bottom:-1px; }
+.dfe .dtabs button.on { color: var(--primary-color); border-bottom-color: var(--primary-color); font-weight:500; }
+.dfe-big .bg-set .dhome, .dfe-big .bg-set details.dall > summary { display:none; }
 .dfe .kord { margin: 8px 0; font-size:13px; }
 .dfe .kord h5 { margin: 4px 0 6px; font-size:13px; font-weight:500; }
 .dfe .kord .kr { display:flex; align-items:center; justify-content:space-between; padding:3px 6px; border-radius:6px; background: color-mix(in srgb, var(--primary-color, #03a9f4) 6%, transparent); margin-bottom:3px; }
@@ -6603,12 +7879,28 @@ dialog.dfe-big { width:100vw; height:100vh; max-width:none; max-height:none; mar
 dialog.dfe-big:not([open]) { display:none; }
 dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big { position:fixed; inset:0; z-index:10000; background: var(--primary-background-color, #fafafa); color: var(--primary-text-color); display:flex; flex-direction:column; font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
-.dfe-big .bg-h { display:flex; align-items:center; gap:12px; padding:10px 16px; background: var(--card-background-color, #fff); border-bottom:1px solid var(--divider-color, #ddd); }
+.dfe-big .bg-h { display:flex; align-items:center; gap:12px; min-height:48px; box-sizing:border-box; padding:6px 12px 6px 16px; font-size:16px; background: var(--card-background-color, #fff); border-bottom:1px solid var(--divider-color, #ddd); }
 .dfe-big .bg-h span { flex:1; font-size:13px; color: var(--secondary-text-color); }
 .dfe-big .bg-x { border:0; border-radius:18px; padding:8px 18px; background: var(--primary-color, #03a9f4); color:#fff; font: inherit; font-weight:500; cursor:pointer; }
 .dfe-big .bg-b { flex:1; min-height:0; display:flex; gap:12px; padding:12px; }
-.dfe-big .bg-plan { flex:1; min-width:0; overflow:auto; }
-.dfe-big .bg-side { flex:0 0 360px; overflow:auto; background: var(--card-background-color, #fff); border-radius:12px; border:1px solid var(--divider-color, #ddd); padding:12px 14px; }
+.dfe-big .bg-mid { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; order:1; }
+.dfe-big .bg-pan { display:contents; }
+.dfe-big .bg-pan .bg-set { order:0; }
+.dfe-big .bg-pan .bg-side { order:2; }
+.dfe-big .bg-tabs { display:none; }
+.dfe-big .bg-tabs button { flex:1; border:0; background:transparent; font: inherit; font-size:14px; padding:8px; cursor:pointer; color: var(--secondary-text-color); border-bottom:2px solid transparent; }
+.dfe-big .bg-tabs button.on { color: var(--primary-color); border-bottom-color: var(--primary-color); font-weight:500; }
+.dfe-big .lic { --mdc-icon-size:18px; color: var(--secondary-text-color); margin-right:8px; flex:none; }
+.dfe-big .lroom { font-size:11px; letter-spacing:.6px; text-transform:uppercase; color: var(--secondary-text-color); margin: 10px 0 2px; }
+.dfe-big .bg-fit[hidden] { display:none; }
+.dfe-big .bg-plan { flex:1; min-height:0; overflow:auto; }
+.dfe-big .bg-plan > device-floorplan-card { display:block; }
+.dfe-big .bg-zoom { display:flex; align-items:center; justify-content:flex-end; gap:4px; font-size:12px; color: var(--secondary-text-color); }
+.dfe-big .bg-zoom button { border:1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; border-radius:14px; padding:2px 8px; font: inherit; cursor:pointer; --mdc-icon-size:18px; display:inline-flex; align-items:center; }
+.dfe-big .bg-zv { min-width:44px; text-align:center; }
+.dfe-big .bg-set { flex:0 0 360px; overflow:auto; background: var(--card-background-color, #fff); border-radius:12px; border:1px solid var(--divider-color, #ddd); padding:4px 12px 12px; }
+.dfe-big .bg-set .mksec { display:none; }
+.dfe-big .bg-side { flex:0 0 280px; overflow:auto; background: var(--card-background-color, #fff); border-radius:12px; border:1px solid var(--divider-color, #ddd); padding:12px 14px; }
 .dfe-big .bg-t { margin:0 0 8px; font-size:16px; font-weight:500; }
 .dfe-big .bg-hint { color: var(--secondary-text-color); font-size:13px; }
 .dfe-big .bg-err { color: var(--error-color, #b3261e); font-size:13px; margin:0 0 8px; }
@@ -6642,7 +7934,13 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big details.dgrp > summary .n { font-weight:500; color: var(--secondary-text-color); }
 .dfe-big .lr { display:flex; align-items:center; gap:6px; padding:2px 4px; border-radius:6px; }
 .dfe-big .lr.sel { background: color-mix(in srgb, var(--primary-color, #03a9f4) 14%, transparent); }
-.dfe-big .lnm { flex:1; text-align:left; border:0; background:transparent; color: inherit; font: inherit; font-size:13px; padding:4px 0; cursor:pointer; }
+.dfe-big .lnm { flex:1; min-width:0; display:flex; align-items:center; text-align:left; border:0; background:transparent; color: inherit; font: inherit; font-size:13px; padding:2px 0; min-height:32px; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+/* 0.11.1 test8: the two side columns share one header style (title + icon, one grey line). */
+.dfe-big .dcol h3 { margin: 2px 0 2px; display:flex; align-items:center; gap:8px; font-size:16px; font-weight:600; --mdc-icon-size:20px; flex-wrap:wrap; }
+.dfe-big .dcol h3 > ha-icon { color: var(--primary-color); }
+.dfe-big .dcol p { margin: 0 0 8px; font-size:12px; line-height:1.4; color: var(--secondary-text-color); }
+.dfe-big .ovchip { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:500; padding:2px 8px; border-radius:12px; background: color-mix(in srgb, var(--primary-color, #03a9f4) 12%, transparent); color: var(--primary-color, #03a9f4); --mdc-icon-size:14px; }
+.dfe-big .mkn { font-size:13px; font-weight:500; color: var(--secondary-text-color); }
 .dfe-big .lb { border:1px solid var(--primary-color, #03a9f4); color: var(--primary-color, #03a9f4); background:transparent; border-radius:12px; padding:2px 9px; font: inherit; font-size:12px; cursor:pointer; }
 .dfe-big .na { color: var(--secondary-text-color); font-size:11px; }
 .dfe-big .ovsec h5 { margin:12px 0 6px; font-size:14px; font-weight:500; }
@@ -6661,7 +7959,19 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big .ovsec .xchip.isb { outline:1.5px solid var(--primary-color, #03a9f4); }
 .dfe-big .ovsec .xic { border:0; background:transparent; padding:0 2px 0 0; cursor:pointer; color: inherit; --mdc-icon-size:16px; display:inline-flex; }
 .dfe-big .ovsec .pr input[type=checkbox] { width:18px; height:18px; }
-@media (max-width: 800px) { .dfe-big .bg-b { flex-direction:column; } .dfe-big .bg-side { flex: 0 0 auto; max-height: 45vh; } .dfe-big .bg-h span { display:none; } }
+/* 0.11.1: the plan comes first. Medium: one side panel with Settings | Markers tabs. Narrow: the plan on top, kept in view. */
+@media (max-width: 1400px) {
+  .dfe-big .bg-pan { display:flex; flex-direction:column; flex: 0 0 380px; min-height:0; order:2; background: var(--card-background-color, #fff); border-radius:12px; border:1px solid var(--divider-color, #ddd); overflow:hidden; }
+  .dfe-big .bg-tabs { display:flex; border-bottom:1px solid var(--divider-color, #ddd); }
+  .dfe-big .bg-pan .bg-set, .dfe-big .bg-pan .bg-side { flex:1; min-height:0; border:0; border-radius:0; }
+  .dfe-big .bg-b.tab-set .bg-side, .dfe-big .bg-b.tab-side .bg-set { display:none; }
+}
+@media (max-width: 800px) {
+  .dfe-big .bg-b { flex-direction:column; overflow:auto; }
+  .dfe-big .bg-mid { flex: 0 0 45vh; position:sticky; top:0; z-index:2; background: var(--secondary-background-color, #f3f3f3); }
+  .dfe-big .bg-pan { flex: 0 0 auto; overflow:visible; }
+  .dfe-big .bg-h span { display:none; }
+}
 `;
 
 class DeviceFloorplanCardEditor extends HTMLElement {
@@ -6726,6 +8036,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _set(c, { devices = true, sections = false } = {}) {
     this._config = this._prune(c);
     this._emit();
+    // 0.11.1: the Card Editor's preview follows every setting.
+    if (this._big && this._big.set) this._big.card.setConfig(this._config);
     this._engine(true);
     if (sections) this._renderSections();
     if (devices) this._renderDevices();
@@ -6790,7 +8102,21 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._renderScenes();
     }));
     const bb = this.querySelector("#bigbtn span");
-    if (bb) bb.textContent = ids.length > 1 ? `Edit markers on ${name(cur)}` : "Edit markers";
+    if (bb) bb.textContent = "Open the Card Editor";
+    // 0.11.1: the home's one-line summary of this card.
+    const ds = this.querySelector("#dsum");
+    if (ds) {
+      const c = this._config;
+      const nOv = Array.isArray(c.overlays) && c.overlays.length ? c.overlays.length : this._engine()._overlays().length;
+      const pos = (c.buttons || {}).position || "bottom";
+      ds.textContent = `${ids.map(name).join(" + ") || "No plan yet"} · ${nOv} overlays · Overlay Bar: ${String(pos).replace("rail_", "rail ").replace("_", " ")}`;
+    }
+    // 0.11.1: in the Card Editor the floor tabs also switch the preview.
+    if (this._big && cur && this._big.card._floor !== cur) {
+      this._big.card._floor = cur;
+      this._big.card._update(true);
+      if (this._big.rerender) this._big.rerender();
+    }
     const add = box.querySelector("[data-fadd]");
     if (add) add.addEventListener("click", () => {
       if (!free.length) return;
@@ -6893,7 +8219,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         { name: "buttons_auto", selector: { boolean: {} } },
         { name: "buttons_style", selector: { select: { options: [{ value: "labels", label: "Icons and labels" }, { value: "icons", label: "Icons only" }], mode: "dropdown" } } },
         ...(rail ? [] : [{ name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside it)" }, { value: "float", label: "Float over the plan" }], mode: "dropdown" } } }]),
-        { name: "layers_button", selector: { select: { options: [{ value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
+        { name: "layers_button", selector: { select: { options: [{ value: "auto", label: "Automatic (away from a side Overlay Bar)" }, { value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
+        { name: "replay_button", selector: { select: { options: [{ value: "layers", label: "Next to the Layers button (round, on the plan)" }, { value: "bar", label: "In the Overlay Bar (its last button)" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
         { type: "expandable", name: "overlay_names", title: "Overlay names", icon: "mdi:rename", schema: ovOpts.filter((o) => OVERLAYS[o.value]).map((o) => ({ name: o.value, selector: { text: {} } })) },
       ],
       // 0.8.2: space around the plan for this card: the plan's default, or its own (linked or per side).
@@ -6917,6 +8244,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             { name: "lights_as", selector: { select: { options: [{ value: "glow", label: "Glow only (tap the glow to switch off)" }, { value: "markers", label: "Markers" }], mode: "dropdown" } } },
             { name: "show_off", selector: { select: { options: [{ value: "hidden", label: "Hidden (Live shows only what's on or happening)" }, { value: "faint", label: "Faint" }], mode: "dropdown" } } },
             { name: "motion_as", selector: { select: { options: [{ value: "pulse", label: "Room pulse (the room's edges glow)" }, { value: "icons", label: "Icons" }, { value: "both", label: "Both" }], mode: "dropdown" } } },
+          ],
+        },
+        {
+          type: "expandable", name: "cameras", title: "Cameras (Live and Security)", icon: "mdi:cctv",
+          schema: [
+            { name: "cam_size", selector: { select: { options: [{ value: "s", label: "Small" }, { value: "m", label: "Medium" }, { value: "l", label: "Large" }], mode: "dropdown" } } },
+            { name: "cam_layout", selector: { select: { options: [{ value: "plan", label: "On the plan, next to each camera" }, { value: "strip", label: "In a strip (film), in the space around the plan" }], mode: "dropdown" } } },
           ],
         },
         {
@@ -6981,8 +8315,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title on the card (optional, empty = none)", overlays: "Which buttons, in which order (drag to reorder). New overlays from updates appear here, marked ✨", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers)",
-      lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
+      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers). Beside a side Overlay Bar it always sits on the plan's other side", replay_button: "Home Replay button",
+      cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
@@ -6994,7 +8328,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       show_quiet: "All sensors by default, also closed / idle (viewers can switch it under Layers)", cameras: "Show cameras",
       connections: "Connections shown by default", layers: "Layers button next to the overlay buttons (viewers can switch connections)", links: "Draw Zigbee links (ZHA)", min_lqi: "Hide Zigbee links below this LQI", hub_links: "Draw hub / bridge links (Matter bridges, hubs)", wifi_links: "Draw Wi-Fi / LAN links to the router / access point (needs router device tracking)", legend: "Legend under the plan", labels: "Connection names next to icons", only_weak: "Only weak and fair signals",
       low: "Battery is low below", only_problems: "Only low batteries and offline devices",
-      size: "Marker size", markers: "Values next to marker icons (overlays that show values)", chips: "Style", names: "Device names", card_id: "Card ID (lets other cards switch this card's overlay)",
+      size: "Marker size (icons in every overlay; chips have their own size below)", markers: "Values next to marker icons (overlays that show values)", chips: "Style", names: "Device names", card_id: "Card ID (lets other cards switch this card's overlay)",
       hide_admin_hint: "Hide the “N new · Place them” button (admins only see it)",
       ...TAP_KINDS,
     };
@@ -7024,8 +8358,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       frame_linked: (c.frame || {}).linked !== false,
       frame_all: Number((c.frame || {}).t) || 0,
       ...Object.fromEntries(["t", "r", "b", "l"].map((k) => [`frame_${k}`, Number((c.frame || {})[k]) || 0])),
-      layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "top-right"),
+      // test9: nothing saved = Automatic (the card picks the corner away from a side Overlay Bar); it is not written.
+      layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "auto"),
+      replay_button: c.replay === false ? "hidden" : c.replay_button || "layers",
       live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
+      cameras: { cam_size: "m", cam_layout: "plan", ...(c.cameras || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
       comfort: { heatmap: true, heatmap_opacity: 52, readings: true, climate_shown: true, airflow: true, humidity: true, humidity_alone: true, climate: true, ...(c.comfort || {}) },
       security: { show_quiet: false, quiet_small: true, cameras: true, ...(c.security || {}) },
@@ -7048,6 +8385,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     delete out.show_states; // replaced by look.markers
     delete out.default_view; // replaced by default_overlay
     if (!out.hide_admin_hint) delete out.hide_admin_hint;
+    if (out.layers_button === "auto") delete out.layers_button;
+    // test10: one setting for the Replay button (the older "replay: false" is folded into it); the default is not written.
+    if (out.replay_button) delete out.replay;
+    if (out.replay_button === "layers") delete out.replay_button;
     if (out.look) {
       out.look = { ...out.look };
       delete out.look.show_title; // 0.11: a title shows when there is one
@@ -7087,13 +8428,24 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       // 0.11: card settings as clear sections: title + one line; one open at a time.
       const csec = (icon, title, p, inner) => `<details class="csec"><summary><h4><ha-icon icon="${icon}"></ha-icon>${title}<ha-icon class="cv" icon="mdi:chevron-down"></ha-icon></h4>${p ? `<p>${p}</p>` : ""}</summary><div class="csb">${inner}</div></details>`;
       // 0.8.1: per floor first (Markers, Rooms), then the settings for the whole card (all floors).
+      // 0.11.1: a short home (header, summary, the Card Editor button, one tip); every setting folded below,
+      // in two tabs: the card (whole house) and the floors. In the Card Editor the home hides and all is open.
       this.innerHTML = `<style>${ED_CSS}</style><div class="dfe">
-        <h3 class="grp"><ha-icon icon="mdi:office-building-outline"></ha-icon>Per floor <small>(Markers and Rooms of the floor picked in the tabs)</small></h3>
+        <div class="dhome">
+          <div class="dh"><ha-icon icon="mdi:floor-plan"></ha-icon><b>Device Floorplan</b><span class="dv">${CARD_VERSION}</span><a href="https://johnkotrolos.github.io/ha-device-floorplan/" target="_blank" rel="noopener">Guide ↗</a></div>
+          <p class="dsum"><ha-icon icon="mdi:information-outline"></ha-icon><span id="dsum"></span></p>
+          <button class="bigbtn" id="bigbtn"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><span>Open the Card Editor</span></button>
+          <p class="dtip"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>New: Home Replay (the round button beside Layers), and camera pictures in a strip.</p>
+        </div>
+        <details class="dall" id="dall"><summary>Card settings</summary>
+        <div class="dcol"><h3><ha-icon icon="mdi:tune-variant"></ha-icon>Card settings</h3><p>How the whole card looks and works: the Overlay Bar, the overlays and what each shows, rooms and people. Floors: settings per floor.</p></div>
+        <div class="dtabs"><button data-dt="card" class="on">Card</button><button data-dt="floor">Floors</button></div>
+        <div class="dpane" data-pane="floor" hidden>
         <div class="fpanel"><div class="floors" id="floors"></div>
-        ${sec("mdi:devices", "Markers", "What each device shows per overlay, extra readings, icon, tap, hide / add, people: all on the plan of this floor.", `<button class="bigbtn" id="bigbtn"><ha-icon icon="mdi:cursor-default-click-outline"></ha-icon><span>Edit markers</span></button>`)}
         ${sec("mdi:texture-box", "Rooms on this floor", "Rooms from the Floorplan Editor: rename them for the card or hide them.", `<div id="rooms"></div>`)}
         ${sec("mdi:gesture-tap-button", "Buttons on this floor", "Overlay actions and light scenes shown only on this floor. Those for every floor are under Card settings.", `<div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions</h5><div id="oacts_f"></div></div><div class="sub"><h5><ha-icon icon="mdi:palette-outline"></ha-icon>Light scenes</h5><div id="scenes_f"></div></div>`)}</div>
-        <h3 class="grp"><ha-icon icon="mdi:home-outline"></ha-icon>Card settings <small>(the whole house, all floors)</small></h3>
+        </div>
+        <div class="dpane" data-pane="card">
         <div id="fopts"></div>
         <div data-form="general"></div>
         ${csec("mdi:gesture-tap-button", "Overlay Bar", "Which buttons, their order, where the Overlay Bar sits and how it looks.", `<div data-form="buttons"></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-hold"></ha-icon>Overlay Bar: hold, status and shortcuts</h5><p>Each overlay button can run an action on hold and show a status (dot, count, value, colour or another icon). Shortcuts are your own buttons: tap and hold run any Home Assistant action (open a page, a popup on this browser, reload…). A faint line separates card overlays, your own overlays and shortcuts; what doesn't fit scrolls in the bar.</p><div id="bbar"></div></div><div class="sub"><h5><ha-icon icon="mdi:gesture-tap-button"></ha-icon>Overlay actions on every floor</h5><p>Your own buttons under the plan, shown in one overlay (buttons for one floor are in the floor menu above): run any Home Assistant action (a script, a scene, the robot, another integration), open a page or a popup. Cleaning also shows the robot's own Start / Pause / Dock.</p><div id="oacts"></div></div>`)}
@@ -7105,7 +8457,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         ${csec("mdi:weather-night", "Day & night", "", `<p id="nightnote"></p><div id="night"></div>`)}
         ${csec("mdi:tune-variant", "Look and tap behaviour", "", `<div data-form="look"></div><button class="lk" id="chipreset"><ha-icon icon="mdi:restore"></ha-icon>Reset Info chips</button><div data-form="tap"></div>`)}
         ${csec("mdi:border-outside", "Frame", "Space around the plan (+) or trimmed margin (−), % of the image: markers and Rooms never move.", `<div data-form="frame"></div>`)}
+        </div></details>
       </div>`;
+      for (const b of this.querySelectorAll("[data-dt]")) b.addEventListener("click", () => {
+        for (const x of this.querySelectorAll("[data-dt]")) x.classList.toggle("on", x === b);
+        for (const pn of this.querySelectorAll(".dpane")) pn.hidden = pn.dataset.pane !== b.dataset.dt;
+      });
       // One card-settings section open at a time; the opened one scrolls to the top.
       for (const d of this.querySelectorAll("details.csec")) d.addEventListener("toggle", () => {
         if (!d.open) return;
@@ -7601,7 +8958,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     };
     const rows = [
       ...ovs.filter(def).map((o) => ({ key: `o:${o}`, icon: def(o).icon, name: (this._config.overlay_names || {})[o] || def(o).label, small: [actions[o] && actions[o].hold_action ? `hold: ${actTxt(actions[o].hold_action)}` : "", stTxt((actions[o] || {}).status, o)].filter(Boolean).join(" · ") || "overlay" })),
-      ...shortcuts.map((sc, i) => ({ key: `s:${i}`, icon: sc.icon || "mdi:gesture-tap", name: sc.name || `Shortcut ${i + 1}`, small: ["shortcut", sc.tap_action ? `tap: ${actTxt(sc.tap_action)}` : "", sc.hold_action ? `hold: ${actTxt(sc.hold_action)}` : "", stTxt(sc.status)].filter(Boolean).join(" · ") })),
+      ...shortcuts.map((sc, i) => ({ key: `s:${i}`, icon: sc.icon || "mdi:gesture-tap", name: sc.name || `Shortcut ${i + 1}`, small: [sc.hidden ? "hidden shortcut" : "shortcut", sc.tap_action ? `tap: ${actTxt(sc.tap_action)}` : "", sc.hold_action ? `hold: ${actTxt(sc.hold_action)}` : "", stTxt(sc.status)].filter(Boolean).join(" · ") })),
     ];
     box.innerHTML = rows.map((r) => `<div class="row" data-bk="${cesc(r.key)}"><button class="hd" data-bopen="${cesc(r.key)}"><ha-icon icon="${cesc(r.icon)}"></ha-icon>${cesc(r.name)}<small style="margin-left:auto">${cesc(r.small)}</small></button>${this._bopen === r.key ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-badd="1"><ha-icon icon="mdi:plus"></ha-icon>Add shortcut</button>`;
     box.querySelector("[data-badd]").addEventListener("click", () => {
@@ -7615,7 +8972,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const body = this._bopen && box.querySelector(`.row[data-bk="${CSS.escape(this._bopen)}"] .body`);
     if (!body) return;
     const [kind, id] = [this._bopen.slice(0, 1), this._bopen.slice(2)];
-    const LBL = { hold_action: "Hold action", st_mode: "Status on the button", st_entity: "Entities", st_show: "Shows", st_when_1: "When (states like running, prepare, or a number test like >50; empty = on / open / armed / unlocked)", st_color_1: "Colour (e.g. green, #E5534B)", st_when_2: "Else when", st_color_2: "Colour", st_when_3: "Else when", st_color_3: "Colour", name: "Name", icon: "Icon", tap_kind: "Tap", tap_action: "Tap action", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)", hold_kind: "Hold" };
+    const LBL = { hold_action: "Hold action", st_mode: "Status on the button", st_entity: "Entities", st_show: "Shows", st_when_1: "When (states like running, prepare, or a number test like >50; empty = on / open / armed / unlocked)", st_color_1: "Colour (e.g. green, #E5534B)", st_when_2: "Else when", st_color_2: "Colour", st_when_3: "Else when", st_color_3: "Colour", name: "Name", icon: "Icon", shown: "Show in the Overlay Bar (off: it stays here with all its settings)", tap_kind: "Tap", tap_action: "Tap action", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)", hold_kind: "Hold" };
     if (kind === "o") {
       const cur = actions[id] || {};
       const hk = (cur.hold_action || {}).action;
@@ -7647,7 +9004,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const bm = tk === "fire-dom-event" && sc.tap_action.browser_mod && sc.tap_action.browser_mod.service === "browser_mod.popup" ? sc.tap_action.browser_mod.data || {} : null;
     const hk = (sc.hold_action || {}).action;
     const data = {
-      name: sc.name || "", icon: sc.icon || "",
+      name: sc.name || "", icon: sc.icon || "", shown: sc.hidden !== true,
       tap_kind: bm ? "popup" : tk === "reload" || tk === "back" ? tk : sc.tap_action ? "action" : "details",
       tap_action: !bm && tk && tk !== "reload" && tk !== "back" ? sc.tap_action : undefined,
       popup_title: bm ? bm.title || "" : "", popup_card: bm ? bm.content : undefined,
@@ -7659,6 +9016,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const schema = [
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
+      { name: "shown", selector: { boolean: {} } },
       { name: "tap_kind", selector: { select: { options: kinds(true), mode: "dropdown" } } },
       ...(data.tap_kind === "action" ? [{ name: "tap_action", selector: { ui_action: {} } }] : []),
       ...(data.tap_kind === "popup" ? [{ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } }] : []),
@@ -7668,6 +9026,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     ];
     body.appendChild(this._form(schema, data, LBL, (v) => {
       const nx = { name: v.name || "", icon: v.icon || "" };
+      if (v.shown === false) nx.hidden = true; // test10: kept with all its settings, not drawn in the Overlay Bar
       if (v.tap_kind === "reload" || v.tap_kind === "back") nx.tap_action = { action: v.tap_kind };
       else if (v.tap_kind === "action") nx.tap_action = v.tap_action && v.tap_action.action ? v.tap_action : { action: "navigate", navigation_path: "/" };
       else if (v.tap_kind === "popup") nx.tap_action = { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(v.popup_title ? { title: v.popup_title } : {}), content: v.popup_card || { type: "markdown", content: "Pick a card" } } } };
@@ -7675,7 +9034,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       else if (v.hold_kind === "action") nx.hold_action = v.hold_action && v.hold_action.action ? v.hold_action : { action: "navigate", navigation_path: "/" };
       const st = this._statusFrom(v, false);
       if (st) nx.status = st;
-      const redraw = v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || (v.st_show === "count" || v.st_show === "value") !== (data.st_show === "count" || data.st_show === "value");
+      const redraw = (v.shown !== false) !== data.shown || v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || (v.st_show === "count" || v.st_show === "value") !== (data.st_show === "count" || data.st_show === "value");
       save({ ...b, shortcuts: shortcuts.map((x, j) => (j === i ? nx : x)) }, redraw);
     }));
     body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-bmv="-1" ${i === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-bmv="1" ${i === shortcuts.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-bdel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
@@ -8114,7 +9473,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const tschema = [...(ov === "live" && eng._camOf(item) ? [] : [{ name: "icon", selector: { icon: {} } }]), { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
       if (tcur === "navigate") tschema.push({ name: "nav", selector: { navigation: {} } });
       if (tcur === "popup") tschema.push({ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } });
-      body.appendChild(this._form(tschema, { icon: p0.icon || dev().icon || "", tap: tcur, nav: tsrc.nav || "", popup_title: tsrc.popup_title || "", popup_card: tsrc.popup_card }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: robot ? "Tap (on every overlay)" : item.bond || item.phantom ? `Tap in ${ovLabel} (bonds and phantoms open their info card)` : `Tap in ${ovLabel}`, nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
+      body.appendChild(this._form(tschema, { icon: p0.icon || dev().icon || "", tap: tcur, nav: tsrc.nav || "", popup_title: tsrc.popup_title || "", popup_card: tsrc.popup_card }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: robot ? "Tap (on every overlay)" : item.bond || item.phantom ? `Tap in ${ovLabel} (empty: a bond of lights switches all, other bonds and phantoms open their info card)` : `Tap in ${ovLabel}`, nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
         const tap = v.tap === "default" ? "" : v.tap;
         const extra = { nav: tap === "navigate" ? v.nav || "" : "", popup_title: tap === "popup" ? v.popup_title || "" : "", popup_card: tap === "popup" ? v.popup_card || null : null };
         if (robot) {
@@ -8237,7 +9596,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (this._big) return;
     const wrap = document.createElement("dialog");
     wrap.className = "dfe-big";
-    wrap.innerHTML = `<style>${BIG_CSS}</style><div class="bg-h"><b>Edit markers</b><span>Pick an overlay under the plan, then click a marker. ${direct ? "Changes are saved to the dashboard right away." : "Changes go into this card's settings (press Save in the card editor when you're done)."}</span><button class="bg-x" aria-label="Close">Done</button></div><div class="bg-b"><div class="bg-plan"></div><aside class="bg-side"></aside></div>`;
+    wrap.innerHTML = `<style>${BIG_CSS}</style><div class="bg-h"><b>Card Editor</b><span></span><button class="bg-x" aria-label="Close">${direct ? "Done" : "Close the window and Press Save"}</button></div><div class="bg-b tab-set"><div class="bg-mid"><div class="bg-zoom"><button data-z="-1" aria-label="Zoom out"><ha-icon icon="mdi:minus"></ha-icon></button><span class="bg-zv">100 %</span><button data-z="1" aria-label="Zoom in"><ha-icon icon="mdi:plus"></ha-icon></button><button data-z="0" class="bg-fit" hidden>Fit</button></div><div class="bg-plan"></div></div><div class="bg-pan"><div class="bg-tabs"><button data-bt="set" class="on">Settings</button><button data-bt="side">Markers</button></div><aside class="bg-set"></aside><aside class="bg-side"></aside></div></div>`;
     // Inside HA's card editor dialog everything outside it is inert: keep the big plan inside the
     // editor (still drawn on top, from the top layer). From the ✎ pen the editor isn't on the page.
     (this.isConnected ? this : document.body).appendChild(wrap);
@@ -8247,14 +9606,57 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       wrap.setAttribute("open", "");
     }
     for (const ev of ["keydown", "keyup", "keypress"]) wrap.addEventListener(ev, (e) => e.stopPropagation());
+    // 0.11.1: the card settings move into the left column (the same sections, moved back on Done).
+    const setBox = wrap.querySelector(".bg-set");
+    const dfe = this.querySelector(":scope > .dfe");
+    const dfeStyle = dfe && dfe.previousElementSibling;
+    const dall = dfe && dfe.querySelector("#dall");
+    const dallWas = dall ? dall.open : false;
+    if (dall) dall.open = true; // all settings open in the Card Editor
+    if (dfe) setBox.append(...[dfeStyle, dfe].filter(Boolean));
+    else {
+      setBox.remove();
+      wrap.querySelector(".bg-b").classList.replace("tab-set", "tab-side");
+      wrap.querySelector(".bg-tabs").remove();
+    }
+    const bgB = wrap.querySelector(".bg-b");
+    const showTab = (t) => {
+      if (!dfe) return;
+      bgB.classList.toggle("tab-set", t === "set");
+      bgB.classList.toggle("tab-side", t === "side");
+      for (const b of wrap.querySelectorAll("[data-bt]")) b.classList.toggle("on", b.dataset.bt === t);
+    };
+    for (const b of wrap.querySelectorAll("[data-bt]")) b.addEventListener("click", () => showTab(b.dataset.bt));
+    // Zoom: the card is drawn wider in its scroll box (its markers and Rooms scale with it); Fit = 100 %.
+    let zoom = 1;
+    const zv = wrap.querySelector(".bg-zv");
+    const fitB = wrap.querySelector(".bg-fit");
+    // At 100 % the plan fits the column (height and width); zoomed, it is drawn wider and scrolls.
+    const setZoom = (z) => {
+      zoom = Math.max(1, Math.min(4, z));
+      card._fitHost = zoom === 1;
+      card.style.width = `${zoom * 100}%`;
+      card.style.height = zoom === 1 ? "100%" : "";
+      zv.textContent = `${Math.round(zoom * 100)} %`;
+      fitB.hidden = zoom === 1;
+      card._update(true);
+    };
+    for (const b of wrap.querySelectorAll("[data-z]")) b.addEventListener("click", () => setZoom(b.dataset.z === "0" ? 1 : zoom * (b.dataset.z === "1" ? 1.25 : 0.8)));
+    wrap.querySelector(".bg-plan").addEventListener("wheel", (e) => {
+      if (!e.ctrlKey) return; // ctrl + wheel / trackpad pinch zooms; a plain wheel scrolls
+      e.preventDefault();
+      setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+    }, { passive: false });
     const card = document.createElement("device-floorplan-card");
     card.setConfig(this._config);
     const fid = this._planIds()[this._ftab || 0];
     if (!direct && fid) card._floor = fid; // 0.8.1: the floor picked in the card editor
+    card._fitHost = true;
+    card.style.height = "100%";
     card.hass = this._hass;
     wrap.querySelector(".bg-plan").appendChild(card);
     const side = wrap.querySelector(".bg-side");
-    this._big = { wrap, card };
+    this._big = { wrap, card, set: !!dfe };
     let sel = null;
     let q = "";
     const render = (id = sel) => {
@@ -8268,7 +9670,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const ovs = eng._overlays().filter((o) => o !== "plan");
       const def = eng._ovDef(ov);
       const items = card._items(a);
-      side.innerHTML = `<div class="bg-sel"></div><div class="bg-list"><div class="bg-lh"><b>${cesc(def ? def.label : "Plan")}</b> · devices <input class="bg-q" placeholder="Search…" value="${cesc(q)}"></div><div class="bg-groups"></div></div>`;
+      // 0.11.1 test8: a strong header like the settings column: title, the overlay as a chip, the count, one line, search.
+      const ovName = def ? (this._config.overlay_names || {})[ov] || def.label : "";
+      side.innerHTML = `<div class="dcol"><h3><ha-icon icon="mdi:map-marker-multiple-outline"></ha-icon>Markers${def ? `<span class="ovchip"><ha-icon icon="${cesc(def.icon || "mdi:layers")}"></ha-icon>${cesc(ovName)}</span><span class="mkn"></span>` : ""}</h3><p>${ov === "plan" || !def ? "Pick an overlay under the plan to edit its markers." : `Every device in ${cesc(ovName)}. Pick one here or on the plan to change what it shows, its icon and what a tap does.`}</p></div><div class="bg-sel"></div><div class="bg-list"><div class="bg-lh"><input class="bg-q" placeholder="Search…" value="${cesc(q)}"></div><div class="bg-groups"></div></div>`;
       const selBox = side.querySelector(".bg-sel");
       if (id && String(id).startsWith("person:")) {
         selBox.innerHTML = `<div class="bg-t"><span></span><button class="bg-c" aria-label="Close">✕</button></div><div class="bg-p"></div>`;
@@ -8284,8 +9688,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             if (nm) nm.innerHTML = `${cesc(((this._config.devices || {})[id] || {}).name || item.name)}${item.bond ? " <small>(bonded)</small>" : item.phantom ? " <small>(phantom)</small>" : ""}`;
           } });
         }
-      } else {
-        selBox.innerHTML = `<p class="bg-hint">${ov === "plan" ? "Pick an overlay under the plan to edit its markers." : `Click a marker on the plan to change it in <b>${cesc(def ? def.label : "")}</b>: what it shows, extra readings, icon, tap. ✕ on a selected marker hides it here.`}</p>`;
       }
       const c = selBox.querySelector(".bg-c");
       if (c) c.addEventListener("click", () => render(null));
@@ -8308,17 +9710,37 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         for (const k of Object.keys(rows)) rows[k].sort((x, y) => name(x).localeCompare(name(y), undefined, { sensitivity: "base" }));
         const hideBtn = (it) => (sel === it.id && rows.on.includes(it) ? `<button class="lb" data-hide="${cesc(it.id)}">Hide in ${cesc(def ? def.label : "")}</button>` : "");
         const closeBtn = (it) => (sel === it.id ? `<button class="bg-c2" data-unpick="1" aria-label="Close">✕</button>` : "");
-        const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}${hideBtn(it)}${closeBtn(it)}</div>`;
+        const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${((this._config.devices || {})[it.id] || {}).icon ? `<ha-icon class="lic" icon="${cesc(this._config.devices[it.id].icon)}"></ha-icon>` : it.main_entity ? `<ha-state-icon class="lic" data-ent="${cesc(it.main_entity)}"></ha-state-icon>` : `<ha-icon class="lic" icon="mdi:devices"></ha-icon>`}${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}${hideBtn(it)}${closeBtn(it)}</div>`;
         const custom = def && def.custom;
         // 0.11: three groups, one style: arrow, bold title with count, collapsible (remembered while editing).
         const lbl = def ? def.label : "";
         const og = (this._grpOpen = this._grpOpen || { on: true, hidden: true, off: false });
-        const grp = (k, title, list, btn) => (list.length ? `<details class="dgrp" data-g="${k}" ${og[k] || ql || list.some((it) => it.id === sel) ? "open" : ""}><summary>${cesc(title)} <span class="n">${list.length}</span></summary>${list.map((it) => row(it, btn(it))).join("")}</details>` : "");
-        box.innerHTML = grp("on", `On ${lbl}`, rows.on, () => "")
+        // 0.11.1: the shown devices grouped by room (as Home Assistant groups by area).
+        const roomName = (it) => {
+          const r = e2._roomOf(it);
+          return r ? (e2._rooms().names || {})[r] || ((a.areas || {})[r] || {}).name || r : "No room";
+        };
+        const byRoom = (list, btn) => {
+          const g = new Map();
+          for (const it of list) {
+            const r = roomName(it);
+            if (!g.has(r)) g.set(r, []);
+            g.get(r).push(it);
+          }
+          return [...g].sort((x, y) => (x[0] === "No room") - (y[0] === "No room") || x[0].localeCompare(y[0])).map(([r, l]) => `<div class="lroom">${cesc(r)}</div>${l.map((it) => row(it, btn(it))).join("")}`).join("");
+        };
+        const grp = (k, title, list, btn) => (list.length ? `<details class="dgrp" data-g="${k}" ${og[k] || ql || list.some((it) => it.id === sel) ? "open" : ""}><summary>${cesc(title)} <span class="n">${list.length}</span></summary>${k === "on" ? byRoom(list, btn) : list.map((it) => row(it, btn(it))).join("")}</details>` : "");
+        box.innerHTML = grp("on", `Shown in ${lbl}`, rows.on, () => "")
           + grp("hidden", `Hidden in ${lbl}`, rows.hidden, (it) => `<button class="lb" data-show="${cesc(it.id)}">↩ Show</button>`)
           + grp("off", `Not shown in ${lbl}`, rows.off, (it) => (custom ? `<button class="lb" data-add="${cesc(it.id)}">+ Add</button>` : ""))
           + `<p class="bg-hint" style="margin-top:10px">Devices that aren't on the plan yet: place them in the Floorplan Editor first.</p>`;
+        const mkn = side.querySelector(".mkn");
+        if (mkn) mkn.textContent = String(rows.on.length);
         for (const d of box.querySelectorAll("details.dgrp")) d.addEventListener("toggle", () => (this._grpOpen[d.dataset.g] = d.open));
+        for (const ic of box.querySelectorAll("ha-state-icon[data-ent]")) {
+          ic.hass = this._hass;
+          ic.stateObj = this._hass.states[ic.dataset.ent];
+        }
         for (const b of box.querySelectorAll("[data-pick]")) b.addEventListener("click", () => render(b.dataset.pick === sel ? null : b.dataset.pick));
         for (const b of box.querySelectorAll("[data-unpick]")) b.addEventListener("click", () => render(null));
         for (const b of box.querySelectorAll("[data-hide]")) b.addEventListener("click", () => {
@@ -8356,8 +9778,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         list();
       });
     };
-    card._pick = (id) => render(id);
+    this._big.rerender = () => render(null);
+    card._pick = (id) => {
+      if (id) showTab("side"); // a marker picked on the plan opens Markers
+      render(id);
+    };
     card._onOv = () => render(sel);
+    card._onWinMove = (id, pos) => this._saveDev(id, { win: pos });
     card._pickHide = (id) => {
       if (!id) return;
       const ov = card._overlay;
@@ -8373,6 +9800,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       } catch (_e) {
         /* already closed */
       }
+      if (dall) dall.open = dallWas;
+      if (dfe) this.prepend(...[dfeStyle, dfe].filter(Boolean)); // the settings go back to Home Assistant's editor
       wrap.remove();
       this._big = null;
       if (onClose) onClose();

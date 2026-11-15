@@ -8,7 +8,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/JohnKotrolos/ha-device-floorplan/blob/main/LICENSE)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/hero.webp" width="100%" alt="Device Floorplan: Live, Cleaning, Comfort and Network overlays on one floorplan">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/hero.webp" width="100%" alt="Device Floorplan with Home Replay: Live, Cleaning, Comfort, Energy and Network on one floorplan, replayed at Yesterday 20:30">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/overview.webp" width="100%" alt="All overlays: Live, Comfort, Energy, Home Replay, Security, Network, Device Health and Cleaning">
 </p>
 
 Put your Home Assistant devices on **your own floorplan** and see your home alive:
@@ -52,6 +55,16 @@ upload your picture (or start from a sample plan), drag your rooms onto it, pres
   from your router, and the devices on other floors as faint markers.
 - **One marker per device per overlay**, and you decide what it shows: the leading value,
   extra readings, a badge, the icon, what a tap does.
+
+### Home Replay: your home, now, replayed
+
+- Go back up to **48 hours** and watch the plan play it back: lights, doors, motion,
+  temperatures, the robot and people, where they happened. Play, pause, change speed,
+  or drag to any moment; tap the time to pick an exact day and minute.
+- **Every overlay has its own timeline**: events in Live, lights on, the average room
+  temperature with heating and cooling in Comfort, openings and motion in Security,
+  offline devices and low batteries in Health, robot runs in Cleaning, drops in Network.
+- Nothing is switched in the past: one tap on **← Now** brings you back.
 
 ### Made for dashboards and wall panels
 

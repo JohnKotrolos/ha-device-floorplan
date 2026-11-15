@@ -440,6 +440,25 @@ def _integrations(hass: HomeAssistant, device: dr.DeviceEntry) -> list[str]:
     return out
 
 
+def bt_proxies(ent_reg: er.EntityRegistry, entries: dict[str, dr.DeviceEntry]) -> set[str]:
+    """Devices that are Bluetooth proxies (ESPHome, Shelly, …).
+
+    Home Assistant's Bluetooth integration adds a scanner device for each proxy: no entities, a
+    Bluetooth connection, "connected via" the proxy itself.
+    """
+    out: set[str] = set()
+    for device in entries.values():
+        parent = device.via_device_id
+        if not parent or parent not in entries:
+            continue
+        if dr.CONNECTION_BLUETOOTH not in {ctype for ctype, _ in _pairs(device.connections)}:
+            continue
+        if er.async_entries_for_device(ent_reg, device.id, include_disabled_entities=True):
+            continue
+        out.add(parent)
+    return out
+
+
 def _connections(
     device: dr.DeviceEntry, integrations: list[str], domains: set[str] | None = None
 ) -> tuple[list[str], bool]:
@@ -787,6 +806,7 @@ def build_plan_payload(
     devices: dict[str, Any] = {}
     entities_out: dict[str, Any] = {}
     zigbee: dict[str, Any] = {}
+    proxies = bt_proxies(ent_reg, entries)
     trackers = router_trackers(hass)
     for key, pos in plan.get("positions", {}).items():
         x, y = pos["x"], pos["y"]
@@ -902,6 +922,10 @@ def build_plan_payload(
             }
         if mac:
             item["mac"] = mac
+        if key in proxies:
+            item["bt_proxy"] = True  # test12: shows under Bluetooth too (Network)
+            if "bluetooth" not in item["conns"]:
+                item["conns"] = [c for c in item["conns"] if c != "other"] + ["bluetooth"]
         if device.via_device_id:
             item["via"] = device.via_device_id  # hub / bridge (Network links, #49)
         router = _router_for(trackers, mac, ids, name)
