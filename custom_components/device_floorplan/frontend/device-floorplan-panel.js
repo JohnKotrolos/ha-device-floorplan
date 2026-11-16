@@ -1206,8 +1206,18 @@ class DeviceFloorplanPanel extends HTMLElement {
       counts[d.area_id] = (counts[d.area_id] || 0) + 1;
     }
     return this.areas
-      .filter((a) => (withEmpty || counts[a.area_id]) && (!f || a.floor_id === f || !a.floor_id))
-      .map((a) => ({ ...a, count: counts[a.area_id] || 0, pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id) }));
+      // 0.12.1: a room placed on this plan is always listed (also when HA puts it on another floor), so it can be
+      // changed or removed; it is marked with its own floor.
+      .filter((a) => this._placedHere(a.area_id) || ((withEmpty || counts[a.area_id]) && (!f || a.floor_id === f || !a.floor_id)))
+      .map((a) => {
+        const mate = this._levelMates(this._plan()).find((p) => (p.anchors || {})[a.area_id] || (p.shapes || {})[a.area_id]);
+        const away = f && a.floor_id && a.floor_id !== f ? (this.floors.find((x) => x.floor_id === a.floor_id) || {}).name || "another floor" : null;
+        return { ...a, count: counts[a.area_id] || 0, pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id), mate: mate ? mate.name : null, away };
+      });
+  }
+
+  _placedHere(aid) {
+    return !!(this.work && ((this.work.anchors || {})[aid] || (this.work.shapes || {})[aid]));
   }
 
   _ignoredRooms() {
@@ -2526,7 +2536,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const allRooms = this._roomsForPlan(true);
     const rooms = allRooms.filter((r) => r.count);
     const empty = allRooms.filter((r) => !r.count);
-    const left = rooms.filter((r) => !r.pos && !r.ignored).length;
+    const left = rooms.filter((r) => !r.pos && !r.ignored && !r.mate).length;
     const roomRow = (r) => {
         const on = !!r.pos;
         if (r.ignored && !on) {
@@ -2536,15 +2546,15 @@ class DeviceFloorplanPanel extends HTMLElement {
         const active = this.s.placingRoom === r.area_id;
         return `<div class="row ${on ? "done" : "todo"} ${active ? "sel" : ""}" draggable="true" data-room="${esc(r.area_id)}">
           <button class="main" data-act="pickroom" data-id="${esc(r.area_id)}"><span class="ico" style="color:${on ? "var(--df-primary)" : "var(--df-sec)"}">${SVG.pin}</span>
-          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.count ? `${r.count} device${r.count > 1 ? "s" : ""}` : "no devices yet"}</span></span>
-          <span class="pill ${on ? "ok" : ""}">${on ? "✓ on plan" : active ? "click on plan" : "drag to plan"}</span></button>
+          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.away ? `On ${esc(r.away)} in Home Assistant · ` : ""}${r.count ? `${r.count} device${r.count > 1 ? "s" : ""}` : "no devices yet"}</span></span>
+          <span class="pill ${on ? "ok" : r.mate && !active ? "grey" : ""}">${on ? "✓ on plan" : active ? "click on plan" : r.mate ? `on ${esc(r.mate)}` : "drag to plan"}</span></button>
           ${on ? `<button class="shbtn ${(this.work.shapes || {})[r.area_id] ? "done" : ""} ${this.s.shapeEdit === r.area_id ? "act" : ""}" data-act="shapeedit" data-id="${esc(r.area_id)}" title="Draw the room's shape – its lights stay inside">${(this.work.shapes || {})[r.area_id] ? "Shape ✓" : "Shape"}</button>` : ""}
           ${on ? `<button class="small" data-act="unpin" data-id="${esc(r.area_id)}" title="Take the pin off the plan" aria-label="Take the pin off the plan">${SVG.close}</button>` : ""}
           <button class="small eyeon" data-act="ignore" data-id="${esc(r.area_id)}" title="Hide: not on this plan" aria-label="Hide ${esc(r.name)}: not on this plan">${SVG.eye}</button></div>`;
       };
     const rows = rooms
       .slice()
-      .sort((a, b) => (a.pos || a.ignored ? 1 : 0) - (b.pos || b.ignored ? 1 : 0) || a.name.localeCompare(b.name))
+      .sort((a, b) => (a.pos || a.ignored || a.mate ? 1 : 0) - (b.pos || b.ignored || b.mate ? 1 : 0) || a.name.localeCompare(b.name))
       .map(roomRow)
       .join("") + (empty.length ? `<div class="lgh" style="padding:10px 12px 4px;font-size:12px;font-weight:500;color:var(--df-sec)">Empty rooms · no devices yet</div>` + empty.slice().sort((a, b) => a.name.localeCompare(b.name)).map(roomRow).join("") : "");
     const scope = this._plan().floor_id && this._plan().kind === "floor" ? "on this floor" : "with devices";
@@ -2558,7 +2568,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle. The orange strips on the plan show where; click one below to go there.</span>${gs.pairs.map((x) => `<button class="link gluepair" data-act="gluefocus" data-k="${esc(`${x.a}|${x.b}`)}">· ${howTxt(x)}</button>`).join("")}</div>`;
     else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
-      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p>${scope === "with devices" && (this.floors || []).length && this._plan().kind === "floor" ? `<p class="lvlhint">Showing all rooms. Link this plan to a Home Assistant floor (⋮ → Floor) to see only its rooms.</p>` : ""}</div>
+      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.${this._levelMates(this._plan()).length ? ` Rooms already on ${esc(this._levelMates(this._plan()).map((p) => p.name).join(", "))} are marked; drag one here too if it is on both.` : ""}</p>${scope === "with devices" && (this.floors || []).length && this._plan().kind === "floor" ? `<p class="lvlhint">Showing all rooms. Link this plan to a Home Assistant floor (⋮ → Floor) to see only its rooms.</p>` : ""}</div>
       <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
   }
 
@@ -3288,8 +3298,23 @@ class DeviceFloorplanPanel extends HTMLElement {
     return id ? this.plans.find((p) => p.id === id) || null : null;
   }
 
+  /** 0.12.1: a plan on the same level as an earlier plan (a garden, the other half of a big floor): it sits
+   *  beside that plan, with its own frame. Returns the first plan of the level, or null. */
+  _besidePlan(plan) {
+    if (!plan || plan.kind !== "floor" || plan.level == null) return null;
+    const first = this.plans.find((p) => p.kind === "floor" && p.level === plan.level);
+    return first && first.id !== plan.id ? first : null;
+  }
+
+  /** The other plans of this plan's level (same level number), for the room list. */
+  _levelMates(plan) {
+    if (!plan || plan.kind !== "floor" || plan.level == null) return [];
+    return this.plans.filter((p) => p.id !== plan.id && p.kind === "floor" && p.level === plan.level);
+  }
+
   /** A later floor: part of a house whose frame comes from another floor. */
   _laterFloor(plan) {
+    if (this._besidePlan(plan)) return null; // 0.12.1: a plan beside another keeps its own frame
     const ref = this._houseRef(plan);
     if (ref) return ref.id !== plan.id ? ref : null;
     // Not saved yet: any other floor with a picture makes this one a later floor.
@@ -4220,11 +4245,11 @@ class DeviceFloorplanPanel extends HTMLElement {
     const level = f.level ?? (p && p.level != null ? p.level : 0);
     const img = f.img ?? (p ? p.image_type : "top");
     const used = (fid) => this.plans.some((pl) => pl.floor_id === fid && (!p || pl.id !== p.id));
-    const floorOpts = this.floors.slice().sort((x, y) => (y.level ?? 0) - (x.level ?? 0)).map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} ${used(fl.floor_id) ? "disabled" : ""}>${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan" : ""}</option>`).join("");
+    const floorOpts = this.floors.slice().sort((x, y) => (y.level ?? 0) - (x.level ?? 0)).map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} >${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan: this one goes beside it" : ""}</option>`).join("");
     const opt = (val, title, desc) => `<label class="opt ${img === val ? "on" : ""}"><input type="radio" name="img" value="${val}" data-act="formimg" ${img === val ? "checked" : ""}><span><b>${title}</b><span>${desc}</span></span></label>`;
     const hasImage = !!f.image || (p && p.image_url && !f.changeImage);
     const title = p ? (p.kind === "view" ? "Plan settings" : "Floor settings") : inline ? "Create your first plan" : "New plan";
-    const intro = !p ? `<p>A plan is one floor of your home, or any other view (garden, a single room…). ${inline ? "Start with one floor: you can add more floors later." : ""}</p>` : "";
+    const intro = !p ? `<p>A plan is one floor of your home, or any other view (garden, a single room…). A floor can have several plans (the house and its garden, or the two halves of a big floor): on the card ◀ ▶ go between them. ${inline ? "Start with one floor: you can add more floors later." : ""}</p>` : "";
     let imageBlock;
     if (p && p.image_url && !f.changeImage && !f.image) {
       const src = this._imgSrc(p);

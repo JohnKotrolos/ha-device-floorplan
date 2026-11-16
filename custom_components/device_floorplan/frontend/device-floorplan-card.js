@@ -1523,6 +1523,8 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .rail button { width:30px; height:30px; border-radius:50%; border:1px solid var(--divider-color); background: var(--card-background-color, #fff); color: var(--primary-text-color); font: inherit; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; --mdc-icon-size: 18px; padding:0; position:relative; }
 .rail button.arrow { border:0; background:transparent; width:28px; height:18px; color: var(--secondary-text-color); }
 .rail button.arrow:disabled { opacity:.3; cursor:default; }
+.rail .sides { display:flex; width:100%; justify-content:center; border-top:1px solid var(--divider-color); padding-top:3px; }
+.rail .sides button.arrow { width:16px; height:22px; }
 .rail button.fl.on { background: var(--dfc-accent); border-color: var(--dfc-accent); color: #fff; }
 .rail .pill { position:absolute; right: calc(100% + 8px); top:50%; transform: translateY(-50%); white-space:nowrap; font-size:12px; font-weight:500; padding: 4px 10px; border-radius: 12px; background: rgba(28,28,28,.88); color:#fff; pointer-events:none; opacity:0; transition: opacity .2s; }
 .lcorner.top-left .rail .pill, .lcorner.bottom-left .rail .pill { right:auto; left: calc(100% + 8px); }
@@ -2041,10 +2043,38 @@ class DeviceFloorplanCard extends HTMLElement {
     return this._floors().slice().sort((a, b) => (Number.isFinite(b.level) ? b.level : -99) - (Number.isFinite(a.level) ? a.level : -99));
   }
 
+  /** 0.12.1: the building as levels, highest on top. Plans with the same level number are one level with
+   *  several plans side by side (house + garden, east + west), in the card's order; a plan without a level
+   *  (a view) is a level of its own, as before. */
+  _levels() {
+    const out = [];
+    for (const f of this._floorStack()) {
+      const g = Number.isFinite(f.level) ? out.find((x) => x.level === f.level) : null;
+      if (g) g.plans.push(f);
+      else out.push({ level: Number.isFinite(f.level) ? f.level : null, plans: [f] });
+    }
+    return out;
+  }
+
+  /** Where the shown plan is: [levels, index of its level, index of the plan in that level]. */
+  _levelAt() {
+    const lv = this._levels();
+    const li = Math.max(0, lv.findIndex((g) => g.plans.some((f) => f.id === this._floor)));
+    const si = lv[li] ? Math.max(0, lv[li].plans.findIndex((f) => f.id === this._floor)) : 0;
+    return [lv, li, si];
+  }
+
+  /** Up / down a level. The side is kept when the other level has it, else its first plan. */
   _stepFloor(dir) {
-    const st = this._floorStack();
-    const i = st.findIndex((f) => f.id === this._floor);
-    const n = st[i - dir]; // dir +1 = up = earlier in the stack
+    const [lv, li, si] = this._levelAt();
+    const n = lv[li - dir]; // dir +1 = up = earlier in the stack
+    if (n) this._setFloor((n.plans[si] || n.plans[0]).id);
+  }
+
+  /** Left / right to the next plan of the same level. dir +1 = right. */
+  _stepSide(dir) {
+    const [lv, li, si] = this._levelAt();
+    const n = lv[li] && lv[li].plans[si + dir];
     if (n) this._setFloor(n.id);
   }
 
@@ -5926,12 +5956,25 @@ class DeviceFloorplanCard extends HTMLElement {
   /** 0.8.1: one round button with the floor number; tapped, it becomes the floor rail (▲ · floors · ▼), on the plan. */
   _floorHtml(floors) {
     const cur = floors.find((f) => f.id === this._floor) || floors[0];
-    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(cur.name)}: change floor" aria-label="Floor ${cesc(cur.name)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
-    const i = floors.findIndex((f) => f.id === this._floor);
+    // 0.12.1: one rail button per level; a level with several plans also gets ◀ ▶ (only then).
+    const [lv, li, si] = this._levelAt();
+    const here = lv[li] ? lv[li].plans : [cur];
+    const sides = here.length > 1;
+    const hf = ((this._hass && this._hass.floors) || {})[cur.floor_id];
+    const full = sides && hf && hf.name && hf.name.toLowerCase() !== cur.name.toLowerCase() ? `${hf.name} · ${cur.name}` : cur.name;
+    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(full)}: change floor" aria-label="Floor ${cesc(full)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
+    const btn = (g, i) => {
+      const f = i === li ? cur : g.plans[si] || g.plans[0];
+      const nm = i === li ? full : f.name;
+      return `<button class="fl ${i === li ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${i === li}" aria-label="${cesc(nm)}" title="${cesc(nm)}">${cesc(f.label)}<span class="pill">${cesc(nm)}</span></button>`;
+    };
+    const side = sides
+      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="Plan to the left${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="Plan to the right${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
+      : "";
     return `<div class="rail" role="toolbar" aria-label="Floors">
-      <button class="arrow" data-step="1" aria-label="Floor up" ${i <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
-      ${floors.map((f) => `<button class="fl ${f.id === this._floor ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${f.id === this._floor}" aria-label="${cesc(f.name)}" title="${cesc(f.name)}">${cesc(f.label)}<span class="pill">${cesc(f.name)}</span></button>`).join("")}
-      <button class="arrow" data-step="-1" aria-label="Floor down" ${i >= floors.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>`;
+      <button class="arrow" data-step="1" aria-label="Floor up" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+      ${lv.map(btn).join("")}
+      <button class="arrow" data-step="-1" aria-label="Floor down" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
   }
 
   /** 0.8.1: the floor rail opens towards the plan: downwards from a button in the upper half, else upwards. */
@@ -5963,6 +6006,10 @@ class DeviceFloorplanCard extends HTMLElement {
       if (fast && Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.6) {
         this._swiped = true;
         this._stepFloor(dy < 0 ? 1 : -1);
+      } else if (fast && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && this._levelAt()[0][this._levelAt()[1]].plans.length > 1) {
+        // 0.12.1: sideways between the plans of this level (only when the level has more than one).
+        this._swiped = true;
+        this._stepSide(dx < 0 ? 1 : -1);
       }
     });
   }
@@ -6966,6 +7013,12 @@ ${reset}
       this._fopen = false;
       if (fl.dataset.floor === this._floor) return this._update(true);
       return this._setFloor(fl.dataset.floor);
+    }
+    const sd = t.closest("[data-side]");
+    if (sd) {
+      // 0.12.1: ◀ ▶ keep the rail open, so several plans of a level can be stepped through.
+      this._stepSide(Number(sd.dataset.side));
+      return;
     }
     const stp = t.closest("[data-step]");
     if (stp) {

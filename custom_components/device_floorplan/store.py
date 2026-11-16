@@ -198,9 +198,26 @@ class FloorplanData:
         one = per_dir.get("h") or per_dir.get("v")
         return {"x": per_dir.get("h") or one, "y": per_dir.get("v") or one}
 
+    def house_floors(self) -> list[dict[str, Any]]:
+        """0.12.1: the floors that make up the house frame: one plan per level, the first of that level.
+        A second plan on the same level (a garden, the other half of a big floor) sits beside it and keeps
+        its own frame, so it doesn't change the size of the house on the other floors."""
+        out: list[dict[str, Any]] = []
+        seen: set[Any] = set()
+        for p in self.plans.values():
+            if p.get("kind") != "floor":
+                continue
+            lv = self.plan_level(p)
+            if lv is not None and lv in seen:
+                continue
+            seen.add(lv)
+            if p.get("width") and p.get("height"):
+                out.append(p)
+        return out
+
     def house_ref(self) -> dict[str, Any] | None:
         """0.8.2: the floor whose frame is the house frame: the one framed first, else the first floor."""
-        floors = [p for p in self.plans.values() if p.get("kind") == "floor" and p.get("width") and p.get("height")]
+        floors = self.house_floors()
         if not floors:
             return None
         return next((p for p in floors if p.get("frame_ref")), None) or next((p for p in floors if p.get("frame")), None) or floors[0]
@@ -234,8 +251,8 @@ class FloorplanData:
         "aspect": the outer box's width / height in screen pixels."""
         own = dict(plan.get("frame") or {})
         ref = self.house_ref()
-        floors = [p for p in self.plans.values() if p.get("kind") == "floor" and p.get("width") and p.get("height")]
-        if plan.get("kind") != "floor" or ref is None or len(floors) < 2 or not (plan.get("width") and plan.get("height")):
+        floors = self.house_floors()
+        if plan not in floors or ref is None or len(floors) < 2:
             return own
         boxes = {p["id"]: self.floor_box(p, ref) for p in floors}
         x1 = min(b["x"] for b in boxes.values())
