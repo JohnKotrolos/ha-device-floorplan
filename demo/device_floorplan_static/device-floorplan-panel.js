@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.0";
+const VERSION = "0.12.1";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -43,6 +43,7 @@ const CONN = {
 };
 const CONN_ORDER = ["zigbee", "network", "bluetooth", "matter", "zwave", "other"];
 
+/** 0.12.1: the one category list (Floorplan Editor, card), in its agreed order. */
 const GROUPS = {
   lights: ["Lights", "mdi:lightbulb-outline"],
   plugs_switches: ["Switches & plugs", "mdi:power-socket-eu"],
@@ -50,17 +51,25 @@ const GROUPS = {
   covers: ["Covers", "mdi:window-shutter"],
   contacts: ["Doors & windows", "mdi:door"],
   motion: ["Motion & presence", "mdi:motion-sensor"],
-  sensors: ["Sensors", "mdi:thermometer"],
-  buttons: ["Buttons & remotes", "mdi:gesture-tap-button"],
-  media: ["Media & screens", "mdi:television"],
   security: ["Security", "mdi:shield-home-outline"],
+  safety: ["Safety", "mdi:smoke-detector-variant"],
   cameras: ["Cameras", "mdi:cctv"],
+  media: ["Media & screens", "mdi:television"],
   appliances: ["Appliances", "mdi:washing-machine"],
+  moving: ["Moving things", "mdi:robot-vacuum"],
+  sensors: ["Sensors", "mdi:thermometer"],
+  energy: ["Energy", "mdi:lightning-bolt"],
+  garden: ["Water & garden", "mdi:sprinkler-variant"],
+  buttons: ["Buttons & remotes", "mdi:gesture-tap-button"],
   network: ["Network & repeaters", "mdi:router-wireless"],
   computers: ["Computers & servers", "mdi:server"],
   helpers: ["Helpers & entities", "mdi:tune-variant"],
   other: ["Other", "mdi:devices"],
 };
+
+/** 0.12.1: "Acts as" (light / switch / fan) ↔ category. */
+const AS_CAT = { light: "lights", switch: "plugs_switches", fan: "climate" };
+const CAT_AS = { lights: "light", plugs_switches: "switch", climate: "fan" };
 
 const STATUSES = [
   ["unplaced", "To place"],
@@ -388,6 +397,7 @@ header h1 .logo { width:28px; height:28px; }
 .ipop a { color: var(--df-primary); }
 .ipop .x { position:absolute; top:4px; right:4px; border:0; background:transparent; color: var(--df-sec); cursor:pointer; font-size:13px; }
 .ovctl.layerctl { display:flex; gap:6px; align-items:flex-start; }
+.tza { position:absolute; box-sizing:border-box; border:2px dashed #f59e0b; background: rgba(245,158,11,.12); border-radius:6px; pointer-events:none; z-index:5; }
 .lhd { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); cursor:grab; pointer-events:auto; touch-action:none; z-index:6; }
 .details .lsec { display:flex; flex-direction:column; gap:6px; border:1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 8%, var(--df-card)); border-radius:10px; padding:8px 10px; }
 .details .lsec .lh { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; }
@@ -1080,6 +1090,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         conns: [],
         virtual: false,
         group: e.group || "helpers",
+        category: e.category || e.group || "helpers",
         physical: !!e.physical,
         main_entity: e.entity_id,
         entities: [],
@@ -1206,8 +1217,18 @@ class DeviceFloorplanPanel extends HTMLElement {
       counts[d.area_id] = (counts[d.area_id] || 0) + 1;
     }
     return this.areas
-      .filter((a) => (withEmpty || counts[a.area_id]) && (!f || a.floor_id === f || !a.floor_id))
-      .map((a) => ({ ...a, count: counts[a.area_id] || 0, pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id) }));
+      // 0.12.1: a room placed on this plan is always listed (also when HA puts it on another floor), so it can be
+      // changed or removed; it is marked with its own floor.
+      .filter((a) => this._placedHere(a.area_id) || ((withEmpty || counts[a.area_id]) && (!f || a.floor_id === f || !a.floor_id)))
+      .map((a) => {
+        const mate = this._levelMates(this._plan()).find((p) => (p.anchors || {})[a.area_id] || (p.shapes || {})[a.area_id]);
+        const away = f && a.floor_id && a.floor_id !== f ? (this.floors.find((x) => x.floor_id === a.floor_id) || {}).name || "another floor" : null;
+        return { ...a, count: counts[a.area_id] || 0, pos: this.work ? this.work.anchors[a.area_id] : null, ignored: this._ignoredRooms().includes(a.area_id), mate: mate ? mate.name : null, away };
+      });
+  }
+
+  _placedHere(aid) {
+    return !!(this.work && ((this.work.anchors || {})[aid] || (this.work.shapes || {})[aid]));
   }
 
   _ignoredRooms() {
@@ -1271,6 +1292,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (s.conn.length && !d.conns.some((c) => s.conn.includes(c))) return false;
     if (s.type.length && !s.type.some((t) => this._inType(d, t))) return false;
     if (st === "hiddenroom" && !s.withHidden) return false;
+    // 0.12.1: phones / watches feed a person (inputs, not markers): not offered for placing; one already placed stays.
+    if (d.integration === "mobile_app" && !(d.category && (this.deviceOpts[d.id] || {}).category) && (st === "unplaced" || st === "new")) return false;
     if (s.status.length && !s.withHidden) {
       const ok = s.status.some((x) => (x === "new" ? this._isNew(d) && st !== "skipped" : x === st));
       if (!ok) return false;
@@ -1603,7 +1626,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _avatarHtml(d) {
     if (!d.integration) return `<span class="ico av">${this._iconHtml(d)}</span>`;
     const dark = this._hass && this._hass.themes && this._hass.themes.darkMode;
-    const fb = (GROUPS[d.group] || GROUPS.other)[1];
+    const fb = (GROUPS[d.category || d.group] || GROUPS.other)[1];
     return `<span class="ico av" title="${esc(d.integration)}"><img class="brand" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="${fb}" src="${BRANDS}/${encodeURIComponent(d.integration)}/${dark ? "dark_icon" : "icon"}.png"></span>`;
   }
 
@@ -1640,7 +1663,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _iconHtml(d) {
     if (d.split && d.as && d.as !== "other") return `<ha-icon icon="${{ light: "mdi:lightbulb", switch: "mdi:toggle-switch-variant", fan: "mdi:fan" }[d.as]}"></ha-icon>`;
-    const fb = (GROUPS[d.group] || GROUPS.other)[1];
+    const fb = (GROUPS[d.category || d.group] || GROUPS.other)[1];
     const ent = this.mainEntity[d.id] || d.main_entity;
     if (ent && customElements.get("ha-state-icon")) return `<ha-state-icon data-ent="${esc(ent)}" data-fallback="${fb}"></ha-state-icon>`;
     return `<ha-icon icon="${fb}"></ha-icon>`;
@@ -2110,6 +2133,12 @@ class DeviceFloorplanPanel extends HTMLElement {
           parts.push(`<span class="ahd" data-ah="1" data-x="${g.e1[0]}" data-y="${g.e1[1]}" title="Drag: one end of the AC unit"></span><span class="ahd" data-ah="2" data-x="${g.e2[0]}" data-y="${g.e2[1]}" title="Drag: the other end of the AC unit"></span><span class="ahd" data-ah="r" data-x="${g.tip[0]}" data-y="${g.tip[1]}" title="Drag: how far the air flows (and to which side)"></span>`);
         }
       }
+      // 0.12.1: the selected device's touch area (a box around the marker) and its corner handle.
+      if (s.sel && this.work.positions[s.sel] && !fade && this.work.positions[s.sel].touch) {
+        const p = this.work.positions[s.sel];
+        const { w, h } = p.touch;
+        parts.push(`<span class="tza" data-x="${p.x - w / 2}" data-y="${p.y - h / 2}" data-w="${w}" data-h="${h}"></span><span class="lhd" data-th="1" data-x="${p.x + w / 2}" data-y="${p.y + h / 2}" title="Drag to size the touch area to the device drawn in your plan"></span>`);
+      }
       // 0.7.0: the selected opening's two ends.
       if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening && this.work.positions[s.sel].opening.x1 != null) {
         const o = this.work.positions[s.sel].opening;
@@ -2375,6 +2404,10 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (el.dataset.x === undefined) continue;
         el.style.left = `${tx + Number(el.dataset.x) * z}%`;
         el.style.top = `${ty + Number(el.dataset.y) * z}%`;
+        if (el.dataset.w) {
+          el.style.width = `${Number(el.dataset.w) * z}%`;
+          el.style.height = `${Number(el.dataset.h) * z}%`;
+        }
       }
     }
     const zl = this.shadowRoot.getElementById("zl");
@@ -2526,7 +2559,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const allRooms = this._roomsForPlan(true);
     const rooms = allRooms.filter((r) => r.count);
     const empty = allRooms.filter((r) => !r.count);
-    const left = rooms.filter((r) => !r.pos && !r.ignored).length;
+    const left = rooms.filter((r) => !r.pos && !r.ignored && !r.mate).length;
     const roomRow = (r) => {
         const on = !!r.pos;
         if (r.ignored && !on) {
@@ -2536,15 +2569,15 @@ class DeviceFloorplanPanel extends HTMLElement {
         const active = this.s.placingRoom === r.area_id;
         return `<div class="row ${on ? "done" : "todo"} ${active ? "sel" : ""}" draggable="true" data-room="${esc(r.area_id)}">
           <button class="main" data-act="pickroom" data-id="${esc(r.area_id)}"><span class="ico" style="color:${on ? "var(--df-primary)" : "var(--df-sec)"}">${SVG.pin}</span>
-          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.count ? `${r.count} device${r.count > 1 ? "s" : ""}` : "no devices yet"}</span></span>
-          <span class="pill ${on ? "ok" : ""}">${on ? "✓ on plan" : active ? "click on plan" : "drag to plan"}</span></button>
+          <span class="rtxt"><span class="rname">${esc(r.name)}</span><span class="rmeta">${r.away ? `On ${esc(r.away)} in Home Assistant · ` : ""}${r.count ? `${r.count} device${r.count > 1 ? "s" : ""}` : "no devices yet"}</span></span>
+          <span class="pill ${on ? "ok" : r.mate && !active ? "grey" : ""}">${on ? "✓ on plan" : active ? "click on plan" : r.mate ? `on ${esc(r.mate)}` : "drag to plan"}</span></button>
           ${on ? `<button class="shbtn ${(this.work.shapes || {})[r.area_id] ? "done" : ""} ${this.s.shapeEdit === r.area_id ? "act" : ""}" data-act="shapeedit" data-id="${esc(r.area_id)}" title="Draw the room's shape – its lights stay inside">${(this.work.shapes || {})[r.area_id] ? "Shape ✓" : "Shape"}</button>` : ""}
           ${on ? `<button class="small" data-act="unpin" data-id="${esc(r.area_id)}" title="Take the pin off the plan" aria-label="Take the pin off the plan">${SVG.close}</button>` : ""}
           <button class="small eyeon" data-act="ignore" data-id="${esc(r.area_id)}" title="Hide: not on this plan" aria-label="Hide ${esc(r.name)}: not on this plan">${SVG.eye}</button></div>`;
       };
     const rows = rooms
       .slice()
-      .sort((a, b) => (a.pos || a.ignored ? 1 : 0) - (b.pos || b.ignored ? 1 : 0) || a.name.localeCompare(b.name))
+      .sort((a, b) => (a.pos || a.ignored || a.mate ? 1 : 0) - (b.pos || b.ignored || b.mate ? 1 : 0) || a.name.localeCompare(b.name))
       .map(roomRow)
       .join("") + (empty.length ? `<div class="lgh" style="padding:10px 12px 4px;font-size:12px;font-weight:500;color:var(--df-sec)">Empty rooms · no devices yet</div>` + empty.slice().sort((a, b) => a.name.localeCompare(b.name)).map(roomRow).join("") : "");
     const scope = this._plan().floor_id && this._plan().kind === "floor" ? "on this floor" : "with devices";
@@ -2558,7 +2591,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (gs.moved) glue = `<div class="gluebox"><b>Glue Rooms</b><span>Overlapping Rooms meet on one line, so they are properly connected; gaps stay walls. An edge the overlap covers completely moves onto the other Room's edge, otherwise both meet in the middle. The orange strips on the plan show where; click one below to go there.</span>${gs.pairs.map((x) => `<button class="link gluepair" data-act="gluefocus" data-k="${esc(`${x.a}|${x.b}`)}">· ${howTxt(x)}</button>`).join("")}</div>`;
     else if (nShapes > 1) glue = `<div class="gluebox ok">✓ All overlapping Rooms are glued.</div>`;
     return `<aside class="side" aria-label="Rooms" data-droptext="Drop to take the pin off the plan">${glue}<div class="sidehead"><h2>Rooms ${scope} <span class="pill ${left ? "" : "ok"}">${left ? `${left} left` : "all placed"}</span></h2>
-      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.</p>${scope === "with devices" && (this.floors || []).length && this._plan().kind === "floor" ? `<p class="lvlhint">Showing all rooms. Link this plan to a Home Assistant floor (⋮ → Floor) to see only its rooms.</p>` : ""}</div>
+      <p>Drag each room onto the plan and drop it in the middle of that room. Or click a room, then click on the plan. Rooms that are not on this plan: hide them with the eye button.${this._levelMates(this._plan()).length ? ` Rooms already on ${esc(this._levelMates(this._plan()).map((p) => p.name).join(", "))} are marked; drag one here too if it is on both.` : ""}</p>${scope === "with devices" && (this.floors || []).length && this._plan().kind === "floor" ? `<p class="lvlhint">Showing all rooms. Link this plan to a Home Assistant floor (⋮ → Floor) to see only its rooms.</p>` : ""}</div>
       <div class="list" style="margin-top:8px">${rows || `<p style="padding:14px;margin:0;font-size:13px;color:var(--df-sec)">No rooms yet${this._scopeFloor() ? " on this floor" : ""}. Rooms come from HA areas. <a href="/config/areas/dashboard" target="_self">Create areas</a> · <a href="https://www.home-assistant.io/docs/organizing/areas/" target="_blank" rel="noopener">How areas work ↗</a></p>`}</div></aside>`;
   }
 
@@ -2728,7 +2761,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const s = this.s;
     if (!shown.length) return `<p style="padding:20px 14px;margin:0;font-size:14px;color:var(--df-sec)">${s.q.trim() ? `Nothing found for “${esc(s.q.trim())}”. Try part of the name or the entity id (e.g. <i>dryer</i> or <i>binary_sensor.</i>).` : "No devices match."} ${this._filtering() ? '<button class="link" data-act="clearall">Clear search and filters</button>' : ""}</p>`;
     const groups = new Map();
-    const keyOf = (d) => (d.loose && !d.physical ? "__loose" : s.groupBy === "conn" ? d.conns[0] || "other" : s.groupBy === "type" ? d.group : d.area_id || "__none");
+    const keyOf = (d) => (d.loose && !d.physical ? "__loose" : s.groupBy === "conn" ? d.conns[0] || "other" : s.groupBy === "type" ? d.category || d.group : d.area_id || "__none");
     const nameOf = (k) => (k === "__loose" ? "Entities without a device" : s.groupBy === "conn" ? (CONN[k] || CONN.other).label : s.groupBy === "type" ? (GROUPS[k] || GROUPS.other)[0] : k === "__none" ? "No area" : (this.areaById.get(k) || {}).name || k);
     for (const d of shown) {
       const k = keyOf(d);
@@ -2921,8 +2954,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     const pos0 = onPlan && this.work && this.work.positions[d.id];
     const mainE = this.mainEntity[d.id] || d.main_entity || "";
     const mainD = mainE.split(".")[0];
-    if (pos0 && ["light", "switch", "fan"].includes(mainD) && (!pos0.as || ["light", "switch", "fan"].includes(pos0.as)) && !this._applType(d.id)) {
-      actsAs = `<label class="fl">Acts as<select data-act="splitas"><option value="">${esc(mainD)} (as in Home Assistant)</option>${[["light", "Light"], ["switch", "Switch"], ["fan", "Fan"]].map(([k, l]) => `<option value="${k}" ${pos0.as === k ? "selected" : ""}>${l}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">What it is on the card: a Light glows and is in Lights; a Switch or Fan shows its icon while on.</div>`;
+    // 0.12.1: one Category choice per device (the safety net for anything sorted wrongly). For a light, plug or fan
+    // it also sets what it is on the card, as "Acts as" did (stored the same way, so older setups keep working).
+    if (!d.loose || d.physical) {
+      const switchy = pos0 && ["light", "switch", "fan"].includes(mainD) && (!pos0.as || ["light", "switch", "fan"].includes(pos0.as)) && !this._applType(d.id);
+      const own = (this.deviceOpts[d.id] || {}).category;
+      const fromAs = switchy && pos0.as ? AS_CAT[pos0.as] : null;
+      const cur = own || fromAs || "";
+      const auto = d.category_auto || d.group || "other";
+      actsAs = `<label class="fl">Category<select data-act="devcat"><option value="">${esc((GROUPS[auto] || GROUPS.other)[0])} (automatic)</option>${Object.entries(GROUPS).map(([k, [l]]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">Where it is listed${switchy ? ", and what it is on the card: Lights glow and are in Lights; Switches & plugs and Climate (a fan) show their icon while on" : ""}.</div>`;
     }
     const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
     const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
@@ -2930,7 +2970,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${this._touchSectionHtml(d, pos0)}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -2956,8 +2996,8 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   /** Type filter: its own group, and "Lights" also for anything with a light (wall switches with light channels). */
   _inType(d, t) {
-    if (d.group === t) return true;
-    return t === "lights" && !d.split && (d.entities || []).some((x) => x.domain === "light");
+    if ((d.category || d.group) === t) return true;
+    return t === "lights" && !d.category && !d.split && (d.entities || []).some((x) => x.domain === "light");
   }
 
   /** Light entities of a device that are NOT placed elsewhere (#106). */
@@ -3011,6 +3051,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     const g = airGeom(c, this._ratio());
     const f = (q) => `${(q[0] * 10).toFixed(1)},${(q[1] * 10).toFixed(1)}`;
     return `<polygon points="${f(g.e1)} ${f(g.f1)} ${f(g.f2)} ${f(g.e2)}" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/><line x1="${(g.e1[0] * 10).toFixed(1)}" y1="${(g.e1[1] * 10).toFixed(1)}" x2="${(g.e2[0] * 10).toFixed(1)}" y2="${(g.e2[1] * 10).toFixed(1)}" stroke="#4fa3ff" stroke-width="${sel ? 4 : 2.5}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  /** 0.12.1: a touch area: the device is already drawn in the plan picture (a TV, an AC); on the card's Live it
+   *  can be tapped there, also when it is off. */
+  _touchSectionHtml(d, pos) {
+    if (!pos || (d.loose && !d.physical) || String(d.id).startsWith("ph:")) return "";
+    const on = !!pos.touch;
+    return `<div class="fl" style="display:flex;flex-direction:column;gap:4px"><span><b>Touch area</b></span><span style="font-size:12px;color:var(--df-sec)">${on ? "Drag the orange corner so the box covers the device drawn in your plan. On the card's Live, tapping it does the device's tap (also when it is off); holding opens its details." : "For a device already drawn in your plan picture (a TV, an AC): tap it where it is drawn, also when it is off."}</span><button class="btn" data-act="${on ? "touchoff" : "touchon"}" data-id="${esc(d.id)}">${on ? "Remove touch area" : "Add a touch area"}</button></div>`;
   }
 
   _airSectionHtml(d) {
@@ -3288,8 +3336,23 @@ class DeviceFloorplanPanel extends HTMLElement {
     return id ? this.plans.find((p) => p.id === id) || null : null;
   }
 
+  /** 0.12.1: a plan on the same level as an earlier plan (a garden, the other half of a big floor): it sits
+   *  beside that plan, with its own frame. Returns the first plan of the level, or null. */
+  _besidePlan(plan) {
+    if (!plan || plan.kind !== "floor" || plan.level == null) return null;
+    const first = this.plans.find((p) => p.kind === "floor" && p.level === plan.level);
+    return first && first.id !== plan.id ? first : null;
+  }
+
+  /** The other plans of this plan's level (same level number), for the room list. */
+  _levelMates(plan) {
+    if (!plan || plan.kind !== "floor" || plan.level == null) return [];
+    return this.plans.filter((p) => p.id !== plan.id && p.kind === "floor" && p.level === plan.level);
+  }
+
   /** A later floor: part of a house whose frame comes from another floor. */
   _laterFloor(plan) {
+    if (this._besidePlan(plan)) return null; // 0.12.1: a plan beside another keeps its own frame
     const ref = this._houseRef(plan);
     if (ref) return ref.id !== plan.id ? ref : null;
     // Not saved yet: any other floor with a picture makes this one a later floor.
@@ -4220,11 +4283,11 @@ class DeviceFloorplanPanel extends HTMLElement {
     const level = f.level ?? (p && p.level != null ? p.level : 0);
     const img = f.img ?? (p ? p.image_type : "top");
     const used = (fid) => this.plans.some((pl) => pl.floor_id === fid && (!p || pl.id !== p.id));
-    const floorOpts = this.floors.slice().sort((x, y) => (y.level ?? 0) - (x.level ?? 0)).map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} ${used(fl.floor_id) ? "disabled" : ""}>${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan" : ""}</option>`).join("");
+    const floorOpts = this.floors.slice().sort((x, y) => (y.level ?? 0) - (x.level ?? 0)).map((fl) => `<option value="floor:${esc(fl.floor_id)}" ${where === `floor:${fl.floor_id}` ? "selected" : ""} >${esc(fl.name)} (HA floor, level ${fl.level ?? "?"})${used(fl.floor_id) ? " · has a plan: this one goes beside it" : ""}</option>`).join("");
     const opt = (val, title, desc) => `<label class="opt ${img === val ? "on" : ""}"><input type="radio" name="img" value="${val}" data-act="formimg" ${img === val ? "checked" : ""}><span><b>${title}</b><span>${desc}</span></span></label>`;
     const hasImage = !!f.image || (p && p.image_url && !f.changeImage);
     const title = p ? (p.kind === "view" ? "Plan settings" : "Floor settings") : inline ? "Create your first plan" : "New plan";
-    const intro = !p ? `<p>A plan is one floor of your home, or any other view (garden, a single room…). ${inline ? "Start with one floor: you can add more floors later." : ""}</p>` : "";
+    const intro = !p ? `<p>A plan is one floor of your home, or any other view (garden, a single room…). A floor can have several plans (the house and its garden, or the two halves of a big floor): on the card ◀ ▶ go between them. ${inline ? "Start with one floor: you can add more floors later." : ""}</p>` : "";
     let imageBlock;
     if (p && p.image_url && !f.changeImage && !f.image) {
       const src = this._imgSrc(p);
@@ -4289,7 +4352,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const devs = this.devices.filter((d) => !d.loose || d.physical);
     const physical = devs.filter((d) => !d.virtual);
     const conns = CONN_ORDER.filter((c) => physical.some((d) => d.conns.includes(c)));
-    const groups = Object.keys(GROUPS).filter((g) => physical.some((d) => d.group === g));
+    const groups = Object.keys(GROUPS).filter((g) => physical.some((d) => (d.category || d.group) === g));
     const keep = devs.filter((d) => this._setupKeep(d, f));
     // Chips carry no counts: the live summary line below is the one number that matters.
     const box = (key, val, label) => {
@@ -4324,7 +4387,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (d.unavailable && f.skipUnavailable) return false;
     if (d.all_hidden && f.skipHidden) return false;
     if (!d.virtual && !d.loose && !d.conns.some((c) => f.conns.includes(c))) return false;
-    if (!f.groups.includes(d.group)) return false;
+    if (!f.groups.includes(d.category || d.group)) return false;
     return true;
   }
 
@@ -4518,6 +4581,29 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (act === "openlink") {
       const pos = this.work.positions[this.s.sel];
       if (pos && t.value) this._change(() => (pos.opening = { link: t.value, side: 1 }));
+      return;
+    }
+    if (act === "devcat") {
+      // 0.12.1: the device's category (all floors); for a light / plug / fan on this plan also what it is on the card.
+      const id = this.s.sel;
+      const d = this.byId.get(id);
+      const v = t.value || null;
+      const pos = this.work.positions[id];
+      const mainD = (this.mainEntity[id] || (d && d.main_entity) || "").split(".")[0];
+      const as = v ? CAT_AS[v] || null : null;
+      if (pos && ["light", "switch", "fan"].includes(mainD) && (!pos.as || ["light", "switch", "fan"].includes(pos.as)) && (pos.as || null) !== as) {
+        this._change(() => {
+          if (as) pos.as = as;
+          else delete pos.as;
+        });
+      }
+      if (d) d.category = v || d.category_auto || d.group;
+      this._ws("devices/options", { device_id: id, category: v })
+        .then((r) => {
+          this.deviceOpts = r.device_opts || this.deviceOpts;
+          this._render();
+        })
+        .catch((err) => this._saveError(err));
       return;
     }
     if (act === "splitas") {
@@ -5354,6 +5440,12 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "unpin":
         this._change(() => delete this.work.anchors[id]);
         break;
+      case "touchon":
+        if (this.work.positions[this.s.sel]) this._change(() => (this.work.positions[this.s.sel].touch = { w: 6, h: 4 }));
+        break;
+      case "touchoff":
+        if (this.work.positions[this.s.sel]) this._change(() => delete this.work.positions[this.s.sel].touch);
+        break;
       case "info":
         this._moreInfo(id);
         break;
@@ -6064,7 +6156,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
     }
     // 0.7.3: press on a bar (not its ends) and drag: the whole bar moves, its twins follow.
-    if (!modal && s.tool === "place" && !mk && !cl && !pin && !phm && !lhd && !e.target.closest("[data-oh],[data-ah],button,input,select")) {
+    if (!modal && s.tool === "place" && !mk && !cl && !pin && !phm && !lhd && !e.target.closest("[data-oh],[data-ah],[data-th],button,input,select")) {
       const p = this._pt(e);
       const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
       let best = null;
@@ -6091,6 +6183,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (bx) this._gesture = { kind: "box", id: bx.dataset.box, el: bx, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", which: e.target.closest("[data-ah]").dataset.ah, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-oh]")) this._gesture = { kind: "oh", which: e.target.closest("[data-oh]").dataset.oh, id: this.s.sel, start, moved: false, snap: this._snap() };
+    else if (!modal && e.target.closest("[data-th]")) this._gesture = { kind: "th", id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
@@ -6225,6 +6318,14 @@ class DeviceFloorplanPanel extends HTMLElement {
       const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
       if (g.which === "1") Object.assign(o, { x1: c(p.x), y1: c(p.y) });
       else Object.assign(o, { x2: c(p.x), y2: c(p.y) });
+      this._renderOverlay();
+      return;
+    }
+    if (g.kind === "th") {
+      const p = this._pt(e);
+      const pos = this.work.positions[g.id];
+      if (!pos) return;
+      pos.touch = { w: Math.max(1, Math.abs(p.x - pos.x) * 2), h: Math.max(1, Math.abs(p.y - pos.y) * 2) };
       this._renderOverlay();
       return;
     }
@@ -6400,7 +6501,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     clearTimeout(this._bondT);
-    if (g.kind === "ah" || g.kind === "lh" || g.kind === "oh") {
+    if (g.kind === "ah" || g.kind === "lh" || g.kind === "oh" || g.kind === "th") {
       if (g.moved) {
         this._pushUndo(g.snap);
         this._scheduleSave();
@@ -7303,7 +7404,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         const lines = [head.join(",")];
         for (const r of this._planRows()) {
           const d = r.d || {};
-          lines.push([d.name || "(removed device)", r.id, d.area_name, plan.name, d.group ? (GROUPS[d.group] || GROUPS.other)[0] : "", (d.conns || []).map((c) => (CONN[c] || CONN.other).label).join(" + "), d.manufacturer, d.model, r.pos.x.toFixed(2), r.pos.y.toFixed(2), r.xm != null ? r.xm.toFixed(2) : "", r.ym != null ? r.ym.toFixed(2) : "", r.pos.approx ? "approximate" : "placed", this.mainEntity[r.id] || d.main_entity || "", r.pos.box ? r.pos.box.x.toFixed(2) : "", r.pos.box ? r.pos.box.y.toFixed(2) : ""].map(q).join(","));
+          lines.push([d.name || "(removed device)", r.id, d.area_name, plan.name, d.category || d.group ? (GROUPS[d.category || d.group] || GROUPS.other)[0] : "", (d.conns || []).map((c) => (CONN[c] || CONN.other).label).join(" + "), d.manufacturer, d.model, r.pos.x.toFixed(2), r.pos.y.toFixed(2), r.xm != null ? r.xm.toFixed(2) : "", r.ym != null ? r.ym.toFixed(2) : "", r.pos.approx ? "approximate" : "placed", this.mainEntity[r.id] || d.main_entity || "", r.pos.box ? r.pos.box.x.toFixed(2) : "", r.pos.box ? r.pos.box.y.toFixed(2) : ""].map(q).join(","));
         }
         download(`device-floorplan-${slug}.csv`, new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" }));
       } else if (fmt === "json") {

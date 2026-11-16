@@ -846,6 +846,10 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
             line = [air.get(k) for k in ("x1", "y1", "x2", "y2")]
             if all(isinstance(v, (int, float)) for v in line):
                 entry["air"].update({k: round(min(100.0, max(0.0, float(v))), 3) for k, v in zip(("x1", "y1", "x2", "y2"), line)})
+    touch = pos.get("touch")
+    if isinstance(touch, dict) and touch.get("w") and touch.get("h"):
+        # 0.12.1: a touch area around the marker (w / h in % of the image): the device drawn in the plan picture.
+        entry["touch"] = {k: round(min(100.0, max(0.5, float(touch[k]))), 3) for k in ("w", "h")}
     box = pos.get("box")
     if box:
         entry["box"] = {

@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.0).
+ * Device Floorplan – dashboard card (v0.12.1).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.0";
+const CARD_VERSION = "0.12.1";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -99,18 +99,20 @@ function barStatus(hass, st) {
 }
 
 // What Live (and custom overlays) can show, by kind.
+// 0.12.1: the names of the one category list (the keys stay, so saved choices keep working; a moved member
+// follows its old switch: fans with Switches & plugs, robots with Appliances, garage doors with Covers).
 const LIVE_KINDS = {
   lights: "Lights",
-  switches: "Switches & plugs",
-  covers: "Covers & blinds",
+  switches: "Switches & plugs (and fans)",
+  covers: "Covers (and garage doors, gates)",
   climate: "Climate",
   motion: "Motion & presence",
   openings: "Doors & windows",
-  locks: "Locks & alarm",
-  media: "Media",
-  appliances: "Appliances (running, vacuum…)",
+  locks: "Security (locks, alarm)",
+  media: "Media & screens",
+  appliances: "Appliances and moving things (robots)",
   cameras: "Cameras",
-  safety: "Smoke, leak, gas",
+  safety: "Safety (smoke, leak, gas, siren)",
 };
 const LIVE_DEFAULT = ["lights", "switches", "covers", "climate", "motion", "openings", "locks", "media", "appliances"];
 const READING_KINDS = { temperature: "Temperature", humidity: "Humidity", battery: "Battery" };
@@ -318,7 +320,8 @@ const lsSet = (k, v) => {
 
 const OPEN_DC = new Set(["door", "window", "opening", "garage_door"]);
 const MOTION_DC = new Set(["motion", "occupancy", "presence", "moving"]);
-const SAFETY_DC = new Set(["smoke", "gas", "moisture", "carbon_monoxide", "safety", "problem", "tamper", "heat", "sound"]);
+// 0.12.1 (rule 5): "problem" and "sound" sensors are no safety alarms.
+const SAFETY_DC = new Set(["smoke", "gas", "moisture", "carbon_monoxide", "safety", "tamper", "heat"]);
 const TOGGLE_DOMAINS = new Set(["light", "switch", "fan", "input_boolean", "cover", "siren", "humidifier"]);
 
 const cesc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -989,6 +992,13 @@ ha-card.dock-right { flex-direction: row; }
 .nglow2 { mix-blend-mode: screen; }
 .box.nt .room.label { color:#fff; text-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 7px rgba(0,0,0,.8); }
 .box.nq .m:not(.on):not(.person) .ic, .box.nq .chip:not(.on) { filter: brightness(.78) saturate(.85); box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 1px 4px rgba(0,0,0,.5); }
+.touch { position:absolute; z-index:1; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+.touch.outline { outline: 1px dashed color-mix(in srgb, var(--dfc-accent) 55%, transparent); outline-offset:-1px; }
+.touch.flash { background: color-mix(in srgb, var(--dfc-accent) 22%, transparent); outline: 1px solid var(--dfc-accent); transition: background .2s; }
+.touch.busy, [data-k].busy { animation: dfbusy 1s ease-in-out infinite; }
+.touch.busy { background: color-mix(in srgb, var(--dfc-accent) 16%, transparent); }
+@keyframes dfbusy { 50% { opacity:.45; } }
+@media (prefers-reduced-motion: reduce) { .touch.busy, [data-k].busy { animation:none; opacity:.6; } }
 .m.person .ic { background: var(--dfc-accent); color:#fff; font-weight:600; font-size: calc(var(--dfc-size) * .38); overflow:hidden; border: 2px solid var(--card-background-color, #fff); width: calc(var(--dfc-size) * 1.1); height: calc(var(--dfc-size) * 1.1); }
 .m.person .ic img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .m.person.low .ic { opacity:.55; border-style: dashed; }
@@ -1523,6 +1533,8 @@ canvas.heat { position:absolute; inset:0; width:100%; height:100%; pointer-event
 .rail button { width:30px; height:30px; border-radius:50%; border:1px solid var(--divider-color); background: var(--card-background-color, #fff); color: var(--primary-text-color); font: inherit; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; --mdc-icon-size: 18px; padding:0; position:relative; }
 .rail button.arrow { border:0; background:transparent; width:28px; height:18px; color: var(--secondary-text-color); }
 .rail button.arrow:disabled { opacity:.3; cursor:default; }
+.rail .sides { display:flex; width:100%; justify-content:center; border-top:1px solid var(--divider-color); padding-top:3px; }
+.rail .sides button.arrow { width:16px; height:22px; }
 .rail button.fl.on { background: var(--dfc-accent); border-color: var(--dfc-accent); color: #fff; }
 .rail .pill { position:absolute; right: calc(100% + 8px); top:50%; transform: translateY(-50%); white-space:nowrap; font-size:12px; font-weight:500; padding: 4px 10px; border-radius: 12px; background: rgba(28,28,28,.88); color:#fff; pointer-events:none; opacity:0; transition: opacity .2s; }
 .lcorner.top-left .rail .pill, .lcorner.bottom-left .rail .pill { right:auto; left: calc(100% + 8px); }
@@ -1755,7 +1767,7 @@ class DeviceFloorplanCard extends HTMLElement {
       root.addEventListener("click", (e) => this._onClick(e));
       root.addEventListener("input", (e) => this._onInput(e));
       root.addEventListener("contextmenu", (e) => {
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh],[data-touch]");
         if (!t) return;
         e.preventDefault();
         if (this._held || this._xOn) return; // a touch long press already did it
@@ -1862,7 +1874,7 @@ class DeviceFloorplanCard extends HTMLElement {
         const inBox = e.target.closest && e.target.closest(".box");
         this._pd = { x: e.clientX, y: e.clientY };
         if (inBox && e.pointerType !== "mouse") this._armT = setTimeout(() => (this._xArm = true), 300);
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh],[data-touch]");
         if (!t) return;
         // A long press counts when the finger is lifted without having moved (moving = explore).
         this._pd.t = t;
@@ -2041,10 +2053,38 @@ class DeviceFloorplanCard extends HTMLElement {
     return this._floors().slice().sort((a, b) => (Number.isFinite(b.level) ? b.level : -99) - (Number.isFinite(a.level) ? a.level : -99));
   }
 
+  /** 0.12.1: the building as levels, highest on top. Plans with the same level number are one level with
+   *  several plans side by side (house + garden, east + west), in the card's order; a plan without a level
+   *  (a view) is a level of its own, as before. */
+  _levels() {
+    const out = [];
+    for (const f of this._floorStack()) {
+      const g = Number.isFinite(f.level) ? out.find((x) => x.level === f.level) : null;
+      if (g) g.plans.push(f);
+      else out.push({ level: Number.isFinite(f.level) ? f.level : null, plans: [f] });
+    }
+    return out;
+  }
+
+  /** Where the shown plan is: [levels, index of its level, index of the plan in that level]. */
+  _levelAt() {
+    const lv = this._levels();
+    const li = Math.max(0, lv.findIndex((g) => g.plans.some((f) => f.id === this._floor)));
+    const si = lv[li] ? Math.max(0, lv[li].plans.findIndex((f) => f.id === this._floor)) : 0;
+    return [lv, li, si];
+  }
+
+  /** Up / down a level. The side is kept when the other level has it, else its first plan. */
   _stepFloor(dir) {
-    const st = this._floorStack();
-    const i = st.findIndex((f) => f.id === this._floor);
-    const n = st[i - dir]; // dir +1 = up = earlier in the stack
+    const [lv, li, si] = this._levelAt();
+    const n = lv[li - dir]; // dir +1 = up = earlier in the stack
+    if (n) this._setFloor((n.plans[si] || n.plans[0]).id);
+  }
+
+  /** Left / right to the next plan of the same level. dir +1 = right. */
+  _stepSide(dir) {
+    const [lv, li, si] = this._levelAt();
+    const n = lv[li] && lv[li].plans[si + dir];
     if (n) this._setFloor(n.id);
   }
 
@@ -3900,7 +3940,7 @@ class DeviceFloorplanCard extends HTMLElement {
         if (kind === "climate" && !q) return [];
         const bs = this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], kind, opts);
         if (!q && !bs.on && this._undoFor([item.main_entity, ...(item.entities || [])])) return one({ ...bs, dim: true });
-        if (!q && (opts.show_off || "hidden") === "hidden" && !bs.on) return [];
+        if (!q && (this._per(item, ov).off || opts.show_off || "hidden") === "hidden" && !bs.on) return [];
         if (kind === "light" && this._glowOnly(ov)) bs.glow = true;
         return one(bs);
       }
@@ -3908,7 +3948,7 @@ class DeviceFloorplanCard extends HTMLElement {
       if (!lead) return [];
       const kind = kindOfE(lead);
       // Live = what is happening now: things that are off are hidden (option: faint).
-      const hideOff = !q && (opts.show_off || "hidden") === "hidden";
+      const hideOff = !q && (this._per(item, ov).off || opts.show_off || "hidden") === "hidden";
       // 0.7.3: Room pulse: motion and presence in a room with a shape show as the room's glowing edges.
       if (!q && kind === "motion" && (opts.motion_as || "pulse") === "pulse" && this._roomOf(item)) return [];
       // 0.7.0: a drawn opening is its own signal (the bar); shutters show only while moving.
@@ -5777,7 +5817,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
+          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._touchHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
@@ -5823,6 +5863,12 @@ class DeviceFloorplanCard extends HTMLElement {
         const pl = this.shadowRoot.querySelector(".pill.show");
         if (pl) pl.classList.remove("show");
       }, this._pillUntil - Date.now());
+    }
+    if (this._busy && this._busy.size && this._specs) {
+      for (const el of this.shadowRoot.querySelectorAll("[data-k]")) {
+        const sp = this._specs.get(el.dataset.k);
+        if (sp && sp.item && this._busyOn(sp.item.id)) el.classList.add("busy");
+      }
     }
     if (box && !box._swipe) this._bindSwipe(box);
     if (box) this._boxW = box.getBoundingClientRect().width || this._boxW;
@@ -5926,12 +5972,25 @@ class DeviceFloorplanCard extends HTMLElement {
   /** 0.8.1: one round button with the floor number; tapped, it becomes the floor rail (▲ · floors · ▼), on the plan. */
   _floorHtml(floors) {
     const cur = floors.find((f) => f.id === this._floor) || floors[0];
-    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(cur.name)}: change floor" aria-label="Floor ${cesc(cur.name)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
-    const i = floors.findIndex((f) => f.id === this._floor);
+    // 0.12.1: one rail button per level; a level with several plans also gets ◀ ▶ (only then).
+    const [lv, li, si] = this._levelAt();
+    const here = lv[li] ? lv[li].plans : [cur];
+    const sides = here.length > 1;
+    const hf = ((this._hass && this._hass.floors) || {})[cur.floor_id];
+    const full = sides && hf && hf.name && hf.name.toLowerCase() !== cur.name.toLowerCase() ? `${hf.name} · ${cur.name}` : cur.name;
+    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(full)}: change floor" aria-label="Floor ${cesc(full)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
+    const btn = (g, i) => {
+      const f = i === li ? cur : g.plans[si] || g.plans[0];
+      const nm = i === li ? full : f.name;
+      return `<button class="fl ${i === li ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${i === li}" aria-label="${cesc(nm)}" title="${cesc(nm)}">${cesc(f.label)}<span class="pill">${cesc(nm)}</span></button>`;
+    };
+    const side = sides
+      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="Plan to the left${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="Plan to the right${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
+      : "";
     return `<div class="rail" role="toolbar" aria-label="Floors">
-      <button class="arrow" data-step="1" aria-label="Floor up" ${i <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
-      ${floors.map((f) => `<button class="fl ${f.id === this._floor ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${f.id === this._floor}" aria-label="${cesc(f.name)}" title="${cesc(f.name)}">${cesc(f.label)}<span class="pill">${cesc(f.name)}</span></button>`).join("")}
-      <button class="arrow" data-step="-1" aria-label="Floor down" ${i >= floors.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button></div>`;
+      <button class="arrow" data-step="1" aria-label="Floor up" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+      ${lv.map(btn).join("")}
+      <button class="arrow" data-step="-1" aria-label="Floor down" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
   }
 
   /** 0.8.1: the floor rail opens towards the plan: downwards from a button in the upper half, else upwards. */
@@ -5963,6 +6022,10 @@ class DeviceFloorplanCard extends HTMLElement {
       if (fast && Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.6) {
         this._swiped = true;
         this._stepFloor(dy < 0 ? 1 : -1);
+      } else if (fast && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && this._levelAt()[0][this._levelAt()[1]].plans.length > 1) {
+        // 0.12.1: sideways between the plans of this level (only when the level has more than one).
+        this._swiped = true;
+        this._stepSide(dx < 0 ? 1 : -1);
       }
     });
   }
@@ -6967,6 +7030,12 @@ ${reset}
       if (fl.dataset.floor === this._floor) return this._update(true);
       return this._setFloor(fl.dataset.floor);
     }
+    const sd = t.closest("[data-side]");
+    if (sd) {
+      // 0.12.1: ◀ ▶ keep the rail open, so several plans of a level can be stepped through.
+      this._stepSide(Number(sd.dataset.side));
+      return;
+    }
     const stp = t.closest("[data-step]");
     if (stp) {
       this._fopen = false;
@@ -7120,7 +7189,11 @@ ${reset}
       return this._update(true);
     }
     const k = t.closest("[data-k]");
-    if (!k) return;
+    const tz = !k && t.closest("[data-touch]");
+    if (!k && !tz) {
+      if (!this._held && !this._swiped && t.closest(".box")) this._flashTouch();
+      return;
+    }
     if (this._swiped) {
       this._swiped = false;
       return;
@@ -7129,6 +7202,7 @@ ${reset}
       this._held = false;
       return;
     }
+    if (tz) return this._pick ? null : this._touchTap(tz.dataset.touch);
     const s = this._specs && this._specs.get(k.dataset.k);
     if (!s) return;
     if (this._pick) return this._pick(s.item.id, s); // marker editing (#87/#95)
@@ -7150,6 +7224,11 @@ ${reset}
   _runAction(s) {
     const act = this._tapAction(s);
     if (act === "none") return;
+    // 0.12.1: an unavailable device says so instead of trying to switch.
+    if (act === "toggle") {
+      const sts = (s.ents || []).map((e) => this._hass.states[e]).filter(Boolean);
+      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(`${this._dev(s.item.id).name || s.item.name || "This device"} is unavailable`);
+    }
     if (act === "robot") {
       const eid = s.type === "robot" ? s.eid : [s.eid, ...(s.ents || []), s.item.main_entity].find((e) => e && domainOf(e) === "vacuum");
       if (eid) {
@@ -7228,6 +7307,7 @@ ${reset}
     if (t.dataset.bh) this._barHold(t);
     else if (t.dataset.k) this._hold(t.dataset.k);
     else if (t.dataset.airent) this._moreInfo(t.dataset.airent);
+    else if (t.dataset.touch) this._moreInfo(t.dataset.ent); // 0.12.1: a touch area held = the device's details
     else this._holdAppl(t.dataset.appl);
   }
 
@@ -7495,9 +7575,66 @@ ${reset}
     return !!(u && Date.now() < u.until && eids.some((e) => u.ents.includes(e)));
   }
 
+  /** 0.12.1 Touch areas: invisible tap areas for devices already drawn in the plan picture (a TV, an AC), set
+   *  in the Floorplan Editor. Live only; they work when the device is off too. The smaller one wins where two
+   *  overlap (drawn last). Card setting live.touch_hint: flash (when you tap empty plan), outline, or none. */
+  _touchHtml(a) {
+    if (this._overlay !== "live" || this._rpIn()) return "";
+    const hint = ((this._config.live || {}).touch_hint) || "flash";
+    const list = this._items(a)
+      .filter((it) => it.touch && Number.isFinite(it.x) && it.main_entity && this._per(it, "live").tap !== "none")
+      .sort((x, y) => y.touch.w * y.touch.h - x.touch.w * x.touch.h);
+    return list
+      .map((it) => {
+        const { w, h } = it.touch;
+        const busy = this._busyOn(it.id) ? "busy" : "";
+        return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(this._dev(it.id).name || it.name || "")}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
+      })
+      .join("");
+  }
+
+  _touchTap(id) {
+    const it = this._items(this._a || {}).find((x) => x.id === id);
+    if (!it) return;
+    const ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
+    const eid = it.main_entity;
+    this._runAction({ type: "dev", key: `touch:${id}`, item: it, ents, eid, kind: kindOf(eid, this._hass.states[eid]) });
+  }
+
+  /** Tapping empty plan briefly shows where the touch areas are (hint "flash"). */
+  _flashTouch() {
+    if (((this._config.live || {}).touch_hint || "flash") !== "flash") return;
+    const zs = this.shadowRoot.querySelectorAll(".touch");
+    if (!zs.length) return;
+    zs.forEach((z) => z.classList.add("flash"));
+    clearTimeout(this._flashT);
+    this._flashT = setTimeout(() => zs.forEach((z) => z.classList.remove("flash")), 700);
+  }
+
+  /** 0.12.1: after a tap, a short "working" pulse until the device answers (slow IR ACs, shutters), max 8 s. */
+  _markBusy(item, ents) {
+    if (!item || !item.id) return;
+    this._busy = this._busy || new Map();
+    this._busy.set(item.id, { until: Date.now() + 8000, ents, was: ents.map((e) => (this._hass.states[e] || {}).state).join("|") });
+    clearTimeout(this._busyT);
+    this._busyT = setTimeout(() => this._update(true), 8100);
+  }
+
+  _busyOn(id) {
+    const b = this._busy && this._busy.get(id);
+    if (!b) return false;
+    const now = b.ents.map((e) => (this._hass.states[e] || {}).state).join("|");
+    if (Date.now() > b.until || now !== b.was) {
+      this._busy.delete(id);
+      return false;
+    }
+    return true;
+  }
+
   _toggle(s) {
     const ents = s.ents.filter((e) => TOGGLE_DOMAINS.has(domainOf(e)));
     if (!ents.length) return this._moreInfo(s.ents[0]);
+    this._markBusy(s.item, ents);
     if (ents.every((e) => domainOf(e) === "cover")) {
       const anyOpen = ents.some((e) => ["open", "opening"].includes((this._hass.states[e] || {}).state));
       this._hass.callService("cover", anyOpen ? "close_cover" : "open_cover", { entity_id: ents });
@@ -8243,6 +8380,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             { name: "values", selector: { boolean: {} } },
             { name: "lights_as", selector: { select: { options: [{ value: "glow", label: "Glow only (tap the glow to switch off)" }, { value: "markers", label: "Markers" }], mode: "dropdown" } } },
             { name: "show_off", selector: { select: { options: [{ value: "hidden", label: "Hidden (Live shows only what's on or happening)" }, { value: "faint", label: "Faint" }], mode: "dropdown" } } },
+            { name: "touch_hint", selector: { select: { options: [{ value: "flash", label: "Flash when you tap the plan where there is nothing" }, { value: "outline", label: "A faint outline" }, { value: "none", label: "Nothing" }], mode: "dropdown" } } },
             { name: "motion_as", selector: { select: { options: [{ value: "pulse", label: "Room pulse (the room's edges glow)" }, { value: "icons", label: "Icons" }, { value: "both", label: "Both" }], mode: "dropdown" } } },
           ],
         },
@@ -8316,7 +8454,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const L = {
       plan: "Plan", title: "Title on the card (optional, empty = none)", overlays: "Which buttons, in which order (drag to reorder). New overlays from updates appear here, marked ✨", default_overlay: "Overlay when the card opens",
       buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers). Beside a side Overlay Bar it always sits on the plan's other side", replay_button: "Home Replay button",
-      cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
+      cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", touch_hint: "Touch areas (devices drawn in your plan) show", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
@@ -9483,6 +9621,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         if ((v.tap || "default") !== tcur) rerender();
         else saved();
       }));
+      // 0.12.1: touchable when off, per device (the card setting stays the default).
+      if (ov === "live" && !item.bond && !item.phantom && TOGGLE_DOMAINS.has(domainOf(item.main_entity || ""))) {
+        body.appendChild(this._form([
+          { name: "off", selector: { select: { options: [{ value: "card", label: "As the card setting (Live)" }, { value: "hidden", label: "Hidden" }, { value: "faint", label: "Faint, so it can be tapped on again" }], mode: "dropdown" } } },
+        ], { off: p0.off || "card" }, { off: "When it is off" }, (v) => {
+          this._savePer(id, ov, { off: v.off === "card" ? "" : v.off });
+          saved();
+        }));
+      }
       // 0.7.5: an appliance's status pill in Live.
       if (ov === "live" && eng._applOf(item)) {
         body.appendChild(this._form([

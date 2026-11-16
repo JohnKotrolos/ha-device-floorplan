@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.0";
+const VERSION = "0.12.1";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -397,6 +397,7 @@ header h1 .logo { width:28px; height:28px; }
 .ipop a { color: var(--df-primary); }
 .ipop .x { position:absolute; top:4px; right:4px; border:0; background:transparent; color: var(--df-sec); cursor:pointer; font-size:13px; }
 .ovctl.layerctl { display:flex; gap:6px; align-items:flex-start; }
+.tza { position:absolute; box-sizing:border-box; border:2px dashed #f59e0b; background: rgba(245,158,11,.12); border-radius:6px; pointer-events:none; z-index:5; }
 .lhd { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); cursor:grab; pointer-events:auto; touch-action:none; z-index:6; }
 .details .lsec { display:flex; flex-direction:column; gap:6px; border:1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 8%, var(--df-card)); border-radius:10px; padding:8px 10px; }
 .details .lsec .lh { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; }
@@ -2132,6 +2133,12 @@ class DeviceFloorplanPanel extends HTMLElement {
           parts.push(`<span class="ahd" data-ah="1" data-x="${g.e1[0]}" data-y="${g.e1[1]}" title="Drag: one end of the AC unit"></span><span class="ahd" data-ah="2" data-x="${g.e2[0]}" data-y="${g.e2[1]}" title="Drag: the other end of the AC unit"></span><span class="ahd" data-ah="r" data-x="${g.tip[0]}" data-y="${g.tip[1]}" title="Drag: how far the air flows (and to which side)"></span>`);
         }
       }
+      // 0.12.1: the selected device's touch area (a box around the marker) and its corner handle.
+      if (s.sel && this.work.positions[s.sel] && !fade && this.work.positions[s.sel].touch) {
+        const p = this.work.positions[s.sel];
+        const { w, h } = p.touch;
+        parts.push(`<span class="tza" data-x="${p.x - w / 2}" data-y="${p.y - h / 2}" data-w="${w}" data-h="${h}"></span><span class="lhd" data-th="1" data-x="${p.x + w / 2}" data-y="${p.y + h / 2}" title="Drag to size the touch area to the device drawn in your plan"></span>`);
+      }
       // 0.7.0: the selected opening's two ends.
       if (s.sel && this.work.positions[s.sel] && !fade && this._openingEnt(s.sel) && this.work.positions[s.sel].opening && this.work.positions[s.sel].opening.x1 != null) {
         const o = this.work.positions[s.sel].opening;
@@ -2397,6 +2404,10 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (el.dataset.x === undefined) continue;
         el.style.left = `${tx + Number(el.dataset.x) * z}%`;
         el.style.top = `${ty + Number(el.dataset.y) * z}%`;
+        if (el.dataset.w) {
+          el.style.width = `${Number(el.dataset.w) * z}%`;
+          el.style.height = `${Number(el.dataset.h) * z}%`;
+        }
       }
     }
     const zl = this.shadowRoot.getElementById("zl");
@@ -2959,7 +2970,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${this._touchSectionHtml(d, pos0)}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -3040,6 +3051,14 @@ class DeviceFloorplanPanel extends HTMLElement {
     const g = airGeom(c, this._ratio());
     const f = (q) => `${(q[0] * 10).toFixed(1)},${(q[1] * 10).toFixed(1)}`;
     return `<polygon points="${f(g.e1)} ${f(g.f1)} ${f(g.f2)} ${f(g.e2)}" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/><line x1="${(g.e1[0] * 10).toFixed(1)}" y1="${(g.e1[1] * 10).toFixed(1)}" x2="${(g.e2[0] * 10).toFixed(1)}" y2="${(g.e2[1] * 10).toFixed(1)}" stroke="#4fa3ff" stroke-width="${sel ? 4 : 2.5}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  /** 0.12.1: a touch area: the device is already drawn in the plan picture (a TV, an AC); on the card's Live it
+   *  can be tapped there, also when it is off. */
+  _touchSectionHtml(d, pos) {
+    if (!pos || (d.loose && !d.physical) || String(d.id).startsWith("ph:")) return "";
+    const on = !!pos.touch;
+    return `<div class="fl" style="display:flex;flex-direction:column;gap:4px"><span><b>Touch area</b></span><span style="font-size:12px;color:var(--df-sec)">${on ? "Drag the orange corner so the box covers the device drawn in your plan. On the card's Live, tapping it does the device's tap (also when it is off); holding opens its details." : "For a device already drawn in your plan picture (a TV, an AC): tap it where it is drawn, also when it is off."}</span><button class="btn" data-act="${on ? "touchoff" : "touchon"}" data-id="${esc(d.id)}">${on ? "Remove touch area" : "Add a touch area"}</button></div>`;
   }
 
   _airSectionHtml(d) {
@@ -5421,6 +5440,12 @@ class DeviceFloorplanPanel extends HTMLElement {
       case "unpin":
         this._change(() => delete this.work.anchors[id]);
         break;
+      case "touchon":
+        if (this.work.positions[this.s.sel]) this._change(() => (this.work.positions[this.s.sel].touch = { w: 6, h: 4 }));
+        break;
+      case "touchoff":
+        if (this.work.positions[this.s.sel]) this._change(() => delete this.work.positions[this.s.sel].touch);
+        break;
       case "info":
         this._moreInfo(id);
         break;
@@ -6131,7 +6156,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       }
     }
     // 0.7.3: press on a bar (not its ends) and drag: the whole bar moves, its twins follow.
-    if (!modal && s.tool === "place" && !mk && !cl && !pin && !phm && !lhd && !e.target.closest("[data-oh],[data-ah],button,input,select")) {
+    if (!modal && s.tool === "place" && !mk && !cl && !pin && !phm && !lhd && !e.target.closest("[data-oh],[data-ah],[data-th],button,input,select")) {
       const p = this._pt(e);
       const W = (this._vpW || 800) * (s.z || 1), H = (this._vpH || 500) * (s.z || 1);
       let best = null;
@@ -6158,6 +6183,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (bx) this._gesture = { kind: "box", id: bx.dataset.box, el: bx, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", which: e.target.closest("[data-ah]").dataset.ah, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-oh]")) this._gesture = { kind: "oh", which: e.target.closest("[data-oh]").dataset.oh, id: this.s.sel, start, moved: false, snap: this._snap() };
+    else if (!modal && e.target.closest("[data-th]")) this._gesture = { kind: "th", id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
@@ -6292,6 +6318,14 @@ class DeviceFloorplanPanel extends HTMLElement {
       const c = (v) => Math.round(Math.min(100, Math.max(0, v)) * 1000) / 1000;
       if (g.which === "1") Object.assign(o, { x1: c(p.x), y1: c(p.y) });
       else Object.assign(o, { x2: c(p.x), y2: c(p.y) });
+      this._renderOverlay();
+      return;
+    }
+    if (g.kind === "th") {
+      const p = this._pt(e);
+      const pos = this.work.positions[g.id];
+      if (!pos) return;
+      pos.touch = { w: Math.max(1, Math.abs(p.x - pos.x) * 2), h: Math.max(1, Math.abs(p.y - pos.y) * 2) };
       this._renderOverlay();
       return;
     }
@@ -6467,7 +6501,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     clearTimeout(this._bondT);
-    if (g.kind === "ah" || g.kind === "lh" || g.kind === "oh") {
+    if (g.kind === "ah" || g.kind === "lh" || g.kind === "oh" || g.kind === "th") {
       if (g.moved) {
         this._pushUndo(g.snap);
         this._scheduleSave();

@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.0).
+ * Device Floorplan – dashboard card (v0.12.1).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.0";
+const CARD_VERSION = "0.12.1";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -992,6 +992,13 @@ ha-card.dock-right { flex-direction: row; }
 .nglow2 { mix-blend-mode: screen; }
 .box.nt .room.label { color:#fff; text-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 7px rgba(0,0,0,.8); }
 .box.nq .m:not(.on):not(.person) .ic, .box.nq .chip:not(.on) { filter: brightness(.78) saturate(.85); box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 1px 4px rgba(0,0,0,.5); }
+.touch { position:absolute; z-index:1; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+.touch.outline { outline: 1px dashed color-mix(in srgb, var(--dfc-accent) 55%, transparent); outline-offset:-1px; }
+.touch.flash { background: color-mix(in srgb, var(--dfc-accent) 22%, transparent); outline: 1px solid var(--dfc-accent); transition: background .2s; }
+.touch.busy, [data-k].busy { animation: dfbusy 1s ease-in-out infinite; }
+.touch.busy { background: color-mix(in srgb, var(--dfc-accent) 16%, transparent); }
+@keyframes dfbusy { 50% { opacity:.45; } }
+@media (prefers-reduced-motion: reduce) { .touch.busy, [data-k].busy { animation:none; opacity:.6; } }
 .m.person .ic { background: var(--dfc-accent); color:#fff; font-weight:600; font-size: calc(var(--dfc-size) * .38); overflow:hidden; border: 2px solid var(--card-background-color, #fff); width: calc(var(--dfc-size) * 1.1); height: calc(var(--dfc-size) * 1.1); }
 .m.person .ic img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .m.person.low .ic { opacity:.55; border-style: dashed; }
@@ -1760,7 +1767,7 @@ class DeviceFloorplanCard extends HTMLElement {
       root.addEventListener("click", (e) => this._onClick(e));
       root.addEventListener("input", (e) => this._onInput(e));
       root.addEventListener("contextmenu", (e) => {
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh],[data-touch]");
         if (!t) return;
         e.preventDefault();
         if (this._held || this._xOn) return; // a touch long press already did it
@@ -1867,7 +1874,7 @@ class DeviceFloorplanCard extends HTMLElement {
         const inBox = e.target.closest && e.target.closest(".box");
         this._pd = { x: e.clientX, y: e.clientY };
         if (inBox && e.pointerType !== "mouse") this._armT = setTimeout(() => (this._xArm = true), 300);
-        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh]");
+        const t = e.target.closest && e.target.closest("[data-k],[data-appl],[data-airent],[data-bh],[data-touch]");
         if (!t) return;
         // A long press counts when the finger is lifted without having moved (moving = explore).
         this._pd.t = t;
@@ -3933,7 +3940,7 @@ class DeviceFloorplanCard extends HTMLElement {
         if (kind === "climate" && !q) return [];
         const bs = this._liveSpec(item, name, item.main_entity, hass.states[item.main_entity], kind, opts);
         if (!q && !bs.on && this._undoFor([item.main_entity, ...(item.entities || [])])) return one({ ...bs, dim: true });
-        if (!q && (opts.show_off || "hidden") === "hidden" && !bs.on) return [];
+        if (!q && (this._per(item, ov).off || opts.show_off || "hidden") === "hidden" && !bs.on) return [];
         if (kind === "light" && this._glowOnly(ov)) bs.glow = true;
         return one(bs);
       }
@@ -3941,7 +3948,7 @@ class DeviceFloorplanCard extends HTMLElement {
       if (!lead) return [];
       const kind = kindOfE(lead);
       // Live = what is happening now: things that are off are hidden (option: faint).
-      const hideOff = !q && (opts.show_off || "hidden") === "hidden";
+      const hideOff = !q && (this._per(item, ov).off || opts.show_off || "hidden") === "hidden";
       // 0.7.3: Room pulse: motion and presence in a room with a shape show as the room's glowing edges.
       if (!q && kind === "motion" && (opts.motion_as || "pulse") === "pulse" && this._roomOf(item)) return [];
       // 0.7.0: a drawn opening is its own signal (the bar); shutters show only while moving.
@@ -5810,7 +5817,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
+          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._touchHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
@@ -5856,6 +5863,12 @@ class DeviceFloorplanCard extends HTMLElement {
         const pl = this.shadowRoot.querySelector(".pill.show");
         if (pl) pl.classList.remove("show");
       }, this._pillUntil - Date.now());
+    }
+    if (this._busy && this._busy.size && this._specs) {
+      for (const el of this.shadowRoot.querySelectorAll("[data-k]")) {
+        const sp = this._specs.get(el.dataset.k);
+        if (sp && sp.item && this._busyOn(sp.item.id)) el.classList.add("busy");
+      }
     }
     if (box && !box._swipe) this._bindSwipe(box);
     if (box) this._boxW = box.getBoundingClientRect().width || this._boxW;
@@ -7176,7 +7189,11 @@ ${reset}
       return this._update(true);
     }
     const k = t.closest("[data-k]");
-    if (!k) return;
+    const tz = !k && t.closest("[data-touch]");
+    if (!k && !tz) {
+      if (!this._held && !this._swiped && t.closest(".box")) this._flashTouch();
+      return;
+    }
     if (this._swiped) {
       this._swiped = false;
       return;
@@ -7185,6 +7202,7 @@ ${reset}
       this._held = false;
       return;
     }
+    if (tz) return this._pick ? null : this._touchTap(tz.dataset.touch);
     const s = this._specs && this._specs.get(k.dataset.k);
     if (!s) return;
     if (this._pick) return this._pick(s.item.id, s); // marker editing (#87/#95)
@@ -7206,6 +7224,11 @@ ${reset}
   _runAction(s) {
     const act = this._tapAction(s);
     if (act === "none") return;
+    // 0.12.1: an unavailable device says so instead of trying to switch.
+    if (act === "toggle") {
+      const sts = (s.ents || []).map((e) => this._hass.states[e]).filter(Boolean);
+      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(`${this._dev(s.item.id).name || s.item.name || "This device"} is unavailable`);
+    }
     if (act === "robot") {
       const eid = s.type === "robot" ? s.eid : [s.eid, ...(s.ents || []), s.item.main_entity].find((e) => e && domainOf(e) === "vacuum");
       if (eid) {
@@ -7284,6 +7307,7 @@ ${reset}
     if (t.dataset.bh) this._barHold(t);
     else if (t.dataset.k) this._hold(t.dataset.k);
     else if (t.dataset.airent) this._moreInfo(t.dataset.airent);
+    else if (t.dataset.touch) this._moreInfo(t.dataset.ent); // 0.12.1: a touch area held = the device's details
     else this._holdAppl(t.dataset.appl);
   }
 
@@ -7551,9 +7575,66 @@ ${reset}
     return !!(u && Date.now() < u.until && eids.some((e) => u.ents.includes(e)));
   }
 
+  /** 0.12.1 Touch areas: invisible tap areas for devices already drawn in the plan picture (a TV, an AC), set
+   *  in the Floorplan Editor. Live only; they work when the device is off too. The smaller one wins where two
+   *  overlap (drawn last). Card setting live.touch_hint: flash (when you tap empty plan), outline, or none. */
+  _touchHtml(a) {
+    if (this._overlay !== "live" || this._rpIn()) return "";
+    const hint = ((this._config.live || {}).touch_hint) || "flash";
+    const list = this._items(a)
+      .filter((it) => it.touch && Number.isFinite(it.x) && it.main_entity && this._per(it, "live").tap !== "none")
+      .sort((x, y) => y.touch.w * y.touch.h - x.touch.w * x.touch.h);
+    return list
+      .map((it) => {
+        const { w, h } = it.touch;
+        const busy = this._busyOn(it.id) ? "busy" : "";
+        return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(this._dev(it.id).name || it.name || "")}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
+      })
+      .join("");
+  }
+
+  _touchTap(id) {
+    const it = this._items(this._a || {}).find((x) => x.id === id);
+    if (!it) return;
+    const ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
+    const eid = it.main_entity;
+    this._runAction({ type: "dev", key: `touch:${id}`, item: it, ents, eid, kind: kindOf(eid, this._hass.states[eid]) });
+  }
+
+  /** Tapping empty plan briefly shows where the touch areas are (hint "flash"). */
+  _flashTouch() {
+    if (((this._config.live || {}).touch_hint || "flash") !== "flash") return;
+    const zs = this.shadowRoot.querySelectorAll(".touch");
+    if (!zs.length) return;
+    zs.forEach((z) => z.classList.add("flash"));
+    clearTimeout(this._flashT);
+    this._flashT = setTimeout(() => zs.forEach((z) => z.classList.remove("flash")), 700);
+  }
+
+  /** 0.12.1: after a tap, a short "working" pulse until the device answers (slow IR ACs, shutters), max 8 s. */
+  _markBusy(item, ents) {
+    if (!item || !item.id) return;
+    this._busy = this._busy || new Map();
+    this._busy.set(item.id, { until: Date.now() + 8000, ents, was: ents.map((e) => (this._hass.states[e] || {}).state).join("|") });
+    clearTimeout(this._busyT);
+    this._busyT = setTimeout(() => this._update(true), 8100);
+  }
+
+  _busyOn(id) {
+    const b = this._busy && this._busy.get(id);
+    if (!b) return false;
+    const now = b.ents.map((e) => (this._hass.states[e] || {}).state).join("|");
+    if (Date.now() > b.until || now !== b.was) {
+      this._busy.delete(id);
+      return false;
+    }
+    return true;
+  }
+
   _toggle(s) {
     const ents = s.ents.filter((e) => TOGGLE_DOMAINS.has(domainOf(e)));
     if (!ents.length) return this._moreInfo(s.ents[0]);
+    this._markBusy(s.item, ents);
     if (ents.every((e) => domainOf(e) === "cover")) {
       const anyOpen = ents.some((e) => ["open", "opening"].includes((this._hass.states[e] || {}).state));
       this._hass.callService("cover", anyOpen ? "close_cover" : "open_cover", { entity_id: ents });
@@ -8299,6 +8380,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             { name: "values", selector: { boolean: {} } },
             { name: "lights_as", selector: { select: { options: [{ value: "glow", label: "Glow only (tap the glow to switch off)" }, { value: "markers", label: "Markers" }], mode: "dropdown" } } },
             { name: "show_off", selector: { select: { options: [{ value: "hidden", label: "Hidden (Live shows only what's on or happening)" }, { value: "faint", label: "Faint" }], mode: "dropdown" } } },
+            { name: "touch_hint", selector: { select: { options: [{ value: "flash", label: "Flash when you tap the plan where there is nothing" }, { value: "outline", label: "A faint outline" }, { value: "none", label: "Nothing" }], mode: "dropdown" } } },
             { name: "motion_as", selector: { select: { options: [{ value: "pulse", label: "Room pulse (the room's edges glow)" }, { value: "icons", label: "Icons" }, { value: "both", label: "Both" }], mode: "dropdown" } } },
           ],
         },
@@ -8372,7 +8454,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const L = {
       plan: "Plan", title: "Title on the card (optional, empty = none)", overlays: "Which buttons, in which order (drag to reorder). New overlays from updates appear here, marked ✨", default_overlay: "Overlay when the card opens",
       buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers). Beside a side Overlay Bar it always sits on the plan's other side", replay_button: "Home Replay button",
-      cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
+      cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", touch_hint: "Touch areas (devices drawn in your plan) show", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
       humidity: "Show humidity", humidity_alone: "Also devices with humidity only", combine: "Bonds and phantoms with several sensors show", climate: "ACs and thermostats as climate chips (mode, room temperature, target)",
@@ -9539,6 +9621,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         if ((v.tap || "default") !== tcur) rerender();
         else saved();
       }));
+      // 0.12.1: touchable when off, per device (the card setting stays the default).
+      if (ov === "live" && !item.bond && !item.phantom && TOGGLE_DOMAINS.has(domainOf(item.main_entity || ""))) {
+        body.appendChild(this._form([
+          { name: "off", selector: { select: { options: [{ value: "card", label: "As the card setting (Live)" }, { value: "hidden", label: "Hidden" }, { value: "faint", label: "Faint, so it can be tapped on again" }], mode: "dropdown" } } },
+        ], { off: p0.off || "card" }, { off: "When it is off" }, (v) => {
+          this._savePer(id, ov, { off: v.off === "card" ? "" : v.off });
+          saved();
+        }));
+      }
       // 0.7.5: an appliance's status pill in Live.
       if (ov === "live" && eng._applOf(item)) {
         body.appendChild(this._form([

@@ -988,6 +988,8 @@ def build_plan_payload(
             "conns": conns,
             "group": group,
         }
+        if pos.get("touch"):
+            item["touch"] = pos["touch"]  # 0.12.1: touch area (Live)
         if is_zha_group(device, integrations):
             item["zha_group"] = True  # 0.8.2: no radio of its own, never on the Network map
         if split:
