@@ -99,18 +99,20 @@ function barStatus(hass, st) {
 }
 
 // What Live (and custom overlays) can show, by kind.
+// 0.12.1: the names of the one category list (the keys stay, so saved choices keep working; a moved member
+// follows its old switch: fans with Switches & plugs, robots with Appliances, garage doors with Covers).
 const LIVE_KINDS = {
   lights: "Lights",
-  switches: "Switches & plugs",
-  covers: "Covers & blinds",
+  switches: "Switches & plugs (and fans)",
+  covers: "Covers (and garage doors, gates)",
   climate: "Climate",
   motion: "Motion & presence",
   openings: "Doors & windows",
-  locks: "Locks & alarm",
-  media: "Media",
-  appliances: "Appliances (running, vacuum…)",
+  locks: "Security (locks, alarm)",
+  media: "Media & screens",
+  appliances: "Appliances and moving things (robots)",
   cameras: "Cameras",
-  safety: "Smoke, leak, gas",
+  safety: "Safety (smoke, leak, gas, siren)",
 };
 const LIVE_DEFAULT = ["lights", "switches", "covers", "climate", "motion", "openings", "locks", "media", "appliances"];
 const READING_KINDS = { temperature: "Temperature", humidity: "Humidity", battery: "Battery" };
@@ -318,7 +320,8 @@ const lsSet = (k, v) => {
 
 const OPEN_DC = new Set(["door", "window", "opening", "garage_door"]);
 const MOTION_DC = new Set(["motion", "occupancy", "presence", "moving"]);
-const SAFETY_DC = new Set(["smoke", "gas", "moisture", "carbon_monoxide", "safety", "problem", "tamper", "heat", "sound"]);
+// 0.12.1 (rule 5): "problem" and "sound" sensors are no safety alarms.
+const SAFETY_DC = new Set(["smoke", "gas", "moisture", "carbon_monoxide", "safety", "tamper", "heat"]);
 const TOGGLE_DOMAINS = new Set(["light", "switch", "fan", "input_boolean", "cover", "siren", "humidifier"]);
 
 const cesc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

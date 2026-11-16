@@ -67,7 +67,7 @@ class FloorplanData:
       "skipped": {"<device_id>": true},       # not wanted on any plan
       "seen": ["<device_id>", ...],           # known to the planner
       "main_entity": {"<device_id>": "<entity_id>"},   # any entity ("Other entity…")
-      "device_opts": {"<device_id>": {"only_main"?: true, "part"?: "own"|"part"}},
+      "device_opts": {"<device_id>": {"only_main"?: true, "part"?: "own"|"part", "category"?: str}},
       "setup_done": bool,
     }
     """
@@ -729,6 +729,12 @@ class FloorplanData:
                 opts["only_main"] = True
             else:
                 opts.pop("only_main", None)
+        if "category" in changes:
+            # 0.12.1: the category picked in the Floorplan Editor (the safety net for anything sorted wrongly).
+            if changes["category"]:
+                opts["category"] = str(changes["category"])[:40]
+            else:
+                opts.pop("category", None)
         if "part" in changes:
             if changes["part"] in ("own", "part"):
                 opts["part"] = changes["part"]

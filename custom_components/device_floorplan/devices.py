@@ -535,6 +535,80 @@ def _group(entities: list[er.RegistryEntry], integrations: list[str] | None = No
     return "other"
 
 
+# 0.12.1: the one category list (DEVICE-CATEGORIES.md). The category decides where a device is LISTED (Floorplan
+# Editor) and can be chosen per device; the older "group" keeps deciding how the card treats it, so nothing an
+# existing user set up behaves differently.
+CATEGORIES = (
+    "lights", "plugs_switches", "climate", "covers", "contacts", "motion", "security", "safety", "cameras",
+    "media", "appliances", "moving", "sensors", "energy", "garden", "buttons", "network", "computers",
+    "helpers", "other",
+)
+_SAFETY_BINARY = {"smoke", "gas", "carbon_monoxide", "moisture", "safety"}
+_ENERGY_INTEGRATIONS = {
+    "enphase_envoy", "solaredge", "solaredge_local", "fronius", "sma", "huawei_solar", "solax", "goodwe",
+    "growatt_server", "sungrow", "victron", "powerwall", "tesla_wall_connector", "easee", "wallbox", "zaptec",
+    "ocpp", "go_echarger", "openevse", "evse", "sense", "emporia_vue", "iotawatt", "p1_monitor", "dsmr",
+    "homewizard", "solarman", "foxess", "deye", "apsystems", "hoymiles", "opendtu", "alfen_wallbox", "keba",
+}
+_GARDEN_INTEGRATIONS = {"plant", "miflora", "rainbird", "hydrawise", "rachio", "gardena_bluetooth", "opensprinkler", "fyta"}
+_PRINTER_INTEGRATIONS = {"bambu_lab", "octoprint", "prusalink", "moonraker", "creality"}
+
+
+def _category(entities: list[er.RegistryEntry], integrations: list[str], group: str, children: int = 0) -> str:
+    """The device's category, from what it mainly is (rule 1: one stray entity doesn't decide)."""
+    integ = set(integrations[:1])
+    if integ & _PRINTER_INTEGRATIONS:
+        return "appliances"
+    if integ & {"mobile_app"}:
+        return "moving"  # a phone / watch: a person's input
+    if integ & _ENERGY_INTEGRATIONS:
+        return "energy"
+    if integ & _GARDEN_INTEGRATIONS:
+        return "garden"
+    primary: dict[str, list[er.RegistryEntry]] = {}
+    for ent in entities:
+        if ent.entity_category is None:
+            primary.setdefault(ent.domain, []).append(ent)
+    dcs = lambda dom: {(e.device_class or e.original_device_class) for e in primary.get(dom, [])}
+    if group == "climate" and not {"climate", "water_heater", "humidifier"} & primary.keys():
+        # A fan beside a camera, a light or many sensors (a 3D printer) is no climate device.
+        sensors = len(primary.get("sensor", [])) + len(primary.get("binary_sensor", []))
+        if {"camera", "light"} & primary.keys() or sensors > 6:
+            return "appliances"
+    if group == "covers":
+        if "valve" in primary and "cover" not in primary:
+            return "garden"
+        if dcs("cover") & {"garage", "gate", "door"}:
+            return "contacts"
+    if group == "security":
+        if "siren" in primary and not {"lock", "alarm_control_panel"} & primary.keys():
+            return "safety"
+        if "lock" in primary and "device_tracker" in primary:
+            return "moving"  # a car
+    if group == "appliances" and {"vacuum", "lawn_mower"} & primary.keys():
+        return "moving"
+    if group == "cameras" and "doorbell" in dcs("event"):
+        return "security"
+    if group in ("sensors", "buttons", "other"):
+        if dcs("binary_sensor") & _SAFETY_BINARY:
+            return "safety"
+        if "vibration" in dcs("binary_sensor"):
+            return "motion"
+        if "doorbell" in dcs("event"):
+            return "security"
+        sdc = dcs("sensor")
+        if sdc & {"moisture", "conductivity"}:
+            return "garden"
+        meter = {"power", "energy", "voltage", "current", "power_factor", "frequency", "battery", "signal_strength", None}
+        if sdc and sdc <= meter and sdc & {"power", "energy"}:
+            return "energy"  # an energy meter
+        if children >= 2:
+            return "network"  # a hub / bridge with devices behind it
+    if group == "plugs_switches" and children >= 2:
+        return "network"
+    return group if group in CATEGORIES else "other"
+
+
 def _entity_rank(ent: er.RegistryEntry) -> tuple[int, int, str]:
     """Which entity leads a device: HA's main entity, then by domain and kind."""
     dc = ent.device_class or ent.original_device_class
@@ -584,6 +658,11 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
         if root in part_of:
             merged_into[child] = part_of[root]
 
+    children: dict[str, int] = {}
+    for device in entries.values():
+        if device.via_device_id:
+            children[device.via_device_id] = children.get(device.via_device_id, 0) + 1
+
     out: dict[str, dict[str, Any]] = {}
     for device in entries.values():
         if device.id in merged_into or device.id in part_of:
@@ -593,9 +672,11 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
             integrations = _integrations(hass, device)
             conns, virtual = _connections(device, integrations, {e.domain for e in entities})
             group = _group(entities, integrations)
+            category = _category(entities, integrations, group, children.get(device.id, 0))
         except Exception:
             _LOGGER.debug("Could not classify device %s", device.id, exc_info=True)
             entities, integrations, conns, virtual, group = [], [], [], False, "other"
+            category = "other"
         area = area_reg.async_get_area(device.area_id) if device.area_id else None
 
         part_ids = [c for c, r in part_of.items() if r == device.id]
@@ -651,6 +732,8 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
             "conns": conns or ([] if virtual else ["other"]),
             "virtual": virtual,
             "group": group,
+            "category": opts.get("category") or category,
+            "category_auto": category,
             "ieee": device_ieee(device),
             "mac": device_mac(device),
             "zha_group": is_zha_group(device, integrations),
@@ -723,6 +806,22 @@ def list_devices(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
     }
 
 
+def _loose_category(domain: str, device_class: str | None) -> str:
+    """0.12.1: the category of an entity without a device."""
+    group = _loose_group(domain, device_class)
+    if domain == "siren":
+        return "safety"
+    if domain == "valve":
+        return "garden"
+    if domain in ("vacuum", "lawn_mower"):
+        return "moving"
+    if domain == "binary_sensor" and device_class in _SAFETY_BINARY:
+        return "safety"
+    if domain == "binary_sensor" and device_class == "vibration":
+        return "motion"
+    return group
+
+
 def _loose_group(domain: str, device_class: str | None) -> str:
     if domain in _LOOSE_GROUP:
         return _LOOSE_GROUP[domain]
@@ -754,6 +853,7 @@ def loose_entities(hass: HomeAssistant) -> list[dict[str, Any]]:
                 "platform": ent.platform,
                 "area_id": ent.area_id,
                 "group": _loose_group(ent.domain, ent.device_class or ent.original_device_class),
+                "category": _loose_category(ent.domain, ent.device_class or ent.original_device_class),
                 # A real appliance without a device (SmartIR AC…) in a room: listed like a device.
                 "physical": bool(ent.area_id and ent.domain in PHYSICAL_DOMAINS and ent.hidden_by is None),
             }
@@ -773,6 +873,7 @@ def loose_entities(hass: HomeAssistant) -> list[dict[str, Any]]:
                 "platform": None,
                 "area_id": None,
                 "group": _loose_group(state.domain, state.attributes.get("device_class")),
+                "category": _loose_category(state.domain, state.attributes.get("device_class")),
                 "physical": False,
             }
         )

@@ -43,6 +43,7 @@ const CONN = {
 };
 const CONN_ORDER = ["zigbee", "network", "bluetooth", "matter", "zwave", "other"];
 
+/** 0.12.1: the one category list (Floorplan Editor, card), in its agreed order. */
 const GROUPS = {
   lights: ["Lights", "mdi:lightbulb-outline"],
   plugs_switches: ["Switches & plugs", "mdi:power-socket-eu"],
@@ -50,17 +51,25 @@ const GROUPS = {
   covers: ["Covers", "mdi:window-shutter"],
   contacts: ["Doors & windows", "mdi:door"],
   motion: ["Motion & presence", "mdi:motion-sensor"],
-  sensors: ["Sensors", "mdi:thermometer"],
-  buttons: ["Buttons & remotes", "mdi:gesture-tap-button"],
-  media: ["Media & screens", "mdi:television"],
   security: ["Security", "mdi:shield-home-outline"],
+  safety: ["Safety", "mdi:smoke-detector-variant"],
   cameras: ["Cameras", "mdi:cctv"],
+  media: ["Media & screens", "mdi:television"],
   appliances: ["Appliances", "mdi:washing-machine"],
+  moving: ["Moving things", "mdi:robot-vacuum"],
+  sensors: ["Sensors", "mdi:thermometer"],
+  energy: ["Energy", "mdi:lightning-bolt"],
+  garden: ["Water & garden", "mdi:sprinkler-variant"],
+  buttons: ["Buttons & remotes", "mdi:gesture-tap-button"],
   network: ["Network & repeaters", "mdi:router-wireless"],
   computers: ["Computers & servers", "mdi:server"],
   helpers: ["Helpers & entities", "mdi:tune-variant"],
   other: ["Other", "mdi:devices"],
 };
+
+/** 0.12.1: "Acts as" (light / switch / fan) ↔ category. */
+const AS_CAT = { light: "lights", switch: "plugs_switches", fan: "climate" };
+const CAT_AS = { lights: "light", plugs_switches: "switch", climate: "fan" };
 
 const STATUSES = [
   ["unplaced", "To place"],
@@ -1080,6 +1089,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         conns: [],
         virtual: false,
         group: e.group || "helpers",
+        category: e.category || e.group || "helpers",
         physical: !!e.physical,
         main_entity: e.entity_id,
         entities: [],
@@ -1281,6 +1291,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (s.conn.length && !d.conns.some((c) => s.conn.includes(c))) return false;
     if (s.type.length && !s.type.some((t) => this._inType(d, t))) return false;
     if (st === "hiddenroom" && !s.withHidden) return false;
+    // 0.12.1: phones / watches feed a person (inputs, not markers): not offered for placing; one already placed stays.
+    if (d.integration === "mobile_app" && !(d.category && (this.deviceOpts[d.id] || {}).category) && (st === "unplaced" || st === "new")) return false;
     if (s.status.length && !s.withHidden) {
       const ok = s.status.some((x) => (x === "new" ? this._isNew(d) && st !== "skipped" : x === st));
       if (!ok) return false;
@@ -1613,7 +1625,7 @@ class DeviceFloorplanPanel extends HTMLElement {
   _avatarHtml(d) {
     if (!d.integration) return `<span class="ico av">${this._iconHtml(d)}</span>`;
     const dark = this._hass && this._hass.themes && this._hass.themes.darkMode;
-    const fb = (GROUPS[d.group] || GROUPS.other)[1];
+    const fb = (GROUPS[d.category || d.group] || GROUPS.other)[1];
     return `<span class="ico av" title="${esc(d.integration)}"><img class="brand" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="${fb}" src="${BRANDS}/${encodeURIComponent(d.integration)}/${dark ? "dark_icon" : "icon"}.png"></span>`;
   }
 
@@ -1650,7 +1662,7 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   _iconHtml(d) {
     if (d.split && d.as && d.as !== "other") return `<ha-icon icon="${{ light: "mdi:lightbulb", switch: "mdi:toggle-switch-variant", fan: "mdi:fan" }[d.as]}"></ha-icon>`;
-    const fb = (GROUPS[d.group] || GROUPS.other)[1];
+    const fb = (GROUPS[d.category || d.group] || GROUPS.other)[1];
     const ent = this.mainEntity[d.id] || d.main_entity;
     if (ent && customElements.get("ha-state-icon")) return `<ha-state-icon data-ent="${esc(ent)}" data-fallback="${fb}"></ha-state-icon>`;
     return `<ha-icon icon="${fb}"></ha-icon>`;
@@ -2738,7 +2750,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const s = this.s;
     if (!shown.length) return `<p style="padding:20px 14px;margin:0;font-size:14px;color:var(--df-sec)">${s.q.trim() ? `Nothing found for “${esc(s.q.trim())}”. Try part of the name or the entity id (e.g. <i>dryer</i> or <i>binary_sensor.</i>).` : "No devices match."} ${this._filtering() ? '<button class="link" data-act="clearall">Clear search and filters</button>' : ""}</p>`;
     const groups = new Map();
-    const keyOf = (d) => (d.loose && !d.physical ? "__loose" : s.groupBy === "conn" ? d.conns[0] || "other" : s.groupBy === "type" ? d.group : d.area_id || "__none");
+    const keyOf = (d) => (d.loose && !d.physical ? "__loose" : s.groupBy === "conn" ? d.conns[0] || "other" : s.groupBy === "type" ? d.category || d.group : d.area_id || "__none");
     const nameOf = (k) => (k === "__loose" ? "Entities without a device" : s.groupBy === "conn" ? (CONN[k] || CONN.other).label : s.groupBy === "type" ? (GROUPS[k] || GROUPS.other)[0] : k === "__none" ? "No area" : (this.areaById.get(k) || {}).name || k);
     for (const d of shown) {
       const k = keyOf(d);
@@ -2931,8 +2943,15 @@ class DeviceFloorplanPanel extends HTMLElement {
     const pos0 = onPlan && this.work && this.work.positions[d.id];
     const mainE = this.mainEntity[d.id] || d.main_entity || "";
     const mainD = mainE.split(".")[0];
-    if (pos0 && ["light", "switch", "fan"].includes(mainD) && (!pos0.as || ["light", "switch", "fan"].includes(pos0.as)) && !this._applType(d.id)) {
-      actsAs = `<label class="fl">Acts as<select data-act="splitas"><option value="">${esc(mainD)} (as in Home Assistant)</option>${[["light", "Light"], ["switch", "Switch"], ["fan", "Fan"]].map(([k, l]) => `<option value="${k}" ${pos0.as === k ? "selected" : ""}>${l}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">What it is on the card: a Light glows and is in Lights; a Switch or Fan shows its icon while on.</div>`;
+    // 0.12.1: one Category choice per device (the safety net for anything sorted wrongly). For a light, plug or fan
+    // it also sets what it is on the card, as "Acts as" did (stored the same way, so older setups keep working).
+    if (!d.loose || d.physical) {
+      const switchy = pos0 && ["light", "switch", "fan"].includes(mainD) && (!pos0.as || ["light", "switch", "fan"].includes(pos0.as)) && !this._applType(d.id);
+      const own = (this.deviceOpts[d.id] || {}).category;
+      const fromAs = switchy && pos0.as ? AS_CAT[pos0.as] : null;
+      const cur = own || fromAs || "";
+      const auto = d.category_auto || d.group || "other";
+      actsAs = `<label class="fl">Category<select data-act="devcat"><option value="">${esc((GROUPS[auto] || GROUPS.other)[0])} (automatic)</option>${Object.entries(GROUPS).map(([k, [l]]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">Where it is listed${switchy ? ", and what it is on the card: Lights glow and are in Lights; Switches & plugs and Climate (a fan) show their icon while on" : ""}.</div>`;
     }
     const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
     const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
@@ -2966,8 +2985,8 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   /** Type filter: its own group, and "Lights" also for anything with a light (wall switches with light channels). */
   _inType(d, t) {
-    if (d.group === t) return true;
-    return t === "lights" && !d.split && (d.entities || []).some((x) => x.domain === "light");
+    if ((d.category || d.group) === t) return true;
+    return t === "lights" && !d.category && !d.split && (d.entities || []).some((x) => x.domain === "light");
   }
 
   /** Light entities of a device that are NOT placed elsewhere (#106). */
@@ -4314,7 +4333,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     const devs = this.devices.filter((d) => !d.loose || d.physical);
     const physical = devs.filter((d) => !d.virtual);
     const conns = CONN_ORDER.filter((c) => physical.some((d) => d.conns.includes(c)));
-    const groups = Object.keys(GROUPS).filter((g) => physical.some((d) => d.group === g));
+    const groups = Object.keys(GROUPS).filter((g) => physical.some((d) => (d.category || d.group) === g));
     const keep = devs.filter((d) => this._setupKeep(d, f));
     // Chips carry no counts: the live summary line below is the one number that matters.
     const box = (key, val, label) => {
@@ -4349,7 +4368,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (d.unavailable && f.skipUnavailable) return false;
     if (d.all_hidden && f.skipHidden) return false;
     if (!d.virtual && !d.loose && !d.conns.some((c) => f.conns.includes(c))) return false;
-    if (!f.groups.includes(d.group)) return false;
+    if (!f.groups.includes(d.category || d.group)) return false;
     return true;
   }
 
@@ -4543,6 +4562,29 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (act === "openlink") {
       const pos = this.work.positions[this.s.sel];
       if (pos && t.value) this._change(() => (pos.opening = { link: t.value, side: 1 }));
+      return;
+    }
+    if (act === "devcat") {
+      // 0.12.1: the device's category (all floors); for a light / plug / fan on this plan also what it is on the card.
+      const id = this.s.sel;
+      const d = this.byId.get(id);
+      const v = t.value || null;
+      const pos = this.work.positions[id];
+      const mainD = (this.mainEntity[id] || (d && d.main_entity) || "").split(".")[0];
+      const as = v ? CAT_AS[v] || null : null;
+      if (pos && ["light", "switch", "fan"].includes(mainD) && (!pos.as || ["light", "switch", "fan"].includes(pos.as)) && (pos.as || null) !== as) {
+        this._change(() => {
+          if (as) pos.as = as;
+          else delete pos.as;
+        });
+      }
+      if (d) d.category = v || d.category_auto || d.group;
+      this._ws("devices/options", { device_id: id, category: v })
+        .then((r) => {
+          this.deviceOpts = r.device_opts || this.deviceOpts;
+          this._render();
+        })
+        .catch((err) => this._saveError(err));
       return;
     }
     if (act === "splitas") {
@@ -7328,7 +7370,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         const lines = [head.join(",")];
         for (const r of this._planRows()) {
           const d = r.d || {};
-          lines.push([d.name || "(removed device)", r.id, d.area_name, plan.name, d.group ? (GROUPS[d.group] || GROUPS.other)[0] : "", (d.conns || []).map((c) => (CONN[c] || CONN.other).label).join(" + "), d.manufacturer, d.model, r.pos.x.toFixed(2), r.pos.y.toFixed(2), r.xm != null ? r.xm.toFixed(2) : "", r.ym != null ? r.ym.toFixed(2) : "", r.pos.approx ? "approximate" : "placed", this.mainEntity[r.id] || d.main_entity || "", r.pos.box ? r.pos.box.x.toFixed(2) : "", r.pos.box ? r.pos.box.y.toFixed(2) : ""].map(q).join(","));
+          lines.push([d.name || "(removed device)", r.id, d.area_name, plan.name, d.category || d.group ? (GROUPS[d.category || d.group] || GROUPS.other)[0] : "", (d.conns || []).map((c) => (CONN[c] || CONN.other).label).join(" + "), d.manufacturer, d.model, r.pos.x.toFixed(2), r.pos.y.toFixed(2), r.xm != null ? r.xm.toFixed(2) : "", r.ym != null ? r.ym.toFixed(2) : "", r.pos.approx ? "approximate" : "placed", this.mainEntity[r.id] || d.main_entity || "", r.pos.box ? r.pos.box.x.toFixed(2) : "", r.pos.box ? r.pos.box.y.toFixed(2) : ""].map(q).join(","));
         }
         download(`device-floorplan-${slug}.csv`, new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" }));
       } else if (fmt === "json") {
