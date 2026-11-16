@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.4).
+ * Device Floorplan – dashboard card (v0.12.5).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.4";
+const CARD_VERSION = "0.12.5";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1006,9 +1006,15 @@ ha-card.dock-right { flex-direction: row; }
 .pic svg polygon { fill:none; stroke: var(--dfc-accent); stroke-width:1.6; vector-effect: non-scaling-stroke; }
 .pic svg polygon.dot { stroke: var(--secondary-text-color, #8a8f98); stroke-dasharray: 3 3; }
 .pic.busy { animation: dfbusy 1s ease-in-out infinite; }
-.pic svg polygon.hl { fill:none; stroke-width:2.4; }
-.pic svg polygon.hlp { animation: dfbusy 1.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .pic svg polygon.hlp { animation:none; } }
+.pic svg .hl polygon { fill:none; stroke: var(--hc); vector-effect: non-scaling-stroke; stroke-linejoin:round; }
+.pic svg .hl .hw { stroke-width:16; opacity:.22; }
+.pic svg .hl .hm { stroke-width:8; opacity:.38; }
+.pic svg .hl .hn { stroke-width:2; opacity:.95; }
+.pic svg .hl .hf { stroke-width:3; stroke-dasharray: 0 1000; stroke-linecap:round; animation: dfflow 2.4s linear infinite; filter: drop-shadow(0 0 3px var(--hc)); }
+.pic svg .hl.breathing { animation: dfbreath 2.6s ease-in-out infinite; }
+@keyframes dfflow { to { stroke-dashoffset: calc(var(--L, 100px) * -1); } }
+@keyframes dfbreath { 0%, 100% { opacity:.35; } 50% { opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .pic svg .hl.breathing, .pic svg .hl .hf { animation:none; } }
 .touch { position:absolute; z-index:1; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color: transparent; }
 .touch.outline { outline: 1px dashed color-mix(in srgb, var(--dfc-accent) 55%, transparent); outline-offset:-1px; }
 .touch.flash { background: color-mix(in srgb, var(--dfc-accent) 22%, transparent); outline: 1px solid var(--dfc-accent); transition: background .2s; }
@@ -4661,7 +4667,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const b = this._bodyOf(item);
       if (b && b.pic) {
         const pl = this._per(item, "live");
-        for (const e of [pl.when, pl.hl]) if (e) want.add(e); // picked on purpose: always replayed
+        for (const e of [pl.when, pl.lead, pl.hl]) if (e) want.add(e); // picked on purpose: always replayed
         for (const e of [b.lead, ...b.ents]) if (e && !["sensor", "button", "event", "update", "image"].includes(domainOf(e))) want.add(e);
       }
     }
@@ -5752,7 +5758,7 @@ class DeviceFloorplanCard extends HTMLElement {
     for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
     // 0.12.3: what the pictures follow (a car's tracker, a bond's members), so they change with it.
-    if (ov === "live") for (const item of this._items(a)) { const b = this._bodyOf(item); if (b && b.pic) { const pl = this._per(item, "live"); for (const e of [b.lead, pl.when, pl.hl, ...b.sw]) if (e) watch.add(e); } }
+    if (ov === "live") for (const item of this._items(a)) { const b = this._bodyOf(item); if (b && b.pic) { const pl = this._per(item, "live"); for (const e of [b.lead, pl.when, pl.lead, pl.hl, ...b.sw]) if (e) watch.add(e); } }
     if (ov === "live" || ov === "security") for (const item of this._items(a)) { const tg = this._liveWhen(item); if (tg) watch.add(tg); }
     if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.progress, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
     if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
@@ -5892,6 +5898,23 @@ class DeviceFloorplanCard extends HTMLElement {
         const pl = this.shadowRoot.querySelector(".pill.show");
         if (pl) pl.classList.remove("show");
       }, this._pillUntil - Date.now());
+    }
+    // 0.12.5: Flow: one light runs around the outline; its dash is sized to the outline's length on screen.
+    for (const f of this.shadowRoot.querySelectorAll(".pic .hf")) {
+      const pic = f.closest(".pic");
+      const sx = pic.offsetWidth / 100;
+      const sy = pic.offsetHeight / 100;
+      const pts = f.getAttribute("points").split(" ").map((q) => q.split(",").map(Number));
+      let L = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const [x1, y1] = pts[i];
+        const [x2, y2] = pts[(i + 1) % pts.length];
+        L += Math.hypot((x2 - x1) * sx, (y2 - y1) * sy);
+      }
+      if (L > 0) {
+        f.style.strokeDasharray = `${(L * 0.18).toFixed(1)} ${(L * 0.82).toFixed(1)}`;
+        f.style.setProperty("--L", `${L.toFixed(1)}px`);
+      }
     }
     if (this._busy && this._busy.size && this._specs) {
       for (const el of this.shadowRoot.querySelectorAll("[data-k]")) {
@@ -7639,7 +7662,7 @@ ${reset}
       // 0.12.4: one rule for every picture. The entity picked in Edit markers ("Show in Live when…") decides
       // On / Off (with an optional "counts as on when"); without one, the item's own entities do.
       const pl = this._per(it, "live");
-      const st = this._picState(body.ents, pl.when, pl.when_on);
+      const st = this._picState(body.ents, pl.when || pl.lead, pl.when_on); // 0.12.5: else the entity that leads
       const state = st;
       const look = (p.looks || {})[state] || PIC_LOOK[state];
       // Highlight: a second entity, shown on top (by default only while On).
@@ -7653,7 +7676,11 @@ ${reset}
       const pts = (p.outline || [[2, 2], [98, 2], [98, 98], [2, 98]]).map(([x, y]) => `${(50 + (x - 50) * k).toFixed(1)},${(50 + (y - 50) * k).toFixed(1)}`).join(" ");
       const busy = !replay && this._busyOn(it.id);
       const hcol = hl ? cesc(hl.color || "#2196f3") : "";
-      const line = look === "outline" || look === "dotted" || busy || (hl && hl.look !== "tint") ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${hl && hl.look !== "tint" ? `<polygon points="${pts}" class="hl ${hl.look === "pulse" ? "hlp" : ""}" style="stroke:${hcol};filter:drop-shadow(0 0 3px ${hcol}) drop-shadow(0 0 6px ${hcol})"/>` : ""}${look === "outline" || look === "dotted" || busy ? `<polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/>` : ""}</svg>` : "";
+      // 0.12.5: Glow = a soft halo (a wide faint stroke under a thin line); Breathing = it fades in and out;
+      // Flow = a light runs around the outline. "pulse" (0.12.4) is Breathing.
+      const hk = hl ? (hl.look === "pulse" ? "breathing" : hl.look) : "";
+      const halo = hl && hk !== "tint" ? `<g class="hl ${hk}" style="--hc:${hcol}"><polygon points="${pts}" class="hw"/><polygon points="${pts}" class="hm"/>${hk === "flow" ? `<polygon points="${pts}" class="hf" pathLength="100"/>` : `<polygon points="${pts}" class="hn"/>`}</g>` : "";
+      const line = look === "outline" || look === "dotted" || busy || halo ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${halo}${look === "outline" || look === "dotted" || busy ? `<polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/>` : ""}</svg>` : "";
       const tint2 = hl && hl.look === "tint" && pic ? `<span class="ptint" style="background:${hcol};-webkit-mask-image:url('${cesc(url)}');mask-image:url('${cesc(url)}')"></span>` : "";
       out.push(`<div class="pic ${look} ${busy ? "busy" : ""}" data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? " · unavailable" : ""}`)}" style="left:${it.x}%;top:${it.y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)">${pic ? `<img src="${cesc(url)}" alt="" draggable="false">${tint}${tint2}` : ""}${line}</div>`);
     }
@@ -8199,6 +8226,10 @@ dialog.dfe-big::backdrop { background: rgba(0,0,0,.4); }
 .dfe-big .na { color: var(--secondary-text-color); font-size:11px; }
 .dfe-big .ovsec h5 { margin:12px 0 6px; font-size:14px; font-weight:500; }
 .dfe-big .ovsec .pr { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; padding:4px 0; }
+.picbox .pics { flex-direction:column; align-items:stretch; gap:4px; }
+.picbox .pics select, .picbox .pics .pfind { width:100%; box-sizing:border-box; font:inherit; font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid var(--divider-color, rgba(0,0,0,.2)); background: var(--card-background-color, #fff); color: var(--primary-text-color); }
+.picbox .pics .pis { font-size:12px; color: var(--secondary-text-color); }
+.picbox .pics .pv input { font:inherit; padding:4px 6px; }
 .dfe-big .ovsec .pr.rad { justify-content:flex-start; cursor:pointer; padding-left:4px; }
 .dfe-big .ovsec .pr.rad span { flex:1; text-align:left; }
 .dfe-big .ovsec select { max-width:60%; font: inherit; padding:4px; border-radius:6px; border:1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
@@ -9559,6 +9590,94 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   /** Save one overlay's settings of a device: devices.<id>.per.<ov> (#100/#101). */
+  /** 0.12.5: "Shows as On when [entity] is [value]" and "Highlight when [entity] is [value] [x] only while On".
+   *  The device's own entities first, by short name with their value; the values offered are the entity's real ones
+   *  (now + the last 7 days); numbers get "above …". Stored as when / when_on / hl / hl_on / hl_any (Live). */
+  _picBox(item, id, p0, done) {
+    const hass = this._hass;
+    const box = document.createElement("div");
+    box.className = "picbox";
+    const devIds = item.bond ? item.members || [] : [item.id];
+    const reg = hass.entities || {};
+    const devNames = devIds.map((d) => (hass.devices || {})[d]).filter(Boolean).map((dv) => dv.name_by_user || dv.name).filter(Boolean).sort((x, y) => y.length - x.length);
+    const own = Object.values(reg).filter((r) => r.device_id && devIds.includes(r.device_id) && !r.hidden && hass.states[r.entity_id]).map((r) => r.entity_id);
+    if (String(item.id).startsWith("entity:") && item.main_entity) own.push(item.main_entity);
+    const short = (e) => {
+      let n = entName(hass, e);
+      for (const dn of devNames) if (n.toLowerCase().startsWith(dn.toLowerCase())) n = n.slice(dn.length).replace(/^[\s\-_·:]+/, "");
+      return n || e;
+    };
+    const val = (e) => {
+      const st = hass.states[e];
+      if (!st) return "";
+      const u = st.attributes.unit_of_measurement;
+      return `${st.state}${u ? ` ${u}` : ""}`;
+    };
+    this._picVals = this._picVals || {};
+    const values = (e) => {
+      if (!e || !hass.states[e]) return [];
+      if (!this._picVals[e]) {
+        this._picVals[e] = [];
+        hass
+          .callWS({ type: "history/history_during_period", start_time: new Date(Date.now() - 7 * 864e5).toISOString(), entity_ids: [e], minimal_response: true, no_attributes: true, significant_changes_only: false })
+          .then((r) => {
+            this._picVals[e] = [...new Set(((r && r[e]) || []).map((x) => x.s))];
+            done();
+          })
+          .catch(() => {});
+      }
+      return [...new Set([hass.states[e].state, ...this._picVals[e]])].filter((v) => v != null && !["unavailable", "unknown", ""].includes(v));
+    };
+    const sentence = (title, eKey, vKey, def) => {
+      const e = p0[eKey] || "";
+      const ents = [...new Set([...own, ...(e ? [e] : [])])].sort((x, y) => short(x).localeCompare(short(y)));
+      const opts = ents.map((x) => `<option value="${cesc(x)}" ${x === e ? "selected" : ""}>${cesc(short(x))} · ${cesc(val(x))}</option>`).join("");
+      const cur = e || def || "";
+      const num0 = cur && hass.states[cur] && num(hass.states[cur].state);
+      const v = p0[vKey] || "";
+      const vals = cur ? values(cur) : [];
+      const vsel = num0
+        ? `<span class="pv">above <input type="number" data-pv="${vKey}" value="${cesc(v.startsWith(">") ? v.slice(1) : "")}" placeholder="0" style="width:6em"></span>`
+        : `<select data-pv="${vKey}"><option value="">on / open / home… (automatic)</option>${vals.map((x) => `<option value="${cesc(x)}" ${x === v ? "selected" : ""}>${cesc(x)}</option>`).join("")}${v && !vals.includes(v) ? `<option value="${cesc(v)}" selected>${cesc(v)}</option>` : ""}</select>`;
+      const defName = def ? `${short(def)} · ${val(def)} (as it leads)` : "its own state (automatic)";
+      return `<div class="pr pics"><b>${title}</b>
+        <input type="search" data-pf="${eKey}" placeholder="Search…" class="pfind">
+        <select data-pe="${eKey}"><option value="">${eKey === "hl" ? "nothing (no highlight)" : cesc(defName)}</option><optgroup label="${cesc(devNames[0] || "This device")}">${opts}</optgroup><option value="__other">Another entity…</option></select>
+        ${cur ? `<span class="pis">is</span>${vsel}` : ""}<div class="pother" data-po="${eKey}" hidden></div></div>`;
+    };
+    box.innerHTML = `<div class="pr"><span><b>Picture</b> <small>(its looks are set in the Floorplan Editor)</small></span></div>
+      ${sentence("Shows as On when", "when", "when_on", p0.lead || "")}
+      ${sentence("Highlight when", "hl", "hl_on", "")}
+      ${p0.hl ? `<label class="pr"><span>Only while it is On</span><input type="checkbox" data-pany ${p0.hl_any ? "" : "checked"}></label>` : ""}`;
+    const save = (patch) => {
+      this._savePer(id, "live", patch);
+      done();
+    };
+    for (const f of box.querySelectorAll("[data-pf]")) f.addEventListener("input", () => {
+      const q = f.value.toLowerCase();
+      const sel = box.querySelector(`[data-pe="${f.dataset.pf}"]`);
+      for (const o of sel.querySelectorAll("optgroup option")) o.hidden = !!q && !o.textContent.toLowerCase().includes(q);
+    });
+    for (const sel of box.querySelectorAll("[data-pe]")) sel.addEventListener("change", () => {
+      const k = sel.dataset.pe;
+      const vk = k === "hl" ? "hl_on" : "when_on";
+      if (sel.value === "__other") {
+        const po = box.querySelector(`[data-po="${k}"]`);
+        po.hidden = false;
+        po.appendChild(this._form([{ name: "e", selector: { entity: {} } }], { e: "" }, { e: "Any entity" }, (v) => save({ [k]: v.e || "", [vk]: "" })));
+        return;
+      }
+      save({ [k]: sel.value, [vk]: "" });
+    });
+    for (const el of box.querySelectorAll("[data-pv]")) el.addEventListener("change", () => {
+      const k = el.dataset.pv;
+      save({ [k]: el.tagName === "INPUT" ? (el.value === "" ? "" : `>${el.value}`) : el.value });
+    });
+    const any = box.querySelector("[data-pany]");
+    if (any) any.addEventListener("change", () => save({ hl_any: !any.checked }));
+    return box;
+  }
+
   _savePer(id, ov, patch) {
     const cur = (this._config.devices || {})[id] || {};
     const per = { ...(cur.per || {}) };
@@ -9620,7 +9739,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const shows = eng._qualifies(item, ov, a);
       // 0.11: only settings that do something: none when the overlay doesn't show the device; a camera in Live
       // shows its picture, so no icon / label / badge for it.
-      const full = shows && !camE;
+      const full = shows && !camE && !(ov === "live" && item.pic); // 0.12.5: a picture replaces the icon
       sec.innerHTML = `<h5>In ${cesc(ovLabel)}</h5>${shows ? "" : `<p class="none">${cesc(ovLabel)} doesn't show this device.${ov === "live" || (eng._ovDef(ov) || {}).custom ? " Switch it on under <b>Shows in</b> below to add it." : ""}</p>`}${shows ? leadSel : ""}<div class="when"></div>
         <label class="pr" ${full ? "" : "hidden"}><span>Show an icon</span><input type="checkbox" data-k="noicon" ${p0.noicon ? "" : "checked"}></label>
         <div class="xs" ${shows ? "" : "hidden"}><span class="xh">Also show${extras ? "" : auto.length ? " <small>(automatic)</small>" : ""} <small>(${camE ? "on the picture" : "as a label or badge"})</small></span>${xRows || `<small class="none">nothing</small>`}
@@ -9642,7 +9761,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             done();
           });
         }
-        if (pops) {
+        if (pops && !item.pic) {
           const autoT = !p0.when ? this._engine()._liveWhen(item) : null;
           const all = this._whenAll || !!item.pic || (p0.when && !/^(binary_sensor|event|input_boolean)\./.test(p0.when));
           const sel = all ? { entity: {} } : { entity: { filter: [{ domain: "binary_sensor" }, { domain: "event" }, { domain: "input_boolean" }] } };
@@ -9657,25 +9776,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
             done();
           });
         }
-        // 0.12.4: a picture's state and its Highlight (one rule for every device: the picture's looks are set in
-        // the Floorplan Editor; here which entities drive them).
-        if (item.pic && wbox) {
-          wbox.insertAdjacentHTML("beforeend", `<div class="pr"><span>Picture</span></div>`);
-          wbox.appendChild(this._form([
-            { name: "when_on", selector: { text: {} } },
-            { name: "hl", selector: { entity: {} } },
-            { name: "hl_on", selector: { text: {} } },
-            { name: "hl_any", selector: { boolean: {} } },
-          ], { when_on: p0.when_on || "", hl: p0.hl || "", hl_on: p0.hl_on || "", hl_any: !!p0.hl_any }, {
-            when_on: "Counts as On when (empty = on, open, home, playing…; e.g. charging, >0)",
-            hl: "Highlight when… (its Highlight look is set in the Floorplan Editor)",
-            hl_on: "Highlight counts as on when (empty = on, open, home…)",
-            hl_any: "Highlight also while it is Off",
-          }, (v) => {
-            this._savePer(id, "live", { when_on: v.when_on || "", hl: v.hl || "", hl_on: v.hl_on || "", hl_any: !!v.hl_any });
-            done();
-          }));
-        }
+        // 0.12.5: a picture: two sentences (which entity makes it On, which one highlights it), with the
+        // entity's real values to pick from. Its looks are set in the Floorplan Editor.
+        if (item.pic && wbox) wbox.appendChild(this._picBox(item, id, p0, done));
       }
       const ni = sec.querySelector('[data-k="noicon"]');
       ni.addEventListener("change", () => {
@@ -9744,7 +9847,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const tsrc = robot ? dev() : { ...dev(), ...p0 };
       const tcur = (robot ? dev().tap : p0.tap || dev().tap) || "default";
       const topts = robot ? [{ value: "default", label: "Robot panel" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "Default for its kind" }, ...TAP_OPTIONS];
-      const tschema = [...(ov === "live" && eng._camOf(item) ? [] : [{ name: "icon", selector: { icon: {} } }]), { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
+      const tschema = [...((ov === "live" && eng._camOf(item)) || (ov === "live" && item.pic) ? [] : [{ name: "icon", selector: { icon: {} } }]), { name: "tap", selector: { select: { options: topts, mode: "dropdown" } } }];
       if (tcur === "navigate") tschema.push({ name: "nav", selector: { navigation: {} } });
       if (tcur === "popup") tschema.push({ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } });
       body.appendChild(this._form(tschema, { icon: p0.icon || dev().icon || "", tap: tcur, nav: tsrc.nav || "", popup_title: tsrc.popup_title || "", popup_card: tsrc.popup_card }, { icon: `Icon in ${ovLabel} (empty = Home Assistant's own)`, tap: robot ? "Tap (on every overlay)" : item.bond || item.phantom ? `Tap in ${ovLabel} (empty: a bond of lights switches all, other bonds and phantoms open their info card)` : `Tap in ${ovLabel}`, nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
@@ -9758,7 +9861,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         else saved();
       }));
       // 0.12.1: touchable when off, per device (the card setting stays the default).
-      if (ov === "live" && !item.bond && !item.phantom && TOGGLE_DOMAINS.has(domainOf(item.main_entity || ""))) {
+      if (ov === "live" && !item.pic && !item.bond && !item.phantom && TOGGLE_DOMAINS.has(domainOf(item.main_entity || ""))) {
         body.appendChild(this._form([
           { name: "off", selector: { select: { options: [{ value: "card", label: "As the card setting (Live)" }, { value: "hidden", label: "Hidden" }, { value: "faint", label: "Faint, so it can be tapped on again" }], mode: "dropdown" } } },
         ], { off: p0.off || "card" }, { off: "When it is off" }, (v) => {

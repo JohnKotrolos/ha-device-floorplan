@@ -58,9 +58,14 @@ In Live the picture is where you tap, also when the device is off. Its look foll
 
 You can change each of these per device (full picture, faint picture, outline, dotted outline, hidden), tint the picture with a colour (it darkens toward the colour and keeps its shading, so black makes a dark car), and move the outline a little inside the picture with **Outline inset**.
 
-**What decides On and Off** is the same for everything: in the card's **Edit markers → Live → Show in Live when…** you can pick any entity (a car's tracker, a camera's car detection, a power sensor). It counts as On when it is on, open, home, playing and similar; for other words or numbers fill in **Counts as On when** (e.g. `charging`, `>0`, same syntax as the Overlay Bar statuses). Leave it empty and the device's own state decides. A picture can also be given to an entity placed on its own, so a camera's "car detected" sensor at the parking spot can show the car.
+**What decides On and Off** is set in the card: **Edit markers → Live → Picture**, two sentences:
 
-**Highlight** is a fourth look on top of the others: a glow of the outline, a second tint or a pulse, in a colour you choose (Floorplan Editor). In Edit markers pick **Highlight when…** (e.g. the car's charging sensor); by default it shows only while the picture is On, or tick **Highlight also while it is Off**.
+- *Shows as On when [entity] is [value]*: pick one of the device's entities (listed by short name with its current value, with a search box; "Another entity…" for anything else, such as a camera's car detection) and one of the values it really has. Numbers get "above …". Left empty, the entity that leads in Live decides, else the device's own state.
+- *Highlight when [entity] is [value]*, and whether only while it is On.
+
+**Highlight** is a fourth look on top of the others, chosen in the Floorplan Editor with a colour: **Glow** (a soft halo), **Breathing** (the glow fades in and out), **Flow** (a light runs around the outline) or **Tint** (a second colour). With "reduce motion" on, the animations stand still.
+
+A picture can also be given to an entity placed on its own, so a camera's "car detected" sensor at the parking spot can show the car.
 
 Moving things never get doors or windows on the plan.
 

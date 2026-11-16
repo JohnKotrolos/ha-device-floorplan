@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.4";
+const VERSION = "0.12.5";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -3162,8 +3162,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       <span style="font-size:12px;color:var(--df-sec)">How it looks on the card:</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${sel("on", "On")}${sel("off", "Off")}${sel("un", "Unavailable")}</div>
       ${rng("inset", "Outline inset", 0, 20, 1, p.inset ?? 4, " % of the picture")}
-      <label class="fl">Highlight <span style="display:flex;gap:8px;align-items:center"><select data-act="pichl">${[["", "None"], ["glow", "Glow (the outline)"], ["tint", "Tint (a second colour)"], ["pulse", "Pulse (the outline)"]].map(([v, l]) => `<option value="${v}" ${((p.hl || {}).look || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>${p.hl ? `<input type="color" data-act="pichlcol" value="${esc(p.hl.color || "#2196f3")}">` : ""}</span></label>
-      ${p.hl ? `<span style="font-size:12px;color:var(--df-sec)">Shown on top of its look while the entity you pick in the card's Edit markers (Live → Highlight when…) is on: a car charging, a washer running…</span>` : ""}
+      <label class="fl">Highlight <span style="display:flex;gap:8px;align-items:center"><select data-act="pichl">${[["", "None"], ["glow", "Glow (a soft halo)"], ["breathing", "Breathing (the glow fades in and out)"], ["flow", "Flow (a light runs around the outline)"], ["tint", "Tint (a second colour)"]].map(([v, l]) => `<option value="${v}" ${(((p.hl || {}).look === "pulse" ? "breathing" : (p.hl || {}).look) || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>${p.hl ? `<input type="color" data-act="pichlcol" value="${esc(p.hl.color || "#2196f3")}">` : ""}</span></label>
+      ${p.hl ? `<span style="font-size:12px;color:var(--df-sec)">Shown on top of its look. What turns it on (a car charging, a washer running…) is picked in the card: Edit markers → Live → Highlight when.</span>` : ""}
       <span style="display:flex;gap:6px">${p.looks ? `<button class="btn" data-act="piclookreset">Reset looks</button>` : ""}<button class="btn" data-act="picoff">Remove picture</button></span></div>`;
   }
 
