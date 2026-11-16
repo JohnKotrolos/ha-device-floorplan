@@ -13,7 +13,14 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, IMAGE_TYPES, IMAGES_URL, MAX_IMAGE_BYTES, UPLOAD_URL
+from .const import (
+    DOMAIN,
+    IMAGE_TYPES,
+    IMAGES_URL,
+    MAX_IMAGE_BYTES,
+    MAX_PIC_BYTES,
+    UPLOAD_URL,
+)
 
 try:  # constant location differs between HA versions
     from homeassistant.components.http import KEY_HASS_USER
@@ -39,6 +46,17 @@ class FloorplanUploadView(HomeAssistantView):
         data = self.hass.data.get(DOMAIN)
         if data is None:
             return self.json_message("Not set up", HTTPStatus.SERVICE_UNAVAILABLE)
+
+        if request.query.get("pic"):
+            # 0.12.2: a device's own picture (transparent PNG / WebP), stored once by its content.
+            ext = IMAGE_TYPES.get(request.content_type)
+            if ext not in ("png", "webp"):
+                return self.json_message("Use a PNG or WebP picture", HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+            body = await request.read()
+            if not body or len(body) > MAX_PIC_BYTES:
+                return self.json_message("Empty or too large (max 2 MB)", HTTPStatus.BAD_REQUEST)
+            name = await data.async_save_pic(body, ext)
+            return self.json({"url": f"{IMAGES_URL}/{name}"})
 
         plan_id = request.query.get("plan_id", "")
         if plan_id not in data.plans:

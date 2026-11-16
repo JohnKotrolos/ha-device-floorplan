@@ -37,6 +37,7 @@ export default defineConfig({
           { text: "3 · Place devices", link: "/using/devices" },
           { text: "Light shapes", link: "/using/light-shapes" },
           { text: "Doors, windows and shutters", link: "/using/openings" },
+          { text: "How devices behave", link: "/using/device-rules" },
           { text: "Editor layers", link: "/using/layers" },
           { text: "Floors and plans", link: "/using/floors" },
           { text: "Robot vacuums", link: "/using/robots" },

@@ -24,7 +24,8 @@ _POSITION = {
     vol.Optional("box"): vol.Any(None, {vol.Required("x"): _PCT, vol.Required("y"): _PCT}),
     vol.Optional("light"): vol.Any(None, dict),
     vol.Optional("air"): vol.Any(None, dict),
-    vol.Optional("touch"): vol.Any(None, dict),  # 0.12.1: touch area {w, h}
+    vol.Optional("touch"): vol.Any(None, dict),
+    vol.Optional("pic"): vol.Any(None, dict),  # 0.12.2: the device's picture  # 0.12.1: touch area {w, h}
     vol.Optional("of"): vol.Any(None, str),  # split device (#91): entity spot of this device
     vol.Optional("as"): vol.Any(None, vol.In(("light", "switch", "fan", "other", "door", "window", "shutter", "washer", "dryer", "dishwasher", "none_appl"))),
     vol.Optional("opening"): vol.Any(None, dict),

@@ -988,6 +988,8 @@ def build_plan_payload(
             "conns": conns,
             "group": group,
         }
+        if pos.get("pic"):
+            item["pic"] = pos["pic"]  # 0.12.2: the device's picture (Live)
         if pos.get("touch"):
             item["touch"] = pos["touch"]  # 0.12.1: touch area (Live)
         if is_zha_group(device, integrations):

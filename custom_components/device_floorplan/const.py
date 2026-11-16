@@ -2,7 +2,7 @@
 
 DOMAIN = "device_floorplan"
 NAME = "Device Floorplan"
-VERSION = "0.12.1"
+VERSION = "0.12.2"
 
 STORAGE_KEY = DOMAIN
 STORAGE_VERSION = 1
@@ -25,6 +25,7 @@ WWW_IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
 MAX_WWW_IMAGES = 300
 
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_PIC_BYTES = 2 * 1024 * 1024  # 0.12.2: a device's own picture
 IMAGE_TYPES = {
     "image/png": "png",
     "image/jpeg": "jpg",

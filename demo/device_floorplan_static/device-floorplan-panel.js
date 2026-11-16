@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.1";
+const VERSION = "0.12.2";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -66,6 +66,60 @@ const GROUPS = {
   helpers: ["Helpers & entities", "mdi:tune-variant"],
   other: ["Other", "mdi:devices"],
 };
+
+/** 0.12.2: the built-in picture library (frontend/pictures/<name>.webp), grouped for the picker. */
+const PIC_LIB = {
+  "Climate & air": ["ac-wall", "ac-ceiling-cassette", "fan-ceiling", "air-purifier", "radiator"],
+  "Media & network": ["tv-wall", "tv-stand", "soundbar", "speaker-smart", "projector", "router", "access-point-ceiling", "nas", "server-mini"],
+  Lights: ["light-ceiling", "light-pendant", "lamp-floor", "lamp-desk"],
+  "Kitchen & appliances": ["cooktop", "range-hood", "coffee-machine", "printer-3d", "pet-feeder", "aquarium"],
+  "Moving things": ["robot-vacuum", "robot-vacuum-dock", "lawn-mower-robot", "car-sedan", "car-suv", "car-sedan-dashed", "car-suv-dashed", "motorcycle", "bicycle"],
+  "Outside": ["solar-panels", "pool", "hot-tub", "grill", "plant-irrigation"],
+};
+const PIC_LOOKS = [["full", "Full picture"], ["faint", "Faint picture"], ["outline", "Outline"], ["dotted", "Dotted outline"], ["hidden", "Hidden"]];
+const PIC_DEF = { on: "full", off: "faint", un: "dotted" };
+const picName = (n) => n.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+/** 0.12.2: trace a picture's outline from its transparency: from the centre, the farthest solid pixel in 72
+ *  directions (a star polygon, 0..100 of the picture box). Good for the mostly round / boxy shapes of devices. */
+async function tracePic(url) {
+  const im = await new Promise((res, rej) => {
+    const i = new Image();
+    i.crossOrigin = "anonymous";
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("Could not read that picture"));
+    i.src = url;
+  });
+  const W = im.naturalWidth;
+  const H = im.naturalHeight;
+  const S = 160 / Math.max(W, H);
+  const w = Math.max(8, Math.round(W * S));
+  const h = Math.max(8, Math.round(H * S));
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const cx = cv.getContext("2d");
+  cx.drawImage(im, 0, 0, w, h);
+  let px;
+  try {
+    px = cx.getImageData(0, 0, w, h).data;
+  } catch (_e) {
+    return { ar: W / H, outline: null };
+  }
+  const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && px[(y * w + x) * 4 + 3] > 40;
+  const pts = [];
+  for (let k = 0; k < 72; k++) {
+    const a = (k / 72) * Math.PI * 2;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    let last = 0;
+    for (let r = 0; r < Math.hypot(w, h); r += 0.5) {
+      if (solid(Math.round(w / 2 + dx * r), Math.round(h / 2 + dy * r))) last = r;
+    }
+    pts.push([+(((w / 2 + dx * last) / w) * 100).toFixed(1), +(((h / 2 + dy * last) / h) * 100).toFixed(1)]);
+  }
+  return { ar: +(W / H).toFixed(4), outline: pts };
+}
 
 /** 0.12.1: "Acts as" (light / switch / fan) ↔ category. */
 const AS_CAT = { light: "lights", switch: "plugs_switches", fan: "climate" };
@@ -397,6 +451,8 @@ header h1 .logo { width:28px; height:28px; }
 .ipop a { color: var(--df-primary); }
 .ipop .x { position:absolute; top:4px; right:4px; border:0; background:transparent; color: var(--df-sec); cursor:pointer; font-size:13px; }
 .ovctl.layerctl { display:flex; gap:6px; align-items:flex-start; }
+.pici { position:absolute; pointer-events:none; z-index:2; opacity:.92; }
+.pici.sel { outline: 2px dashed #f59e0b; outline-offset:2px; }
 .tza { position:absolute; box-sizing:border-box; border:2px dashed #f59e0b; background: rgba(245,158,11,.12); border-radius:6px; pointer-events:none; z-index:5; }
 .lhd { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); cursor:grab; pointer-events:auto; touch-action:none; z-index:6; }
 .details .lsec { display:flex; flex-direction:column; gap:6px; border:1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 8%, var(--df-card)); border-radius:10px; padding:8px 10px; }
@@ -2133,6 +2189,12 @@ class DeviceFloorplanPanel extends HTMLElement {
           parts.push(`<span class="ahd" data-ah="1" data-x="${g.e1[0]}" data-y="${g.e1[1]}" title="Drag: one end of the AC unit"></span><span class="ahd" data-ah="2" data-x="${g.e2[0]}" data-y="${g.e2[1]}" title="Drag: the other end of the AC unit"></span><span class="ahd" data-ah="r" data-x="${g.tip[0]}" data-y="${g.tip[1]}" title="Drag: how far the air flows (and to which side)"></span>`);
         }
       }
+      // 0.12.2: device pictures, as on the card (full picture; the selected one with its outline).
+      for (const [pid, p] of Object.entries(this.work.positions)) {
+        if (!p.pic || !Number.isFinite(p.x)) continue;
+        const url = this._picUrl(p.pic.src);
+        if (url) parts.push(`<img class="pici ${pid === s.sel ? "sel" : ""}" src="${esc(url)}" alt="" data-x="${p.x}" data-y="${p.y}" data-w="${p.pic.w}" style="aspect-ratio:${p.pic.ar};transform:translate(-50%,-50%) rotate(${p.pic.r || 0}deg)">`);
+      }
       // 0.12.1: the selected device's touch area (a box around the marker) and its corner handle.
       if (s.sel && this.work.positions[s.sel] && !fade && this.work.positions[s.sel].touch) {
         const p = this.work.positions[s.sel];
@@ -2406,7 +2468,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         el.style.top = `${ty + Number(el.dataset.y) * z}%`;
         if (el.dataset.w) {
           el.style.width = `${Number(el.dataset.w) * z}%`;
-          el.style.height = `${Number(el.dataset.h) * z}%`;
+          if (el.dataset.h) el.style.height = `${Number(el.dataset.h) * z}%`;
         }
       }
     }
@@ -2970,7 +3032,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       <div style="flex:1;min-width:0">${d.parts && d.parts.length && onPlan ? `<input class="nmin" id="devlabel" value="${esc(this._pl(d))}" placeholder="${esc(d.name)}" aria-label="Name on the plan" maxlength="60">` : `<div class="nm">${esc(d.name)}</div>`}<div class="sub">${esc([d.area_name || "No area", d.manufacturer, d.model].filter(Boolean).join(" · "))}</div></div>
       ${close}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${badges}<span class="badge bat">${esc(stLabel)}</span></div>
-      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${this._touchSectionHtml(d, pos0)}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
+      ${conn}${bondNote}${this._zhaGroupNote(d)}${merged}${parts}${stack}${phNote}<div class="acts">${acts.join("")}</div>${lightSec}${actsAs}${this._picSectionHtml(d, pos0)}${pos0 && pos0.pic ? "" : this._touchSectionHtml(d, pos0)}${onPlan ? this._airSectionHtml(d) + this._openSectionHtml(d) : ""}${box}${moreBtn}${moreBox}${bondHint}${hint}</div>`;
   }
 
   // ------------------------------------------------------- light shapes (#74)
@@ -3051,6 +3113,77 @@ class DeviceFloorplanPanel extends HTMLElement {
     const g = airGeom(c, this._ratio());
     const f = (q) => `${(q[0] * 10).toFixed(1)},${(q[1] * 10).toFixed(1)}`;
     return `<polygon points="${f(g.e1)} ${f(g.f1)} ${f(g.f2)} ${f(g.e2)}" fill="rgba(79,163,255,${sel ? ".16" : ".07"})" stroke="#4fa3ff" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/><line x1="${(g.e1[0] * 10).toFixed(1)}" y1="${(g.e1[1] * 10).toFixed(1)}" x2="${(g.e2[0] * 10).toFixed(1)}" y2="${(g.e2[1] * 10).toFixed(1)}" stroke="#4fa3ff" stroke-width="${sel ? 4 : 2.5}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  /** 0.12.2: the device's picture on the plan (library or own upload): size, turn, tint, looks per state. */
+  _picSectionHtml(d, pos) {
+    if (!pos || (d.loose && !d.physical) || String(d.id).startsWith("ph:")) return "";
+    const p = pos.pic;
+    const opts = Object.entries(PIC_LIB)
+      .map(([g, list]) => `<optgroup label="${esc(g)}">${list.map((n) => `<option value="lib:${n}" ${p && p.src === `lib:${n}` ? "selected" : ""}>${esc(picName(n))}</option>`).join("")}</optgroup>`)
+      .join("");
+    const own = p && !p.src.startsWith("lib:") ? `<option value="${esc(p.src)}" selected>Your own picture</option>` : "";
+    const pick = `<select data-act="picsrc"><option value="">None (its icon)</option>${own}${opts}<option value="upload">Upload your own (transparent PNG / WebP)…</option></select><input type="file" id="picfile" accept="image/png,image/webp" hidden>`;
+    if (!p) return `<div class="fl" style="display:flex;flex-direction:column;gap:4px"><span><b>Picture</b></span><span style="font-size:12px;color:var(--df-sec)">A top-down picture instead of the icon, in Live. The picture is where you tap.</span>${pick}</div>`;
+    const lk = p.looks || {};
+    const sel = (k, label) => `<label class="fl" style="flex:1">${label}<select data-act="piclook" data-k="${k}">${PIC_LOOKS.map(([v, l]) => `<option value="${v}" ${(lk[k] || PIC_DEF[k]) === v ? "selected" : ""}>${l}${PIC_DEF[k] === v ? " (default)" : ""}</option>`).join("")}</select></label>`;
+    const rng = (k, label, min, max, step, val) => `<label class="fl">${label} <span style="color:var(--df-sec)">${val}</span><input type="range" data-act="picnum" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${val}"></label>`;
+    return `<div class="fl" style="display:flex;flex-direction:column;gap:6px"><span><b>Picture</b></span>${pick}
+      ${rng("w", "Size", 1, 40, 0.5, p.w)}${rng("r", "Turn", 0, 355, 5, p.r || 0)}
+      <label class="fl">Colour <span style="display:flex;gap:8px;align-items:center"><input type="color" data-act="pictint" value="${esc(p.tint || "#9aa4ae")}"><label style="font-size:12px"><input type="checkbox" data-act="pictinton" ${p.tint ? "checked" : ""}> Tint the picture</label></span></label>
+      <span style="font-size:12px;color:var(--df-sec)">How it looks on the card:</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${sel("on", "On")}${sel("off", "Off")}${sel("un", "Unavailable")}</div>
+      ${rng("inset", "Outline inset", 0, 20, 1, p.inset ?? 4)}
+      <span style="display:flex;gap:6px">${p.looks ? `<button class="btn" data-act="piclookreset" data-id="${esc(d.id)}">Reset looks</button>` : ""}<button class="btn" data-act="picoff" data-id="${esc(d.id)}">Remove picture</button></span></div>`;
+  }
+
+  /** The picture's address: the library is a static file, an own picture is signed (async, then redrawn). */
+  _picUrl(src) {
+    if (!src) return null;
+    if (src.startsWith("lib:")) return `${STATIC}/pictures/${src.slice(4)}.webp`;
+    this._picSigned = this._picSigned || new Map();
+    if (this._picSigned.has(src)) return this._picSigned.get(src);
+    this._picSigned.set(src, null);
+    signUrl(this._hass, src)
+      .then((u) => {
+        this._picSigned.set(src, u);
+        this._renderOverlay();
+      })
+      .catch(() => {});
+    return null;
+  }
+
+  /** Set the picture of the selected device: size from the touch area or a default, outline traced. */
+  async _setPic(id, src) {
+    const pos = this.work.positions[id];
+    if (!pos) return;
+    let traced = { ar: 1, outline: null };
+    try {
+      const url = src.startsWith("lib:") ? this._picUrl(src) : await signUrl(this._hass, src);
+      traced = await tracePic(url);
+    } catch (_e) {
+      /* keep a box outline */
+    }
+    this._change(() => {
+      const old = pos.pic || {};
+      pos.pic = { w: old.w || (pos.touch ? pos.touch.w : 6), r: old.r || 0, inset: old.inset ?? 4, ...(old.tint ? { tint: old.tint } : {}), ...(old.looks ? { looks: old.looks } : {}), src, ar: traced.ar, ...(traced.outline ? { outline: traced.outline } : {}) };
+      delete pos.touch; // the picture is the tap area
+    });
+  }
+
+  async _uploadPic(id, file) {
+    if (!file) return;
+    if (!["image/png", "image/webp"].includes(file.type)) return this._toast("Use a transparent PNG or WebP picture", false);
+    try {
+      const url = `/api/${WS}/upload?pic=1`;
+      const init = { method: "POST", body: file, headers: { "Content-Type": file.type } };
+      const resp = this._hass.fetchWithAuth ? await this._hass.fetchWithAuth(url, init) : await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${this._hass.auth.data.access_token}` } });
+      if (!resp.ok) throw new Error(`Upload failed (${resp.status})`);
+      const r = await resp.json();
+      await this._setPic(id, r.url);
+    } catch (err) {
+      this._saveError(err);
+    }
   }
 
   /** 0.12.1: a touch area: the device is already drawn in the plan picture (a TV, an AC); on the card's Live it
@@ -4583,6 +4716,36 @@ class DeviceFloorplanPanel extends HTMLElement {
       if (pos && t.value) this._change(() => (pos.opening = { link: t.value, side: 1 }));
       return;
     }
+    if (act === "picsrc") {
+      const id = this.s.sel;
+      if (t.value === "upload") {
+        const f = this.shadowRoot.getElementById("picfile");
+        if (f) {
+          f.onchange = () => this._uploadPic(id, f.files && f.files[0]);
+          f.click();
+        }
+        return;
+      }
+      if (!t.value) return this._change(() => delete this.work.positions[id].pic);
+      return this._setPic(id, t.value);
+    }
+    if (act === "piclook" || act === "picnum" || act === "pictint" || act === "pictinton") {
+      const pos = this.work.positions[this.s.sel];
+      if (!pos || !pos.pic) return;
+      return this._change(() => {
+        const p = pos.pic;
+        if (act === "piclook") {
+          const looks = { ...(p.looks || {}) };
+          if (t.value === PIC_DEF[t.dataset.k]) delete looks[t.dataset.k];
+          else looks[t.dataset.k] = t.value;
+          if (Object.keys(looks).length) p.looks = looks;
+          else delete p.looks;
+        } else if (act === "picnum") p[t.dataset.k] = Number(t.value);
+        else if (act === "pictint") p.tint = t.value;
+        else if (t.checked) p.tint = (this.shadowRoot.querySelector('[data-act="pictint"]') || {}).value || "#9aa4ae";
+        else delete p.tint;
+      });
+    }
     if (act === "devcat") {
       // 0.12.1: the device's category (all floors); for a light / plug / fan on this plan also what it is on the card.
       const id = this.s.sel;
@@ -5439,6 +5602,12 @@ class DeviceFloorplanPanel extends HTMLElement {
         break;
       case "unpin":
         this._change(() => delete this.work.anchors[id]);
+        break;
+      case "picoff":
+        if (this.work.positions[this.s.sel]) this._change(() => delete this.work.positions[this.s.sel].pic);
+        break;
+      case "piclookreset":
+        if (this.work.positions[this.s.sel] && this.work.positions[this.s.sel].pic) this._change(() => delete this.work.positions[this.s.sel].pic.looks);
         break;
       case "touchon":
         if (this.work.positions[this.s.sel]) this._change(() => (this.work.positions[this.s.sel].touch = { w: 6, h: 4 }));

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
 import shutil
@@ -631,6 +632,13 @@ class FloorplanData:
                 plan["height"] = height
             await self._commit_image(plan_id, old)
 
+    async def async_save_pic(self, body: bytes, ext: str) -> str:
+        """0.12.2: save a device's own picture; the same picture is stored once (name from its content)."""
+        name = f"pic_{hashlib.sha1(body).hexdigest()[:16]}.{ext}"
+        if not await self.hass.async_add_executor_job((self.images_path / name).is_file):
+            await self.hass.async_add_executor_job(self._write_file, name, body)
+        return name
+
     async def async_set_image_file(
         self, plan_id: str, src: Path, width: int, height: int
     ) -> None:
@@ -794,6 +802,11 @@ class FloorplanData:
             pass
 
 
+_PIC_SRC = re.compile(r"^(lib:[a-z0-9-]{1,40}|/api/device_floorplan/image/pic_[0-9a-f]{16}\.(png|webp))$")
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+_LOOKS = ("full", "faint", "outline", "dotted", "hidden")
+
+
 def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "x": round(min(100.0, max(0.0, float(pos["x"]))), 3),
@@ -846,6 +859,37 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
             line = [air.get(k) for k in ("x1", "y1", "x2", "y2")]
             if all(isinstance(v, (int, float)) for v in line):
                 entry["air"].update({k: round(min(100.0, max(0.0, float(v))), 3) for k, v in zip(("x1", "y1", "x2", "y2"), line)})
+    pic = pos.get("pic")
+    if isinstance(pic, dict) and isinstance(pic.get("src"), str) and _PIC_SRC.match(pic["src"]):
+        # 0.12.2: the device's picture on the plan: library ("lib:<name>") or own upload; size (w in % of the
+        # image width, ar = width / height), rotation, tint, looks per state, outline (traced, 0..100) and its inset.
+        p: dict[str, Any] = {"src": pic["src"]}
+        try:
+            p["w"] = round(min(100.0, max(0.5, float(pic.get("w", 6)))), 3)
+            p["ar"] = round(min(20.0, max(0.05, float(pic.get("ar", 1)))), 4)
+            p["r"] = round(float(pic.get("r", 0)) % 360, 1)
+            p["inset"] = round(min(30.0, max(0.0, float(pic.get("inset", 4)))), 1)
+        except (TypeError, ValueError):
+            p.update({"w": 6.0, "ar": 1.0, "r": 0.0, "inset": 4.0})
+        tint = pic.get("tint")
+        if isinstance(tint, str) and _HEX.match(tint):
+            p["tint"] = tint
+        looks = pic.get("looks")
+        if isinstance(looks, dict):
+            lk = {k: v for k, v in looks.items() if k in ("on", "off", "un") and v in _LOOKS}
+            if lk:
+                p["looks"] = lk
+        outline = pic.get("outline")
+        if isinstance(outline, list):
+            pts = []
+            for pt in outline[:200]:
+                try:
+                    pts.append([round(min(100.0, max(0.0, float(pt[0]))), 1), round(min(100.0, max(0.0, float(pt[1]))), 1)])
+                except (TypeError, ValueError, IndexError):
+                    continue
+            if len(pts) >= 3:
+                p["outline"] = pts
+        entry["pic"] = p
     touch = pos.get("touch")
     if isinstance(touch, dict) and touch.get("w") and touch.get("h"):
         # 0.12.1: a touch area around the marker (w / h in % of the image): the device drawn in the plan picture.

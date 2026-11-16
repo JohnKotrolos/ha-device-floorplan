@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.1).
+ * Device Floorplan – dashboard card (v0.12.2).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.1";
+const CARD_VERSION = "0.12.2";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -822,6 +822,11 @@ function planSensors(hass) {
   );
 }
 
+// 0.12.2 Device pictures: default look per state, and states that count as off.
+const PIC_LOOK = { on: "full", off: "faint", un: "dotted" };
+const PIC_OFF = new Set(["off", "unknown", "idle", "standby", "closed", "docked", "paused", "not_home", "unavailable"]);
+const STATIC_BASE = "/device_floorplan_static";
+
 const _cardSigned = new Map();
 async function cardSign(hass, url) {
   if (!url || !url.startsWith("/api/")) return url;
@@ -992,6 +997,15 @@ ha-card.dock-right { flex-direction: row; }
 .nglow2 { mix-blend-mode: screen; }
 .box.nt .room.label { color:#fff; text-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 7px rgba(0,0,0,.8); }
 .box.nq .m:not(.on):not(.person) .ic, .box.nq .chip:not(.on) { filter: brightness(.78) saturate(.85); box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 1px 4px rgba(0,0,0,.5); }
+.pic { position:absolute; z-index:1; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+.pic img { width:100%; height:100%; object-fit:fill; display:block; pointer-events:none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.pic.faint img { opacity:.38; filter:saturate(.4); }
+.pic .ptint { position:absolute; inset:0; mix-blend-mode:color; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
+.pic.faint .ptint { opacity:.38; }
+.pic svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.pic svg polygon { fill:none; stroke: var(--dfc-accent); stroke-width:1.6; vector-effect: non-scaling-stroke; }
+.pic svg polygon.dot { stroke: var(--secondary-text-color, #8a8f98); stroke-dasharray: 3 3; }
+.pic.busy { animation: dfbusy 1s ease-in-out infinite; }
 .touch { position:absolute; z-index:1; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color: transparent; }
 .touch.outline { outline: 1px dashed color-mix(in srgb, var(--dfc-accent) 55%, transparent); outline-offset:-1px; }
 .touch.flash { background: color-mix(in srgb, var(--dfc-accent) 22%, transparent); outline: 1px solid var(--dfc-accent); transition: background .2s; }
@@ -5817,7 +5831,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._touchHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
+          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._picHtml(a)}${this._touchHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
@@ -6317,6 +6331,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _markerHtml(s) {
+    if (s.item && s.item.pic && this._overlay === "live" && !this._rpIn()) return ""; // 0.12.2: its picture stands there
     if (s.cam && (this._overlay === "live" || this._overlay === "security")) return this._camHtml(s);
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
@@ -7582,7 +7597,7 @@ ${reset}
     if (this._overlay !== "live" || this._rpIn()) return "";
     const hint = ((this._config.live || {}).touch_hint) || "flash";
     const list = this._items(a)
-      .filter((it) => it.touch && Number.isFinite(it.x) && it.main_entity && this._per(it, "live").tap !== "none")
+      .filter((it) => it.touch && !it.pic && Number.isFinite(it.x) && it.main_entity && this._per(it, "live").tap !== "none")
       .sort((x, y) => y.touch.w * y.touch.h - x.touch.w * x.touch.h);
     return list
       .map((it) => {
@@ -7591,6 +7606,56 @@ ${reset}
         return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(this._dev(it.id).name || it.name || "")}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
       })
       .join("");
+  }
+
+  /** 0.12.2 Device pictures (Live): the picture stands at the device and is its tap area (tap = the device's
+   *  tap, hold = details, also when off). One look per state, changeable per device in the Floorplan Editor:
+   *  on = full, off = faint, unavailable = dotted outline. The outline is traced from the picture's transparency
+   *  when it is picked; "inset" pulls it a little inside. A tint keeps the picture's shading (blend "color"). */
+  _picHtml(a) {
+    if (this._overlay !== "live" || this._rpIn()) return "";
+    const out = [];
+    for (const it of this._items(a)) {
+      const p = it.pic;
+      if (!p || !Number.isFinite(it.x) || !it.main_entity) continue;
+      const ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
+      const sts = ents.map((e) => this._hass.states[e]).filter(Boolean);
+      const un = !sts.length || sts.every((x) => x.state === "unavailable");
+      const st0 = this._hass.states[it.main_entity];
+      const on = !un && st0 && !PIC_OFF.has(st0.state);
+      const state = un ? "un" : on ? "on" : "off";
+      const look = (p.looks || {})[state] || PIC_LOOK[state];
+      if (look === "hidden") continue;
+      const url = this._picUrl(p.src);
+      if (!url) continue;
+      const pic = look === "full" || look === "faint";
+      const tint = pic && p.tint ? `<span class="ptint" style="background:${cesc(p.tint)};-webkit-mask-image:url('${cesc(url)}');mask-image:url('${cesc(url)}')"></span>` : "";
+      const k = Math.max(0.4, (100 - 2 * (p.inset ?? 4)) / 100);
+      const pts = (p.outline || [[2, 2], [98, 2], [98, 98], [2, 98]]).map(([x, y]) => `${(50 + (x - 50) * k).toFixed(1)},${(50 + (y - 50) * k).toFixed(1)}`).join(" ");
+      const line = look === "outline" || look === "dotted" || this._busyOn(it.id) ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/></svg>` : "";
+      const name = this._dev(it.id).name || it.name || "";
+      out.push(`<div class="pic ${look} ${this._busyOn(it.id) ? "busy" : ""}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(`${name}${un ? " · unavailable" : ""}`)}" style="left:${it.x}%;top:${it.y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)">${pic ? `<img src="${cesc(url)}" alt="" draggable="false">${tint}` : ""}${line}</div>`);
+    }
+    return out.join("");
+  }
+
+  /** The picture's address: the library is a static file; an own picture needs a signed address (async). */
+  _picUrl(src) {
+    if (src.startsWith("lib:")) return `${STATIC_BASE}/pictures/${src.slice(4)}.webp`;
+    this._picSigned = this._picSigned || new Map();
+    const hit = this._picSigned.get(src);
+    if (hit) return hit;
+    if (!this._picSigning) {
+      this._picSigning = true;
+      cardSign(this._hass, src)
+        .then((u) => {
+          this._picSigned.set(src, u);
+          this._update(true);
+        })
+        .catch(() => {})
+        .finally(() => (this._picSigning = false));
+    }
+    return null;
   }
 
   _touchTap(id) {
