@@ -988,6 +988,12 @@ def build_plan_payload(
             "conns": conns,
             "group": group,
         }
+        try:
+            # 0.12.3: the category (the user's choice wins); the card uses it for rules such as
+            # "a moving thing's doors are no openings of the house".
+            item["category"] = data.device_opts.get(device.id, {}).get("category") or _category(entities, integrations, group)
+        except Exception:
+            _LOGGER.debug("Could not categorise %s", device.id, exc_info=True)
         if pos.get("pic"):
             item["pic"] = pos["pic"]  # 0.12.2: the device's picture (Live)
         if pos.get("touch"):

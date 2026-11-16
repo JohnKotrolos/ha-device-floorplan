@@ -100,6 +100,7 @@ class FloorplanData:
         self.device_opts = data.get("device_opts", {})
         self.setup_done = bool(data.get("setup_done", False))
         self.card_state = data.get("card_state", {})
+        await self.hass.async_add_executor_job(self.move_pics)
 
     @staticmethod
     def _defaults(plan: dict[str, Any]) -> None:
@@ -632,12 +633,58 @@ class FloorplanData:
                 plan["height"] = height
             await self._commit_image(plan_id, old)
 
+    @property
+    def pics_path(self) -> Path:
+        """0.12.3: own device pictures live in their own subfolder (config/device_floorplan/pictures)."""
+        return self.images_path / "pictures"
+
     async def async_save_pic(self, body: bytes, ext: str) -> str:
         """0.12.2: save a device's own picture; the same picture is stored once (name from its content)."""
         name = f"pic_{hashlib.sha1(body).hexdigest()[:16]}.{ext}"
-        if not await self.hass.async_add_executor_job((self.images_path / name).is_file):
-            await self.hass.async_add_executor_job(self._write_file, name, body)
+        await self.hass.async_add_executor_job(self._write_pic, name, body)
         return name
+
+    def _write_pic(self, name: str, body: bytes) -> None:
+        self.pics_path.mkdir(parents=True, exist_ok=True)
+        if not (self.pics_path / name).is_file():
+            tmp = self.pics_path / f".{name}.{os.getpid()}.{time.time_ns()}.tmp"
+            tmp.write_bytes(body)
+            tmp.replace(self.pics_path / name)
+
+    def move_pics(self) -> None:
+        """0.12.3: pictures saved by 0.12.2 next to the plan images move into the subfolder (same URL)."""
+        if not self.images_path.is_dir():
+            return
+        for f in self.images_path.glob("pic_*"):
+            if f.is_file():
+                self.pics_path.mkdir(parents=True, exist_ok=True)
+                f.replace(self.pics_path / f.name)
+
+    def pic_used(self) -> set[str]:
+        """File names of own pictures that a device or bond on any plan uses."""
+        used = set()
+        for plan in self.plans.values():
+            for pos in (plan.get("positions") or {}).values():
+                src = (pos.get("pic") or {}).get("src", "")
+                if src.startswith(IMAGES_URL):
+                    used.add(src.rsplit("/", 1)[-1])
+        return used
+
+    def list_pics(self) -> list[dict[str, Any]]:
+        used = self.pic_used()
+        if not self.pics_path.is_dir():
+            return []
+        files = sorted(self.pics_path.glob("pic_*"), key=lambda f: f.stat().st_mtime, reverse=True)
+        return [{"url": f"{IMAGES_URL}/{f.name}", "used": f.name in used} for f in files if f.is_file()]
+
+    def delete_pic(self, name: str) -> bool:
+        """Delete an own picture that no device uses."""
+        if not re.match(r"^pic_[0-9a-f]{16}\.(png|webp)$", name) or name in self.pic_used():
+            return False
+        f = self.pics_path / name
+        if f.is_file():
+            f.unlink()
+        return True
 
     async def async_set_image_file(
         self, plan_id: str, src: Path, width: int, height: int

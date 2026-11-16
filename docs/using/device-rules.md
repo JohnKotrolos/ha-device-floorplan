@@ -44,7 +44,9 @@ The card setting **Touch areas show** decides whether you see them: a short flas
 
 ## Device pictures
 
-Instead of an icon, a device can stand on the plan as a top-down **picture**: one from the built-in library, or your own transparent PNG or WebP (max 2 MB). Open the device in the Floorplan Editor, pick it under **Picture**, then set its size and turn.
+Instead of an icon, a device can stand on the plan as a top-down **picture**: one from the built-in library, or your own transparent PNG or WebP (max 2 MB). Open the device in the Floorplan Editor, choose it under **Picture** (a grid of thumbnails), then set its size and turn. Your own pictures stay in the grid under **Your pictures**, so you can use them for other devices too; one that no device uses can be deleted there. They are stored privately in `config/device_floorplan/pictures`, not in `www`.
+
+A **bond** is one device on the card, so it has one picture or touch area, set in the bond's panel; tapping it switches the whole bond.
 
 In Live the picture is where you tap, also when the device is off. Its look follows the device's state:
 
@@ -54,7 +56,11 @@ In Live the picture is where you tap, also when the device is off. Its look foll
 | Off | faint picture |
 | Unavailable | dotted outline |
 
-You can change each of these per device (full picture, faint picture, outline, dotted outline, hidden), tint the picture with a colour (its shading stays), and move the outline a little inside the picture with **Outline inset**.
+You can change each of these per device (full picture, faint picture, outline, dotted outline, hidden), tint the picture with a colour (it darkens toward the colour and keeps its shading, so black makes a dark car), and move the outline a little inside the picture with **Outline inset**.
+
+A device with a **location tracker** (a car, a mower) follows home and away instead: at home it shows the On look, away it is hidden, unless you pick another Off look (a dotted outline can mean "the spot is free"). Moving things never get doors or windows on the plan.
+
+In **Home Replay** the pictures take the look of the replayed moment.
 
 ## When a device is off
 

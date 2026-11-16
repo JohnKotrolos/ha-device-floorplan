@@ -55,6 +55,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_plan_image_url,
         ws_plan_image_template,
         ws_images_list,
+        ws_pics_list,
+        ws_pic_delete,
         ws_skip,
         ws_seen,
         ws_main_entity,
@@ -344,6 +346,32 @@ async def ws_images_list(hass: HomeAssistant, connection, msg: dict[str, Any]) -
         return
     images = await hass.async_add_executor_job(data.list_www_images)
     connection.send_result(msg["id"], {"images": images})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "device_floorplan/pictures/list"})
+@websocket_api.async_response
+async def ws_pics_list(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    """0.12.3: the user's own device pictures, newest first, and whether a device uses each."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    pics = await hass.async_add_executor_job(data.list_pics)
+    connection.send_result(msg["id"], {"pictures": pics})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "device_floorplan/pictures/delete", vol.Required("name"): cv.string})
+@websocket_api.async_response
+async def ws_pic_delete(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    """0.12.3: delete an own picture that no device uses."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    ok = await hass.async_add_executor_job(data.delete_pic, msg["name"])
+    if not ok:
+        connection.send_error(msg["id"], "in_use", "This picture is used by a device, or isn't yours")
+        return
+    pics = await hass.async_add_executor_job(data.list_pics)
+    connection.send_result(msg["id"], {"pictures": pics})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "device_floorplan/overlay/subscribe"})

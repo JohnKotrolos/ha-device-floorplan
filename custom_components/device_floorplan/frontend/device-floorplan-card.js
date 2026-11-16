@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.2).
+ * Device Floorplan – dashboard card (v0.12.3).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.2";
+const CARD_VERSION = "0.12.3";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1000,7 +1000,7 @@ ha-card.dock-right { flex-direction: row; }
 .pic { position:absolute; z-index:1; cursor:pointer; -webkit-tap-highlight-color: transparent; }
 .pic img { width:100%; height:100%; object-fit:fill; display:block; pointer-events:none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
 .pic.faint img { opacity:.38; filter:saturate(.4); }
-.pic .ptint { position:absolute; inset:0; mix-blend-mode:color; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
+.pic .ptint { position:absolute; inset:0; mix-blend-mode:multiply; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
 .pic.faint .ptint { opacity:.38; }
 .pic svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
 .pic svg polygon { fill:none; stroke: var(--dfc-accent); stroke-width:1.6; vector-effect: non-scaling-stroke; }
@@ -2552,6 +2552,7 @@ class DeviceFloorplanCard extends HTMLElement {
       out.push({ id, eid, st, kind: openKind(eid, st), as: guessOpenAs(eid, hass, d.name, d.as), x: d.x, y: d.y, area_id: d.area_id, opening: d.opening });
     };
     for (const [id, d] of Object.entries(a.devices || {})) {
+      if (d.category === "moving") continue; // 0.12.3: a car's doors are no openings of the house
       const ents = d.entities || [];
       const eid = ents.find((e) => domainOf(e) === "cover" && hass.states[e]) || ents.find((e) => openKind(e, hass.states[e]) === "contact");
       if (eid) add(id, d, eid);
@@ -4652,6 +4653,11 @@ class DeviceFloorplanCard extends HTMLElement {
     const real = this._live || this._hass;
     const want = new Set([...(this._watch || []), "sun.sun"]);
     for (const item of this._items(this._a || {})) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") want.add(e);
+    // 0.12.3: the entities a picture follows, so it takes the replayed moment's look.
+    for (const item of this._items(this._a || {})) {
+      const b = this._bodyOf(item, this._a);
+      if (b && b.pic) for (const e of [b.lead, b.tracker, ...b.ents]) if (e && !["sensor", "button", "event", "update", "image"].includes(domainOf(e))) want.add(e);
+    }
     const ents = [...want].filter((e) => real.states[e]);
     const start = new Date(Date.now() - this._rpSpan()).toISOString();
     // Sensors only need their state (their unit etc. come from now); everything else with attributes.
@@ -5738,6 +5744,8 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.7.0: doors, windows and shutters drive bars and room shading even without a marker.
     for (const o of this._openSpots(a)) watch.add(o.eid);
     if (ov === "live") for (const m of this._motionSpots(a)) watch.add(m.eid);
+    // 0.12.3: what the pictures follow (a car's tracker, a bond's members), so they change with it.
+    if (ov === "live") for (const item of this._items(a)) { const b = this._bodyOf(item, a); if (b && b.pic) for (const e of [b.lead, b.tracker, ...b.sw]) if (e) watch.add(e); }
     if (ov === "live" || ov === "security") for (const item of this._items(a)) { const tg = this._liveWhen(item); if (tg) watch.add(tg); }
     if (ov === "live") for (const item of this._items(a)) { const ap = this._applOf(item); if (ap) for (const e of [ap.status, ap.remaining, ap.progress, ap.running, ap.power, ap.door, ap.plug]) if (e) watch.add(e); }
     if (ov === "network") for (const s of specs) if (s.rt) watch.add(s.rt.eid);
@@ -6331,7 +6339,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   _markerHtml(s) {
-    if (s.item && s.item.pic && this._overlay === "live" && !this._rpIn()) return ""; // 0.12.2: its picture stands there
+    if (s.item && this._overlay === "live" && this._picStands(s.item)) return ""; // 0.12.2: its picture stands there
     if (s.cam && (this._overlay === "live" || this._overlay === "security")) return this._camHtml(s);
     if (s.type === "net") {
       const r = ROLES[s.role] || ROLES.device;
@@ -7217,7 +7225,7 @@ ${reset}
       this._held = false;
       return;
     }
-    if (tz) return this._pick ? null : this._touchTap(tz.dataset.touch);
+    if (tz) return this._pick || this._rpIn() ? null : this._touchTap(tz.dataset.touch); // Replay is for looking
     const s = this._specs && this._specs.get(k.dataset.k);
     if (!s) return;
     if (this._pick) return this._pick(s.item.id, s); // marker editing (#87/#95)
@@ -7597,13 +7605,14 @@ ${reset}
     if (this._overlay !== "live" || this._rpIn()) return "";
     const hint = ((this._config.live || {}).touch_hint) || "flash";
     const list = this._items(a)
-      .filter((it) => it.touch && !it.pic && Number.isFinite(it.x) && it.main_entity && this._per(it, "live").tap !== "none")
-      .sort((x, y) => y.touch.w * y.touch.h - x.touch.w * x.touch.h);
+      .map((it) => [it, this._bodyOf(it, a)])
+      .filter(([it, b]) => b && b.touch && !b.pic && Number.isFinite(it.x) && this._per(it, "live").tap !== "none")
+      .sort(([, x], [, y]) => y.touch.w * y.touch.h - x.touch.w * x.touch.h);
     return list
-      .map((it) => {
-        const { w, h } = it.touch;
+      .map(([it, b]) => {
+        const { w, h } = b.touch;
         const busy = this._busyOn(it.id) ? "busy" : "";
-        return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(this._dev(it.id).name || it.name || "")}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
+        return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(b.lead)}" role="button" aria-label="${cesc(b.name)}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
       })
       .join("");
   }
@@ -7613,18 +7622,22 @@ ${reset}
    *  on = full, off = faint, unavailable = dotted outline. The outline is traced from the picture's transparency
    *  when it is picked; "inset" pulls it a little inside. A tint keeps the picture's shading (blend "color"). */
   _picHtml(a) {
-    if (this._overlay !== "live" || this._rpIn()) return "";
+    if (this._overlay !== "live") return "";
+    const replay = this._rpIn(); // 0.12.3: in Replay the picture takes the look of the replayed moment
     const out = [];
     for (const it of this._items(a)) {
-      const p = it.pic;
-      if (!p || !Number.isFinite(it.x) || !it.main_entity) continue;
-      const ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
+      const body = this._bodyOf(it, a);
+      const p = body && body.pic;
+      if (!p || !Number.isFinite(it.x)) continue;
+      const ents = body.ents;
       const sts = ents.map((e) => this._hass.states[e]).filter(Boolean);
       const un = !sts.length || sts.every((x) => x.state === "unavailable");
-      const st0 = this._hass.states[it.main_entity];
-      const on = !un && st0 && !PIC_OFF.has(st0.state);
+      // 0.12.3: a device with a location tracker follows home / away (a car in its garage spot); away is hidden
+      // unless the user picked another Off look. Otherwise: on when any of its entities is on.
+      const trk = this._hass.states[body.tracker];
+      const on = !un && (trk ? trk.state === "home" : sts.some((x) => !PIC_OFF.has(x.state)));
       const state = un ? "un" : on ? "on" : "off";
-      const look = (p.looks || {})[state] || PIC_LOOK[state];
+      const look = (p.looks || {})[state] || (trk && state === "off" ? "hidden" : PIC_LOOK[state]);
       if (look === "hidden") continue;
       const url = this._picUrl(p.src);
       if (!url) continue;
@@ -7632,11 +7645,41 @@ ${reset}
       const tint = pic && p.tint ? `<span class="ptint" style="background:${cesc(p.tint)};-webkit-mask-image:url('${cesc(url)}');mask-image:url('${cesc(url)}')"></span>` : "";
       const k = Math.max(0.4, (100 - 2 * (p.inset ?? 4)) / 100);
       const pts = (p.outline || [[2, 2], [98, 2], [98, 98], [2, 98]]).map(([x, y]) => `${(50 + (x - 50) * k).toFixed(1)},${(50 + (y - 50) * k).toFixed(1)}`).join(" ");
-      const line = look === "outline" || look === "dotted" || this._busyOn(it.id) ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/></svg>` : "";
-      const name = this._dev(it.id).name || it.name || "";
-      out.push(`<div class="pic ${look} ${this._busyOn(it.id) ? "busy" : ""}" data-touch="${cesc(it.id)}" data-ent="${cesc(it.main_entity)}" role="button" aria-label="${cesc(`${name}${un ? " · unavailable" : ""}`)}" style="left:${it.x}%;top:${it.y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)">${pic ? `<img src="${cesc(url)}" alt="" draggable="false">${tint}` : ""}${line}</div>`);
+      const busy = !replay && this._busyOn(it.id);
+      const line = look === "outline" || look === "dotted" || busy ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/></svg>` : "";
+      out.push(`<div class="pic ${look} ${busy ? "busy" : ""}" data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${un ? " · unavailable" : ""}`)}" style="left:${it.x}%;top:${it.y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)">${pic ? `<img src="${cesc(url)}" alt="" draggable="false">${tint}` : ""}${line}</div>`);
     }
     return out.join("");
+  }
+
+  /** Does a picture stand for this item (itself or its bond)? Its marker is then not drawn in Live. */
+  _picStands(it) {
+    if (it.pic) return true;
+    return !!(it.bond && this._items(this._a || {}).some((x) => x.bond === it.bond && x.pic));
+  }
+
+  /** 0.12.3: the "body" of an item (its picture / touch area and what it follows). A bond is one device: its
+   *  body is drawn once, at the member that holds it (the first member with a picture / touch area), and it
+   *  follows all members. Other members of the bond get null. */
+  _bodyOf(it, a) {
+    const bond = it.bond && ((a || this._a || {}).bonds || {})[it.bond];
+    let holder = it;
+    let ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
+    let name = this._dev(it.id).name || it.name || "";
+    if (bond) {
+      const items = this._items(a || this._a || {}).filter((x) => x.bond === it.bond);
+      holder = items.find((x) => x.pic) || items.find((x) => x.touch) || items[0];
+      if (!holder || holder.id !== it.id) return null;
+      ents = [...new Set(items.flatMap((x) => [x.main_entity, ...(x.entities || [])]).filter(Boolean))];
+      name = bond.name || this._dev(it.id).name || it.name || "";
+    }
+    if (!holder.pic && !holder.touch) return null;
+    const tracker = ents.find((e) => domainOf(e) === "device_tracker") || null;
+    const lead = (bond && bond.entities && bond.entities[0]) || it.main_entity || ents[0];
+    if (!lead) return null;
+    // The switching entities: a bond switches all its members' main entities together (as its marker).
+    const sw = bond ? bond.entities || [lead] : [lead];
+    return { pic: holder.pic, touch: holder.touch, ents, tracker, lead, sw, name, bond: it.bond || null };
   }
 
   /** The picture's address: the library is a static file; an own picture needs a signed address (async). */
@@ -7647,7 +7690,7 @@ ${reset}
     if (hit) return hit;
     if (!this._picSigning) {
       this._picSigning = true;
-      cardSign(this._hass, src)
+      cardSign(this._live || this._hass, src)
         .then((u) => {
           this._picSigned.set(src, u);
           this._update(true);
@@ -7660,10 +7703,10 @@ ${reset}
 
   _touchTap(id) {
     const it = this._items(this._a || {}).find((x) => x.id === id);
-    if (!it) return;
-    const ents = [...new Set([it.main_entity, ...(it.entities || [])].filter(Boolean))];
-    const eid = it.main_entity;
-    this._runAction({ type: "dev", key: `touch:${id}`, item: it, ents, eid, kind: kindOf(eid, this._hass.states[eid]) });
+    const b = it && this._bodyOf(it, this._a);
+    if (!b) return;
+    // 0.12.3: a bond's picture / touch area switches the whole bond (its members' main entities), as its marker.
+    this._runAction({ type: "dev", key: `touch:${id}`, item: it, ents: b.bond ? b.sw : b.ents, eid: b.lead, kind: kindOf(b.lead, this._hass.states[b.lead]) });
   }
 
   /** Tapping empty plan briefly shows where the touch areas are (hint "flash"). */

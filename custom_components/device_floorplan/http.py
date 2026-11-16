@@ -100,7 +100,7 @@ class FloorplanImageView(HomeAssistantView):
             return self.json_message("Not set up", HTTPStatus.SERVICE_UNAVAILABLE)
         if "/" in filename or "\\" in filename or filename.startswith("."):
             return self.json_message("Not found", HTTPStatus.NOT_FOUND)
-        path = data.images_path / filename
+        path = (data.pics_path if filename.startswith("pic_") else data.images_path) / filename  # 0.12.3
         exists = await self.hass.async_add_executor_job(path.is_file)
         if not exists:
             return self.json_message("Not found", HTTPStatus.NOT_FOUND)
