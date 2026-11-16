@@ -933,6 +933,8 @@ def build_plan_payload(
                 **({"light": pos["light"]} if pos.get("light") else {}),
                 **({"air": pos["air"]} if pos.get("air") else {}),
                 **({"opening": pos["opening"]} if pos.get("opening") else {}),
+                **({"pic": pos["pic"]} if pos.get("pic") else {}),  # 0.12.4: a placed entity can have a picture
+                **({"touch": pos["touch"]} if pos.get("touch") else {}),
             }
             continue
         if data.skipped.get(key) or key in part_of:

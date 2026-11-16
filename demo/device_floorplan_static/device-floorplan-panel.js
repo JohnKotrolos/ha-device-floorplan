@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.3";
+const VERSION = "0.12.4";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -3145,7 +3145,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       this.s.picGrid = false; // the picker closes when another device is picked
       this.s.picGridFor = d.id;
     }
-    if (!pos || (!bond && d.loose && !d.physical) || String(d.id).startsWith("ph:")) return "";
+    if (!pos || String(d.id).startsWith("ph:")) return ""; // 0.12.4: devices, bonds and entities placed on their own
     const p = pos.pic;
     const what = bond ? "the whole bond" : "the icon";
     const cur = p
@@ -3162,6 +3162,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       <span style="font-size:12px;color:var(--df-sec)">How it looks on the card:</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${sel("on", "On")}${sel("off", "Off")}${sel("un", "Unavailable")}</div>
       ${rng("inset", "Outline inset", 0, 20, 1, p.inset ?? 4, " % of the picture")}
+      <label class="fl">Highlight <span style="display:flex;gap:8px;align-items:center"><select data-act="pichl">${[["", "None"], ["glow", "Glow (the outline)"], ["tint", "Tint (a second colour)"], ["pulse", "Pulse (the outline)"]].map(([v, l]) => `<option value="${v}" ${((p.hl || {}).look || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>${p.hl ? `<input type="color" data-act="pichlcol" value="${esc(p.hl.color || "#2196f3")}">` : ""}</span></label>
+      ${p.hl ? `<span style="font-size:12px;color:var(--df-sec)">Shown on top of its look while the entity you pick in the card's Edit markers (Live → Highlight when…) is on: a car charging, a washer running…</span>` : ""}
       <span style="display:flex;gap:6px">${p.looks ? `<button class="btn" data-act="piclookreset">Reset looks</button>` : ""}<button class="btn" data-act="picoff">Remove picture</button></span></div>`;
   }
 
@@ -3243,8 +3245,8 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   /** 0.12.1: a touch area: the device is already drawn in the plan picture (a TV, an AC); on the card's Live it
    *  can be tapped there, also when it is off. */
-  _touchSectionHtml(d, pos, bond = false) {
-    if (!pos || (!bond && d.loose && !d.physical) || String(d.id).startsWith("ph:")) return "";
+  _touchSectionHtml(d, pos) {
+    if (!pos || String(d.id).startsWith("ph:")) return "";
     const on = !!pos.touch;
     return `<div class="fl" style="display:flex;flex-direction:column;gap:4px"><span><b>Touch area</b></span><span style="font-size:12px;color:var(--df-sec)">${on ? "Drag the orange corner so the box covers the device drawn in your plan. On the card's Live, tapping it does the device's tap (also when it is off); holding opens its details." : "For a device already drawn in your plan picture (a TV, an AC): tap it where it is drawn, also when it is off."}</span><button class="btn" data-act="${on ? "touchoff" : "touchon"}">${on ? "Remove touch area" : "Add a touch area"}</button></div>`;
   }
@@ -4291,7 +4293,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         const bid = this._bodyId(ids[0]);
         const bd = this.byId.get(bid) || { id: bid };
         const bp = this.work.positions[bid];
-        return `${this._picSectionHtml(bd, bp, true)}${bp && bp.pic ? "" : this._touchSectionHtml(bd, bp, true)}`;
+        return `${this._picSectionHtml(bd, bp, true)}${bp && bp.pic ? "" : this._touchSectionHtml(bd, bp)}`;
       })()}
       <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button>${this._wallSpot(this.s.sel) ? `<button class="btn" data-act="snapwall" title="Move it onto the nearest edge of its Room">${SVG.magnet}Snap to wall</button>` : ""}<button class="btn danger" data-act="remove">Remove from plan</button></div></div>`;
   }
@@ -4777,6 +4779,16 @@ class DeviceFloorplanPanel extends HTMLElement {
       const pos = this.work.positions[this.s.sel];
       if (pos && t.value) this._change(() => (pos.opening = { link: t.value, side: 1 }));
       return;
+    }
+    if (act === "pichl" || act === "pichlcol") {
+      const pos = this.work.positions[this._bodyId(this.s.sel)];
+      if (!pos || !pos.pic) return;
+      return this._change(() => {
+        if (act === "pichl") {
+          if (t.value) pos.pic.hl = { look: t.value, color: (pos.pic.hl || {}).color || "#2196f3" };
+          else delete pos.pic.hl;
+        } else if (pos.pic.hl) pos.pic.hl.color = t.value;
+      });
     }
     if (act === "piclook" || act === "picnum" || act === "pictint" || act === "pictinton") {
       const pos = this.work.positions[this._bodyId(this.s.sel)];

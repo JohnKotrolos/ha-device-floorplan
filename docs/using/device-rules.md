@@ -58,7 +58,11 @@ In Live the picture is where you tap, also when the device is off. Its look foll
 
 You can change each of these per device (full picture, faint picture, outline, dotted outline, hidden), tint the picture with a colour (it darkens toward the colour and keeps its shading, so black makes a dark car), and move the outline a little inside the picture with **Outline inset**.
 
-A device with a **location tracker** (a car, a mower) follows home and away instead: at home it shows the On look, away it is hidden, unless you pick another Off look (a dotted outline can mean "the spot is free"). Moving things never get doors or windows on the plan.
+**What decides On and Off** is the same for everything: in the card's **Edit markers → Live → Show in Live when…** you can pick any entity (a car's tracker, a camera's car detection, a power sensor). It counts as On when it is on, open, home, playing and similar; for other words or numbers fill in **Counts as On when** (e.g. `charging`, `>0`, same syntax as the Overlay Bar statuses). Leave it empty and the device's own state decides. A picture can also be given to an entity placed on its own, so a camera's "car detected" sensor at the parking spot can show the car.
+
+**Highlight** is a fourth look on top of the others: a glow of the outline, a second tint or a pulse, in a colour you choose (Floorplan Editor). In Edit markers pick **Highlight when…** (e.g. the car's charging sensor); by default it shows only while the picture is On, or tick **Highlight also while it is Off**.
+
+Moving things never get doors or windows on the plan.
 
 In **Home Replay** the pictures take the look of the replayed moment.
 

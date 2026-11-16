@@ -921,6 +921,10 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         tint = pic.get("tint")
         if isinstance(tint, str) and _HEX.match(tint):
             p["tint"] = tint
+        hl = pic.get("hl")
+        if isinstance(hl, dict) and hl.get("look") in ("glow", "tint", "pulse"):
+            # 0.12.4: the Highlight look (shown on top while a second entity, picked on the card, is on).
+            p["hl"] = {"look": hl["look"], "color": hl["color"] if isinstance(hl.get("color"), str) and _HEX.match(hl["color"]) else "#2196f3"}
         looks = pic.get("looks")
         if isinstance(looks, dict):
             lk = {k: v for k, v in looks.items() if k in ("on", "off", "un") and v in _LOOKS}
