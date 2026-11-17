@@ -535,7 +535,7 @@ class FloorplanData:
             for k, v in (changes["bond_meta"] or {}).items():
                 if str(k) not in plan.get("bonds", {}) or not isinstance(v, dict):
                     continue
-                m = {kk: str(vv)[:80] for kk, vv in v.items() if kk in ("name", "icon", "tap", "show") and vv}
+                m = {kk: str(vv)[:80] for kk, vv in v.items() if kk in ("name", "icon", "tap", "show", "lights") and vv}
                 if m:
                     meta[str(k)] = m
             plan["bond_meta"] = meta
@@ -869,7 +869,7 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "screen", "drum", "line", "none"):
         # Light shape on the plan (#74), in percent of the image (x / y axes).
         clean: dict[str, Any] = {"type": light["type"]}
-        for k in ("r", "x1", "y1", "x2", "y2", "w", "h", "a"):
+        for k in ("r", "x1", "y1", "x2", "y2", "w", "h", "a", "cx", "cy"):  # 0.12.6: cx / cy = its own centre
             if light.get(k) is not None:
                 clean[k] = round(float(light[k]), 3)
         col = light.get("color")

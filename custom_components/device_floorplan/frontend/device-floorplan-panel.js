@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.12.5";
+const VERSION = "0.12.6";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -466,6 +466,11 @@ header h1 .logo { width:28px; height:28px; }
 .ptile .pl { font-size:11px; line-height:1.2; text-align:center; }
 .ptile .pdel { position:absolute; top:2px; right:4px; font-size:14px; line-height:1; color:var(--df-sec); }
 .pici.sel { outline: 2px dashed #f59e0b; outline-offset:2px; }
+.pici.pr { opacity:1; }
+.pici.pr .pic { pointer-events:none; cursor:default; }
+.pvsw { display:flex; gap:4px; flex-wrap:wrap; }
+.pvsw button { flex:1; min-width:60px; border:1px solid var(--df-line, rgba(0,0,0,.2)); background:transparent; color:inherit; border-radius:6px; padding:4px 6px; font:inherit; font-size:12px; cursor:pointer; }
+.pvsw button.on { background: var(--primary-color, #03a9f4); color:#fff; border-color: var(--primary-color, #03a9f4); }
 .tza { position:absolute; box-sizing:border-box; border:2px dashed #f59e0b; background: rgba(245,158,11,.12); border-radius:6px; pointer-events:none; z-index:5; }
 .lhd { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); cursor:grab; pointer-events:auto; touch-action:none; z-index:6; }
 .details .lsec { display:flex; flex-direction:column; gap:6px; border:1px solid color-mix(in srgb, #f59e0b 45%, transparent); background: color-mix(in srgb, #f59e0b 8%, var(--df-card)); border-radius:10px; padding:8px 10px; }
@@ -647,6 +652,7 @@ header h1 .logo { width:28px; height:28px; }
 .details .uses small { color: var(--df-sec); }
 /* 0.11 (#5): every drag handle sits above markers and labels, with a bigger invisible grip; names never catch the mouse. */
 .lhd, .ohd, .ahd, .rh { z-index:20 !important; }
+.lhd.lc { background:#fff; border:3px solid #f59e0b; cursor:move; }
 .lhd::before, .ohd::before, .ahd::before, .rh::before { content:""; position:absolute; inset:-10px; border-radius:50%; }
 .pin.lbl, .mk .tip, .bx .tip { pointer-events:none; }
 .ahd { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid #4fa3ff; cursor:grab; pointer-events:auto; touch-action:none; z-index:6; box-shadow:0 1px 3px rgba(0,0,0,.35); }
@@ -1017,6 +1023,8 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   connectedCallback() {
     window.addEventListener("keydown", this._onKey);
+    // 0.12.6: the card's picture renderer, so the Editor previews pictures exactly as the card draws them.
+    if (!window.__dfcPic) import(`${STATIC}/device-floorplan-card.js?v=${VERSION}`).then(() => this._render && this.work && this._render()).catch(() => {});
     if (this._vp && this._ro) this._ro.observe(this._vp.parentElement);
   }
   /** 0.11: when HA's connection comes back, a failed load reloads and a failed save is sent again.
@@ -2202,11 +2210,26 @@ class DeviceFloorplanPanel extends HTMLElement {
           parts.push(`<span class="ahd" data-ah="1" data-x="${g.e1[0]}" data-y="${g.e1[1]}" title="Drag: one end of the AC unit"></span><span class="ahd" data-ah="2" data-x="${g.e2[0]}" data-y="${g.e2[1]}" title="Drag: the other end of the AC unit"></span><span class="ahd" data-ah="r" data-x="${g.tip[0]}" data-y="${g.tip[1]}" title="Drag: how far the air flows (and to which side)"></span>`);
         }
       }
-      // 0.12.2: device pictures, as on the card (full picture; the selected one with its outline).
+      // 0.12.2: device pictures, as on the card. 0.12.6: drawn by the card's own renderer (window.__dfcPic): tint,
+      // inset, looks and the animated Highlight exactly as on the card. The selected one follows "Preview".
+      const PR = window.__dfcPic;
+      let picCss = false;
       for (const [pid, p] of Object.entries(this.work.positions)) {
         if (!p.pic || !Number.isFinite(p.x)) continue;
         const url = this._picUrl(p.pic.src);
-        if (url) parts.push(`<span class="pici ${pid === this._bodyId(s.sel) ? "sel" : ""}" data-x="${p.x}" data-y="${p.y}" data-w="${p.pic.w}" style="aspect-ratio:${p.pic.ar};transform:translate(-50%,-50%) rotate(${p.pic.r || 0}deg)">${this._picThumb(p.pic.src, p.pic.tint)}</span>`);
+        if (!url) continue;
+        const isSel = pid === this._bodyId(s.sel);
+        let inner = this._picThumb(p.pic.src, p.pic.tint);
+        if (PR) {
+          const pv = isSel ? s.picPrev || "on" : "on";
+          const st = pv === "hl" ? "on" : pv;
+          const look = (p.pic.looks || {})[st] || PIC_DEF[st];
+          const hl = pv === "hl" && p.pic.hl && p.pic.hl.look ? p.pic.hl : null;
+          inner = look === "hidden" ? "" : PR.html({ p: { ...p.pic, w: 100, r: 0 }, url, look, hl, x: 50, y: 50 });
+          if (!picCss) parts.push(`<style>${PR.css}</style>`);
+          picCss = true;
+        }
+        parts.push(`<span class="pici ${PR ? "pr" : ""} ${isSel ? "sel" : ""}" data-x="${p.x}" data-y="${p.y}" data-w="${p.pic.w}" style="aspect-ratio:${p.pic.ar};transform:translate(-50%,-50%) rotate(${p.pic.r || 0}deg)">${inner}</span>`);
       }
       // 0.12.1: the selected device's touch area (a box around the marker) and its corner handle.
       const tb = s.sel && this._bodyId(s.sel);
@@ -2486,6 +2509,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         }
       }
     }
+    if (window.__dfcPic) window.__dfcPic.sizeFlow(this.shadowRoot);
     const zl = this.shadowRoot.getElementById("zl");
     if (zl) zl.textContent = `${Math.round((this.s.g || 1) * z * 100)}%`;
     // Keep the length boxes fully inside the plan (they used to be cut off at the edges); test12: inside the part
@@ -3159,10 +3183,12 @@ class DeviceFloorplanPanel extends HTMLElement {
     return `<div class="fl" style="display:flex;flex-direction:column;gap:6px"><span><b>Picture</b></span>${cur}${grid}
       ${rng("w", "Size", 1, 40, 0.5, p.w, " % of the plan width")}${rng("r", "Turn", 0, 355, 5, p.r || 0, "°")}
       <label class="fl">Colour <span style="display:flex;gap:8px;align-items:center"><input type="color" data-act="pictint" value="${esc(p.tint || "#9aa4ae")}"><label style="font-size:12px"><input type="checkbox" data-act="pictinton" ${p.tint ? "checked" : ""}> Tint the picture</label></span></label>
+      <span style="font-size:12px;color:var(--df-sec)">Preview on the plan:</span>
+      <div class="pvsw">${[["on", "On"], ["off", "Off"], ["un", "Unavailable"], ...(p.hl ? [["hl", "Highlight"]] : [])].map(([v, l]) => `<button data-act="picprev" data-v="${v}" class="${(this.s.picPrev || "on") === v ? "on" : ""}">${l}</button>`).join("")}</div>
       <span style="font-size:12px;color:var(--df-sec)">How it looks on the card:</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${sel("on", "On")}${sel("off", "Off")}${sel("un", "Unavailable")}</div>
       ${rng("inset", "Outline inset", 0, 20, 1, p.inset ?? 4, " % of the picture")}
-      <label class="fl">Highlight <span style="display:flex;gap:8px;align-items:center"><select data-act="pichl">${[["", "None"], ["glow", "Glow (a soft halo)"], ["breathing", "Breathing (the glow fades in and out)"], ["flow", "Flow (a light runs around the outline)"], ["tint", "Tint (a second colour)"]].map(([v, l]) => `<option value="${v}" ${(((p.hl || {}).look === "pulse" ? "breathing" : (p.hl || {}).look) || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>${p.hl ? `<input type="color" data-act="pichlcol" value="${esc(p.hl.color || "#2196f3")}">` : ""}</span></label>
+      <label class="fl">Highlight <span style="display:flex;gap:8px;align-items:center"><select data-act="pichl">${[["", "None"], ["glow", "Glow (still)"], ["breathing", "Breathing glow (animated)"], ["flow", "Flow: a light runs around (animated)"], ["tint", "Tint (a second colour)"]].map(([v, l]) => `<option value="${v}" ${(((p.hl || {}).look === "pulse" ? "breathing" : (p.hl || {}).look) || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>${p.hl ? `<input type="color" data-act="pichlcol" value="${esc(p.hl.color || "#2196f3")}">` : ""}</span></label>
       ${p.hl ? `<span style="font-size:12px;color:var(--df-sec)">Shown on top of its look. What turns it on (a car charging, a washer running…) is picked in the card: Edit markers → Live → Highlight when.</span>` : ""}
       <span style="display:flex;gap:6px">${p.looks ? `<button class="btn" data-act="piclookreset">Reset looks</button>` : ""}<button class="btn" data-act="picoff">Remove picture</button></span></div>`;
   }
@@ -3425,8 +3451,8 @@ class DeviceFloorplanPanel extends HTMLElement {
     });
   }
 
-  _shape(id) {
-    const lead = this._bondLeader(id);
+  _shape(id, exact = false) {
+    const lead = exact ? id : this._lightLead(id);
     const pos = this.work.positions[lead];
     if (!pos) return null;
     const lamp = this._isLamp(id);
@@ -3448,7 +3474,8 @@ class DeviceFloorplanPanel extends HTMLElement {
       s.ty = anc ? anc.y : 50;
     }
     if (s.type === "panel" && s.h == null) s.h = s.w * this._ratio();
-    return { ...s, x: pos.x, y: pos.y, auto: !pos.light, lead };
+    // 0.12.6: a light shape can have its own centre (cx / cy), else the marker's place.
+    return { ...s, x: Number.isFinite(s.cx) ? s.cx : pos.x, y: Number.isFinite(s.cy) ? s.cy : pos.y, auto: !pos.light, lead };
   }
 
   /** 0.8.2: where "Snap to wall" puts a marker: on the nearest edge of the Room it is in (else the nearest Room),
@@ -4078,8 +4105,14 @@ class DeviceFloorplanPanel extends HTMLElement {
 
   /** Handles for the selected light's shape (drag on the plan). */
   _shapeHandles(s) {
-    const R = this._ratio();
     if (!s || s.type === "none") return "";
+    // 0.12.6: every light shape can be moved away from its marker (to where the lamp hangs).
+    const c = ["bulb", "spot", "strip", "panel", "wall"].includes(s.type) ? `<span class="lhd lc" data-lh="c" data-x="${s.x}" data-y="${s.y}" title="Drag: where the light is"></span>` : "";
+    return c + this._shapeHandles0(s);
+  }
+
+  _shapeHandles0(s) {
+    const R = this._ratio();
     if (s.type === "strip") return `<span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag the end of the strip"></span>`;
     if (s.type === "line") return `<span class="lhd" data-lh="start" data-x="${s.x1}" data-y="${s.y1}" title="Drag: one end of the machine"></span><span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag: the other end of the machine"></span>`;
     if (s.type === "screen") return `<span class="lhd" data-lh="start" data-x="${s.x1}" data-y="${s.y1}" title="Drag: one end of the screen"></span><span class="lhd" data-lh="end" data-x="${s.x2}" data-y="${s.y2}" title="Drag: the other end of the screen"></span>`;
@@ -4131,11 +4164,20 @@ class DeviceFloorplanPanel extends HTMLElement {
     let size = "";
     if (s.type === "panel") size = `<label>Width <input id="lightw" inputmode="decimal" value="${v(s.w)}"></label><label>Height <input id="lighth" inputmode="decimal" value="${v((s.h / this._ratio()))}"></label>${u}`;
     else if (s.type !== "none") size = `<label>${s.type === "strip" ? "Glow width" : "Radius"} <input id="lightr" inputmode="decimal" value="${v(s.r)}"></label>${u}`;
-    return `<div class="lsec"><div class="lh">💡 Light on the plan<small>${s.auto ? "automatic" : "set by you"}</small></div>
+    // 0.12.6: a bond of lamps: one light for the whole bond (default) or one per lamp, each at its own place.
+    const bd = this._bondOf(d.id);
+    const lampsOf = bd ? bd[1].filter((m) => this.work.positions[m]) : [];
+    const lead = this._lightLead(d.id);
+    const mName = (m) => (this.byId.get(m) || {}).name || m;
+    const bondRow = bd && lampsOf.length > 1
+      ? `<div class="lchips"><button class="${this._lampMode(d.id) ? "" : "on"}" data-act="bondlights" data-v="">One light for the whole bond</button><button class="${this._lampMode(d.id) ? "on" : ""}" data-act="bondlights" data-v="lamp">One light per lamp</button></div>
+        ${this._lampMode(d.id) ? `<div class="lchips">${lampsOf.map((m) => { const t = (this.work.positions[m].light || {}).type; return `<button class="${m === lead ? "on" : ""}" data-act="lampof" data-m="${esc(m)}">${esc(mName(m))}: ${esc(t ? (types.find((x) => x[0] === t) || [t, t])[1] : "Bulb")}</button>`; }).join("")}</div>` : ""}`
+      : "";
+    return `<div class="lsec"><div class="lh">💡 Light on the plan<small>${s.auto ? "automatic" : "set by you"}</small></div>${bondRow}
       <div class="lchips">${types.map(([k, l]) => `<button class="${s.type === k && !(s.auto && k !== "bulb") ? "on" : ""}" data-act="lighttype" data-type="${k}">${l}</button>`).join("")}</div>
       ${size ? `<div class="lsz">${size}</div>` : ""}
       ${s.type === "none" ? "" : this._lightColourHtml(s)}
-      <div style="font-size:12px;color:var(--df-sec)">${s.type === "none" ? "No light pool on the card." : "Drag the orange handle on the plan. The card draws a soft light pool here when the light is on."}${this._bondOf(d.id) ? " One shape for the whole bond." : ""}</div></div>`;
+      <div style="font-size:12px;color:var(--df-sec)">${s.type === "none" ? "No light pool on the card." : "Drag the orange handle on the plan. The card draws a soft light pool here when the light is on."}${this._bondOf(d.id) ? (this._lampMode(d.id) ? " Each lamp has its own light; it glows while that lamp is on." : " One light for the whole bond.") : ""}</div></div>`;
   }
 
   _extraCtlHtml() {
@@ -4154,13 +4196,13 @@ class DeviceFloorplanPanel extends HTMLElement {
   _lightSvg() {
     if (!this.work) return "";
     const s = this.s;
-    const lights = Object.keys(this.work.positions).filter((id) => this.byId.get(id) && !this.skipped.has(id) && this._bondLeader(id) === id && this._isLight(id));
+    const lights = Object.keys(this.work.positions).filter((id) => this.byId.get(id) && !this.skipped.has(id) && (this._bondLeader(id) === id || this._lampMode(id)) && this._isLight(id));
     let out = "";
     if (s.nightPrev) {
       const R = this._ratio();
       out += `<defs><radialGradient id="lglow"><stop offset="0" stop-color="rgb(255,196,120)" stop-opacity=".95"/><stop offset=".55" stop-color="rgb(255,180,90)" stop-opacity=".45"/><stop offset="1" stop-color="rgb(255,170,80)" stop-opacity="0"/></radialGradient></defs><rect x="0" y="0" width="1000" height="1000" fill="rgba(10,16,38,.72)"/>`;
       for (const id of lights) {
-        const sh = this._shape(id);
+        const sh = this._shape(id, this._lampMode(id));
         if (!sh || ["none", "screen", "drum", "line"].includes(sh.type)) continue;
         const ells = sh.type === "strip" ? [0, 1, 2, 3, 4].map((i) => ({ x: sh.x + ((sh.x2 - sh.x) * i) / 4, y: sh.y + ((sh.y2 - sh.y) * i) / 4, rx: sh.r, ry: sh.r * R }))
           : sh.type === "panel" ? [{ x: sh.x, y: sh.y, rx: sh.w * 0.8, ry: sh.h * 0.8 }]
@@ -4169,9 +4211,12 @@ class DeviceFloorplanPanel extends HTMLElement {
         for (const e of ells) out += `<ellipse cx="${e.x * 10}" cy="${e.y * 10}" rx="${e.rx * 10}" ry="${e.ry * 10}" fill="url(#lglow)" style="mix-blend-mode:screen"/>`;
       }
     }
-    const selLead = s.sel && this.work.positions[s.sel] && this._isLight(s.sel) ? this._bondLeader(s.sel) : null;
-    if (s.layers.lightshapes === true) for (const id of lights) if (id !== selLead) out += this._shapeSvg(this._shape(id), "");
-    if (selLead) out += this._shapeSvg(this._shape(selLead), "sel");
+    const selLead = s.sel && this.work.positions[s.sel] && this._isLight(s.sel) ? this._lightLead(s.sel) : null;
+    // 0.12.6: a per-lamp bond shows all its lamps' shapes while selected.
+    const mates = selLead && this._lampMode(s.sel) ? (this._bondOf(s.sel) || [null, []])[1].filter((m) => m !== selLead && this.work.positions[m]) : [];
+    if (s.layers.lightshapes === true) for (const id of lights) if (id !== selLead && !mates.includes(id)) out += this._shapeSvg(this._shape(id, this._lampMode(id)), "");
+    for (const m of mates) out += this._shapeSvg(this._shape(m, true), "");
+    if (selLead) out += this._shapeSvg(this._shape(selLead, true), "sel");
     if (s.sel && this.work.positions[s.sel] && this._climateEnt(s.sel) && this._canCool(this._climateEnt(s.sel))) out += this._airSvg(this._air(s.sel), true);
     // 0.7.0: openings (doors, windows, shutters): all faint, the selected one bold.
     for (const id of Object.keys(this.work.positions)) {
@@ -4783,6 +4828,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (act === "pichl" || act === "pichlcol") {
       const pos = this.work.positions[this._bodyId(this.s.sel)];
       if (!pos || !pos.pic) return;
+      if (act === "pichl") this.s.picPrev = t.value ? "hl" : "on"; // 0.12.6: show what was just picked
       return this._change(() => {
         if (act === "pichl") {
           if (t.value) pos.pic.hl = { look: t.value, color: (pos.pic.hl || {}).color || "#2196f3" };
@@ -4793,6 +4839,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     if (act === "piclook" || act === "picnum" || act === "pictint" || act === "pictinton") {
       const pos = this.work.positions[this._bodyId(this.s.sel)];
       if (!pos || !pos.pic) return;
+      if (act === "piclook") this.s.picPrev = t.dataset.k; // 0.12.6: preview the state whose look changed
       return this._change(() => {
         const p = pos.pic;
         if (act === "piclook") {
@@ -4851,7 +4898,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (t.id === "lightk" || t.id === "lighthex") {
-      const lead = this._bondLeader(this.s.sel);
+      const lead = this._lightLead(this.s.sel);
       const pos = this.work.positions[lead];
       if (!pos) return;
       const cur = this._shape(lead);
@@ -4861,7 +4908,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (t.id === "lightr" || t.id === "lightw" || t.id === "lighth") {
-      const lead = this._bondLeader(this.s.sel);
+      const lead = this._lightLead(this.s.sel);
       const pos = this.work.positions[lead];
       const v = parseFloat(String(t.value).replace(",", "."));
       if (!pos || !(v > 0)) return this._render();
@@ -4880,7 +4927,7 @@ class DeviceFloorplanPanel extends HTMLElement {
       return;
     }
     if (t.id === "lighta") {
-      const lead = this._bondLeader(this.s.sel);
+      const lead = this._lightLead(this.s.sel);
       const pos = this.work.positions[lead];
       const v = parseFloat(String(t.value).replace(",", "."));
       if (!pos || !(v >= 0)) return this._render();
@@ -5539,7 +5586,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         break;
       }
       case "lightauto": {
-        const lead = this._bondLeader(s.sel);
+        const lead = this._lightLead(s.sel);
         const pos = this.work.positions[lead];
         if (pos && pos.light) this._change(() => delete pos.light.color);
         break;
@@ -5674,6 +5721,24 @@ class DeviceFloorplanPanel extends HTMLElement {
         if (bp && bp.pic) this._change(() => delete bp.pic.looks);
         break;
       }
+      case "bondlights": {
+        const b = this._bondOf(s.sel);
+        if (!b) break;
+        const meta = { ...this._bondMeta(b[0]) };
+        if (el.dataset.v === "lamp") meta.lights = "lamp";
+        else delete meta.lights;
+        s.lampOf = null;
+        this._change(() => (this.work.bond_meta = { ...(this.work.bond_meta || {}), [b[0]]: meta }));
+        break;
+      }
+      case "lampof":
+        s.lampOf = el.dataset.m;
+        this._render();
+        break;
+      case "picprev":
+        this.s.picPrev = el.dataset.v || "on";
+        this._render();
+        break;
       case "picgrid":
         this.s.picGrid = !this.s.picGrid;
         this._render();
@@ -5830,7 +5895,7 @@ class DeviceFloorplanPanel extends HTMLElement {
         break;
       }
       case "lighttype": {
-        const lead = this._bondLeader(s.sel);
+        const lead = this._lightLead(s.sel);
         const pos = this.work.positions[lead];
         if (!pos) break;
         const t = el.dataset.type;
@@ -6057,6 +6122,20 @@ class DeviceFloorplanPanel extends HTMLElement {
   }
 
   /** The member that carries the bond's marker (first one on the plan). */
+  /** 0.12.6: a bond set to "One light per lamp" (else one light for the whole bond). */
+  _lampMode(id) {
+    const b = this._bondOf(id);
+    return !!b && this._bondMeta(b[0]).lights === "lamp";
+  }
+
+  /** 0.12.6: whose light shape is edited: the lamp picked in the bond panel (per lamp), else the bond's leader. */
+  _lightLead(id) {
+    const b = this._bondOf(id);
+    if (!b || !this._lampMode(id)) return this._bondLeader(id);
+    const ok = (m) => m && b[1].includes(m) && this.work.positions[m];
+    return ok(this.s.lampOf) ? this.s.lampOf : b[1].find((m) => this.work.positions[m]) || id;
+  }
+
   _bondLeader(id) {
     const b = this._bondOf(id);
     if (!b) return id;
@@ -6454,7 +6533,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     else if (!modal && e.target.closest("[data-ah]")) this._gesture = { kind: "ah", which: e.target.closest("[data-ah]").dataset.ah, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-oh]")) this._gesture = { kind: "oh", which: e.target.closest("[data-oh]").dataset.oh, id: this.s.sel, start, moved: false, snap: this._snap() };
     else if (!modal && e.target.closest("[data-th]")) this._gesture = { kind: "th", id: this._bodyId(this.s.sel), start, moved: false, snap: this._snap() };
-    else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._bondLeader(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
+    else if (lhd) this._gesture = { kind: "lh", which: lhd.dataset.lh, id: this._lightLead(this.s.sel), el: lhd, start, moved: false, snap: this._snap() };
     else if (phm) this._gesture = { kind: "ph", id: phm.dataset.ph, el: phm, start, moved: false, snap: this._snap() };
     else if (mk) this._gesture = { kind: "mk", id: mk.dataset.mk, el: mk, start, moved: false, snap: this._snap() };
     else if (cl) this._gesture = { kind: "cluster", id: cl.dataset.cluster, start, moved: false };
@@ -6606,11 +6685,12 @@ class DeviceFloorplanPanel extends HTMLElement {
       const cur = this._shape(g.id);
       const R = this._ratio();
       const l = { ...(pos.light || {}), type: cur.type };
-      if (g.which === "r") l.r = Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R));
+      if (g.which === "c") Object.assign(l, { cx: Math.round(p.x * 1000) / 1000, cy: Math.round(p.y * 1000) / 1000, r: l.r ?? cur.r }); // 0.12.6
+      if (g.which === "r") l.r = Math.max(0.5, Math.hypot(p.x - cur.x, (p.y - cur.y) / R));
       if (g.which === "end") Object.assign(l, { x2: p.x, y2: p.y, r: l.r ?? cur.r }, ["screen", "line"].includes(cur.type) ? { x1: l.x1 ?? cur.x1, y1: l.y1 ?? cur.y1 } : {});
       if (g.which === "start") Object.assign(l, { x1: p.x, y1: p.y, x2: l.x2 ?? cur.x2, y2: l.y2 ?? cur.y2, r: l.r ?? cur.r });
-      if (g.which === "corner") Object.assign(l, { w: Math.max(1, Math.abs(p.x - pos.x) * 2), h: Math.max(1, Math.abs(p.y - pos.y) * 2) });
-      if (g.which === "wall") Object.assign(l, { r: Math.max(0.5, Math.hypot(p.x - pos.x, (p.y - pos.y) / R)), a: Math.round((Math.atan2((p.y - pos.y) / R, p.x - pos.x) * 180) / Math.PI) });
+      if (g.which === "corner") Object.assign(l, { w: Math.max(1, Math.abs(p.x - cur.x) * 2), h: Math.max(1, Math.abs(p.y - cur.y) * 2) });
+      if (g.which === "wall") Object.assign(l, { r: Math.max(0.5, Math.hypot(p.x - cur.x, (p.y - cur.y) / R)), a: Math.round((Math.atan2((p.y - cur.y) / R, p.x - cur.x) * 180) / Math.PI) });
       pos.light = l;
       this._renderOverlay();
       return;

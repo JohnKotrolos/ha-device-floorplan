@@ -1088,6 +1088,7 @@ def build_plan_payload(
             **({"icon": meta["icon"]} if meta.get("icon") else {}),
             **({"tap": meta["tap"]} if meta.get("tap") else {}),
             **({"show": meta["show"]} if meta.get("show") else {}),
+            **({"lights": meta["lights"]} if meta.get("lights") == "lamp" else {}),  # 0.12.6: one light per lamp
             "members": placed,
             "names": [(devices.get(m) or entities_out.get(m[7:]))["name"] for m in placed],
             "entities": mains,
