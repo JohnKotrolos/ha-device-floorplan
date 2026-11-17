@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.6).
+ * Device Floorplan – dashboard card (v0.12.7).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.6";
+const CARD_VERSION = "0.12.7";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -7718,7 +7718,9 @@ ${reset}
       reads = picked || [...(s.ents || []), ...(s.also || []), ...(item.entities || [])];
       // 0.11.1: a bond lists every member (its leading one too); each row opens that member's details.
       if (s.phantom || item.bond) lead = null; // a phantom has no one leading entity: all its sensors are listed
-      if (item.bond && !picked) reads = [...(item.entities || []), ...(s.also || [])];
+      // 0.12.7: a bond always lists all its parts, then the picked "Also show" lines.
+      if (item.bond) reads = [...(item.entities || []), ...(picked || s.also || [])];
+      else if (s.phantom && picked) reads = [...(s.ents || []), ...picked];
       toggles = this._infoToggles(item.bond ? { ...s, ents: item.entities || [] } : s);
       open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
       anchor = `[data-k="${CSS.escape(s.key)}"]`;
@@ -7831,9 +7833,7 @@ ${reset}
   _lookHere(s) {
     if (!s || !s.item || this._overlay !== "live" || s.type === "net") return false;
     const b = this._bodyOf(s.item);
-    if (b && b.touch) return true;
-    const lt = s.item.light && s.item.light.type;
-    return !!(lt && lt !== "none" && !["drum", "line", "screen"].includes(lt) && s.kind === "light" && s.on);
+    return !!(b && b.touch); // 0.12.7: a light shape is not a look (Live's "Lights as" decides for lamps)
   }
 
   /** Does a picture stand for this item (itself or its bond)? Its marker is then not drawn in Live. */
@@ -8325,6 +8325,7 @@ const MP_CSS = `
 .mp .mpc.hidden, .mp .mpc.off { opacity:.55; text-decoration: line-through; }
 .mp .mpc.cur { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); border-color: var(--primary-color, #03a9f4); opacity:1; text-decoration:none; }
 .mp h5 { margin:10px 0 4px; font-size:15px; font-weight:600; }
+.mp .mpfor { margin:6px 0 2px; font-size:13px; color: var(--secondary-text-color); }
 .mp .mpr { display:block; padding:7px 0; border-bottom:1px solid var(--divider-color, rgba(0,0,0,.08)); }
 .mp .mpr.mpsw { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; }
 .mp .mpl { display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
@@ -8478,8 +8479,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     this._hass = hass;
     if (first) this._render();
     else this.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
-    // 0.8.1: Edit markers works on the values from when it opened (nothing redraws or blinks while editing).
-    if (this._big) this._big.wrap.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
+    // 0.12.7: the Card Editor window's card gets live states (its preview acts like the card); the settings
+    // column is not redrawn (only its fields get the new hass).
+    if (this._big) {
+      this._big.wrap.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
+      if (this._big.card) this._big.card.hass = hass;
+    }
   }
 
   connectedCallback() {
@@ -9992,10 +9997,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     root.innerHTML = `<style>${MP_CSS}</style><div class="mpchips">${avail.map((o) => `<button class="mpc ${stOf(o)} ${o === ov ? "cur" : ""}" data-ov="${cesc(o)}" title="${cesc(`${labelOf(o)}: ${ST[stOf(o)]}`)}"><ha-icon icon="${cesc((eng._ovDef(o) || {}).icon || "mdi:layers")}"></ha-icon>${cesc(labelOf(o))}</button>`).join("") || `<p class="mpn">No overlay on this card shows this device.</p>`}</div>`;
     for (const b of root.querySelectorAll("[data-ov]")) b.addEventListener("click", () => pickOv(b.dataset.ov));
     // A sentence: label, the current value (with "automatic"), and its control under it.
-    const row = (label, value, auto, ctrl) => {
+    // 0.12.7: dd = a drop-down under it shows the value, so the label line keeps only the "automatic" tag.
+    const row = (label, value, auto, ctrl, dd = false) => {
       const r = document.createElement("div");
       r.className = "mpr";
-      r.innerHTML = `<div class="mpl"><span class="mpk">${cesc(label)}</span><span class="mpv">${value}${auto ? ` <small>automatic</small>` : ""}</span></div>`;
+      r.innerHTML = `<div class="mpl"><span class="mpk">${cesc(label)}</span><span class="mpv">${dd ? "" : value}${auto ? ` <small>automatic</small>` : ""}</span></div>`;
       if (ctrl) r.appendChild(ctrl);
       return r;
     };
@@ -10006,11 +10012,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const st = stOf(ov);
       const lbl = labelOf(ov);
       const shown = st === "shown" || st === "added";
-      sec.insertAdjacentHTML("beforeend", `<h5>In ${cesc(lbl)}</h5>`);
+      sec.insertAdjacentHTML("beforeend", `<p class="mpfor">These settings are for <b>${cesc(lbl)}</b> only</p>`);
       // 1. Show in this overlay.
       const sw = document.createElement("label");
       sw.className = "mpr mpsw";
-      sw.innerHTML = `<span class="mpk">Show in ${cesc(lbl)} <small>${st === "added" || st === "off" ? "(you add it)" : `(${cesc(lbl)} shows it by itself)`}</small></span><ha-switch></ha-switch>`;
+      sw.innerHTML = `<span class="mpk">Show here <small>${st === "added" || st === "off" ? "(you add it)" : `(${cesc(lbl)} shows it by itself)`}</small></span><ha-switch></ha-switch>`;
       const hs = sw.querySelector("ha-switch");
       hs.checked = shown;
       hs.addEventListener("change", () => {
@@ -10028,9 +10034,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     // On every overlay: name, the value of several sensors, temperatures for Comfort.
     const all = document.createElement("details");
     all.className = "mpall";
-    all.open = !!this._mpAllOpen;
-    all.addEventListener("toggle", () => (this._mpAllOpen = all.open));
-    all.innerHTML = `<summary>On every overlay</summary>`;
+    all.innerHTML = `<summary>For all overlays</summary>`;
     root.appendChild(all);
     all.appendChild(this._form([{ name: "name", selector: { text: {} } }], { name: dev().name || "" }, { name: `Name on the card (automatic: ${item.name})` }, (v) => {
       this._saveDev(id, { name: v.name });
@@ -10060,6 +10064,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         saved();
       }));
     }
+    // 0.12.7: open when it holds only the name; folded (as you left it) when there is more.
+    all.open = all.querySelectorAll("ha-form").length <= 1 || !!this._mpAllOpen;
+    all.addEventListener("toggle", () => (this._mpAllOpen = all.open));
   }
 
   /** 0.12.6: the settings of one shown overlay, in reading order. */
@@ -10084,7 +10091,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         const x0 = per().extras;
         this._savePer(id, ov, { lead: e || "", ...(Array.isArray(x0) ? { extras: x0.filter((x) => x !== e) } : {}) });
         done();
-      } })));
+      } }), true));
     }
     // Bonds: on if any is on, or how many.
     if (item.bond) {
@@ -10095,7 +10102,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._savePer(id, ov, { show: s.value });
         done();
       });
-      sec.appendChild(row("Counts as on", cur === "count" ? "how many are on (2 of 3)" : "if any is on", !p0.show, s));
+      sec.appendChild(row("Counts as on", "", !p0.show, s, true));
     }
     // 3. Shown as: its own look (picture, chip, touch area, light) or, without one, an icon.
     const body = eng._bodyOf(item);
@@ -10103,10 +10110,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (picE) looks.push("picture");
     if (sp && sp.type === "chip") looks.push(sp.rd ? "chip with its values" : "chip");
     if (ov === "live" && body && body.touch && !picE) looks.push("touch area");
-    const lt = item.light && item.light.type;
-    if (ov === "live" && lt && lt !== "none" && !["drum", "line", "screen"].includes(lt)) looks.push("its light (while on)");
+    // 0.12.7: lamps follow the overlay's "Lights as" (glow only = no icon); a light shape is not a look.
+    const glowOnly = !!(sp && sp.kind === "light" && eng._glowOnly(ov) && !looks.length);
+    if (glowOnly) looks.push("its glow (Lights as: Glow)");
     const legacyOff = !!p0.noicon;
-    const iconDrawn = !picE && !camE && !(sp && sp.type === "chip") && !legacyOff && !(ov === "live" && body && body.touch);
+    const iconDrawn = !picE && !camE && !glowOnly && !(sp && sp.type === "chip") && !legacyOff && !(ov === "live" && body && body.touch);
     const shownAs = looks.length ? looks.join(" + ") : "an icon";
     const iconBox = document.createElement("div");
     if (iconDrawn || (sp && sp.type === "chip" && sp.cl2)) {
@@ -10122,7 +10130,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         done();
       });
     }
-    const lookTxt = looks.length && looks.some((l) => /light/.test(l)) && !looks.some((l) => /touch|picture|chip/.test(l)) ? `${shownAs}; an icon while off` : looks.length ? `${shownAs} <small>(no icon)</small>` : legacyOff ? "nothing but its readings <small>(icon hidden)</small>" : "an icon";
+    const lookTxt = legacyOff ? (looks.length ? shownAs : "its readings only") : looks.length && !glowOnly ? `${shownAs} <small>(no icon)</small>` : shownAs;
     sec.appendChild(row("Shown as", lookTxt, false, iconBox.childNodes.length ? iconBox : null));
     // 4. Also shows: the real lines, with their values, where they are drawn.
     if (!picE || ov !== "live") this._mpExtras(sec, row, { item, id, ov, per, eng, T, sp, camE, done, saved });
@@ -10137,7 +10145,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           this._savePer(id, "live", { popup: s.value === "1" ? "" : "off" });
           done();
         });
-        sec.appendChild(row("Shows the picture", pops ? "when something happens" : "only with Layers → Cameras", pops, s));
+        sec.appendChild(row("Shows the picture", "", pops, s, true));
       }
       if (!picE && (!camE || (p0.popup !== "off" && p0.popup !== false))) {
         const autoT = !p0.when ? eng._liveWhen(item) : null;
@@ -10148,7 +10156,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           this._savePer(id, "live", { when: e || "" });
           done();
         } });
-        sec.appendChild(row(camE ? "Triggered by" : "Shows in Live", cur ? `when ${cesc(T.short(cur))} is on <small>(${cesc(T.val(cur))})</small>` : cesc(auto), !cur, ctl));
+        sec.appendChild(row("When it shows", "", !cur, ctl, true));
       }
       if (picE) sec.appendChild(this._picBox(item, id, p0, done));
       if (!picE && !item.phantom && !camE && (TOGGLE_DOMAINS.has(domainOf(item.main_entity || "")) || item.bond)) {
@@ -10161,7 +10169,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           done();
         });
         const W = { hidden: "hidden", faint: "faint", shown: "shown" };
-        sec.appendChild(row("When it is off", W[cur] || (added ? "shown" : card === "faint" ? "faint" : "hidden"), !cur, s));
+        sec.appendChild(row("When it is off", W[cur] || "", !cur, s, true));
       }
       if (eng._applOf(item)) {
         sec.appendChild(this._form([
@@ -10264,24 +10272,32 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const say = (w) => W[w] || w;
     const mk = (key, pre, opts, cur, words, isHold) => {
       const box = document.createElement("div");
-      const schema = [{ name: "a", selector: { select: { options: opts, mode: "dropdown" } } }];
       const src = robot && !isHold ? dev() : { ...dev(), ...p0 };
-      if (cur === "navigate") schema.push({ name: "nav", selector: { navigation: {} } });
-      if (cur === "popup") schema.push({ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } });
-      box.appendChild(this._form(schema, { a: cur || "default", nav: src[`${pre}nav`] || "", popup_title: src[`${pre}popup_title`] || "", popup_card: src[`${pre}popup_card`] }, { a: isHold ? "Long press" : robot ? "Tap (on every overlay)" : "Tap", nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => {
-        const act = v.a === "default" ? "" : v.a;
-        const extra = { [`${pre}nav`]: act === "navigate" ? v.nav || "" : "", [`${pre}popup_title`]: act === "popup" ? v.popup_title || "" : "", [`${pre}popup_card`]: act === "popup" ? v.popup_card || null : null };
+      const save = (act, v = {}) => {
+        const pick = (k, dflt) => (k in v ? v[k] : src[`${pre}${k}`] ?? dflt);
+        const extra = { [`${pre}nav`]: act === "navigate" ? pick("nav", "") : "", [`${pre}popup_title`]: act === "popup" ? pick("popup_title", "") : "", [`${pre}popup_card`]: act === "popup" ? pick("popup_card", null) : null };
         if (robot && !isHold) this._saveDev(id, { [key]: act, ...extra });
         else this._savePer(id, ov, { [key]: act, ...extra });
+      };
+      // 0.12.7: a plain drop-down like the others; "Automatic (what it does)".
+      const sel = document.createElement("select");
+      sel.innerHTML = opts.map((o) => `<option value="${cesc(o.value)}" ${(cur || "default") === o.value ? "selected" : ""}>${cesc(o.value === "default" ? `Automatic (${say(words)})` : o.label)}</option>`).join("");
+      sel.addEventListener("change", () => {
+        save(sel.value === "default" ? "" : sel.value);
         done();
-      }));
-      sec.appendChild(row(isHold ? "Long press" : "Tap", cesc(say(words)), !cur, box));
+      });
+      box.appendChild(sel);
+      if (cur === "navigate" || cur === "popup") {
+        const schema = cur === "navigate" ? [{ name: "nav", selector: { navigation: {} } }] : [{ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } }];
+        box.appendChild(this._form(schema, { nav: src[`${pre}nav`] || "", popup_title: src[`${pre}popup_title`] || "", popup_card: src[`${pre}popup_card`] }, { nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => save(cur, v)));
+      }
+      sec.appendChild(row(isHold ? "Long press" : robot ? "Tap (all overlays)" : "Tap", "", !cur, box, true));
     };
     const tcur = (robot ? dev().tap : p0.tap || dev().tap) || "";
-    const topts = robot ? [{ value: "default", label: "Automatic (robot panel)" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "Automatic (as set for its kind)" }, ...TAP_OPTIONS];
+    const topts = robot ? [{ value: "default", label: "" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "" }, ...TAP_OPTIONS];
     mk("tap", "", topts, tcur, tapW, false);
     const hcur = p0.hold || dev().hold || "";
-    const hopts = [{ value: "default", label: "Automatic (as set for its kind)" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }];
+    const hopts = [{ value: "default", label: "" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }];
     mk("hold", "hold_", hopts, hcur, holdW, true);
     sec.insertAdjacentHTML("beforeend", `<p class="mpn">Try them on the plan: a tap or long press there does the real thing.</p>`);
   }
@@ -10439,7 +10455,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           else rows.off.push(it);
         }
         for (const k of Object.keys(rows)) rows[k].sort((x, y) => name(x).localeCompare(name(y), undefined, { sensitivity: "base" }));
-        const hideBtn = (it) => (sel === it.id && rows.on.includes(it) ? `<button class="lb" data-hide="${cesc(it.id)}">Hide in ${cesc(def ? def.label : "")}</button>` : "");
+        const hideBtn = () => ""; // 0.12.7: the "Show here" switch in the settings does it
         const closeBtn = (it) => (sel === it.id ? `<button class="bg-c2" data-unpick="1" aria-label="Close">✕</button>` : "");
         const row = (it, btn) => `<div class="lr ${sel === it.id ? "sel" : ""}" data-id="${cesc(it.id)}"><button class="lnm" data-pick="${cesc(it.id)}">${((this._config.devices || {})[it.id] || {}).icon ? `<ha-icon class="lic" icon="${cesc(this._config.devices[it.id].icon)}"></ha-icon>` : it.main_entity ? `<ha-state-icon class="lic" data-ent="${cesc(it.main_entity)}"></ha-state-icon>` : `<ha-icon class="lic" icon="mdi:devices"></ha-icon>`}${cesc(name(it))}${it.bond ? " <small>(bonded)</small>" : it.phantom ? " <small>(phantom)</small>" : ""}</button>${btn}${hideBtn(it)}${closeBtn(it)}</div>`;
         const custom = def && def.custom;
