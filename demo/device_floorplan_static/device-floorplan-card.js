@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.7).
+ * Device Floorplan – dashboard card (v0.12.8).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.7";
+const CARD_VERSION = "0.12.8";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -7037,7 +7037,25 @@ ${reset}
     const k = s.type === "chip" && s.kind === "reading" ? "reading" : tapKind(s.kind);
     const act = taps[k] || "more-info";
     if (act === "toggle" && !s.ents.some((e) => TOGGLE_DOMAINS.has(domainOf(e)))) return "more-info";
+    // 0.12.8: Health is for checking (batteries, connections): a tap there opens details, it never switches.
+    if (act === "toggle" && this._overlay === "health") return "more-info";
     return act;
+  }
+
+  /** 0.12.8: the device's own word for "active": a door is open, motion is detected, an appliance is running. */
+  _onWords(item, sp) {
+    const e = (sp && sp.eid) || item.main_entity;
+    const st = e && this._hass.states[e];
+    const dm = e ? domainOf(e) : "";
+    const dc = (st && st.attributes.device_class) || "";
+    if (this._applOf(item)) return "it's running";
+    if (dm === "cover" || ["door", "window", "opening", "garage_door", "garage"].includes(dc)) return "it's open";
+    if (["motion", "moving", "vibration"].includes(dc)) return "motion is detected";
+    if (["occupancy", "presence"].includes(dc)) return "someone is there";
+    if (dm === "media_player") return "it's playing";
+    if (dm === "lock") return "it's unlocked";
+    if (dm === "climate") return "it's running";
+    return "it's on";
   }
 
   /** Marker editing: ✕ on the selected marker hides it in this overlay (#108). */
@@ -9854,7 +9872,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       return [...new Set([hass.states[e].state, ...this._picVals[e]])].filter((v) => v != null && !["unavailable", "unknown", ""].includes(v));
     };
     const sentence = (title, eKey, vKey, def) => {
-      const e = p0[eKey] || "";
+      // 0.12.8: the picture has no "Follows" line: an entity picked there before (lead) is its "Shows as On when".
+      const e = p0[eKey] || (eKey === "when" ? p0.lead || "" : "");
       const ents = [...new Set([...own, ...(e ? [e] : [])])].sort((x, y) => short(x).localeCompare(short(y)));
       const opts = ents.map((x) => `<option value="${cesc(x)}" ${x === e ? "selected" : ""}>${cesc(short(x))} · ${cesc(val(x))}</option>`).join("");
       const cur = e || def || "";
@@ -9864,13 +9883,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const vsel = num0
         ? `<span class="pv">above <input type="number" data-pv="${vKey}" value="${cesc(v.startsWith(">") ? v.slice(1) : "")}" placeholder="0" style="width:6em"></span>`
         : `<select data-pv="${vKey}"><option value="">on / open / home… (automatic)</option>${vals.map((x) => `<option value="${cesc(x)}" ${x === v ? "selected" : ""}>${cesc(x)}</option>`).join("")}${v && !vals.includes(v) ? `<option value="${cesc(v)}" selected>${cesc(v)}</option>` : ""}</select>`;
-      const defName = def ? `${short(def)} · ${val(def)} (as it leads)` : "its own state (automatic)";
+      const defName = def ? `Automatic: ${short(def)} · ${val(def)}` : "Automatic: its own state";
       return `<div class="mpr pics"><span class="mpk">${title}</span>
         <select data-pe="${eKey}"><option value="">${eKey === "hl" ? "nothing (no highlight)" : cesc(defName)}</option><optgroup label="${cesc(devNames[0] || "This device")}">${opts}</optgroup><option value="__other">Another entity…</option></select>
         ${cur ? `<span class="pis">is</span>${vsel}` : ""}<div class="pother" data-po="${eKey}" hidden></div></div>`;
     };
-    box.innerHTML = `<div class="mpl"><span class="mpk"><b>Picture</b></span><span class="mpv"><small>its looks are set in the Floorplan Editor</small></span></div>
-      ${sentence("Shows as On when", "when", "when_on", p0.lead || "")}
+    box.innerHTML = `${sentence("Shows as On when", "when", "when_on", item.main_entity || "")}
       ${sentence("Highlight when", "hl", "hl_on", "")}
       ${p0.hl ? `<label class="mpr mpsw"><span class="mpk">Only while it is On</span><input type="checkbox" data-pany ${p0.hl_any ? "" : "checked"}></label>` : ""}`;
     const save = (patch) => {
@@ -9883,10 +9901,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (sel.value === "__other") {
         const po = box.querySelector(`[data-po="${k}"]`);
         po.hidden = false;
-        po.appendChild(this._form([{ name: "e", selector: { entity: {} } }], { e: "" }, { e: "Any entity" }, (v) => save({ [k]: v.e || "", [vk]: "" })));
+        po.appendChild(this._form([{ name: "e", selector: { entity: {} } }], { e: "" }, { e: "Any entity" }, (v) => save({ [k]: v.e || "", [vk]: "", ...(k === "when" ? { lead: "" } : {}) })));
         return;
       }
-      save({ [k]: sel.value, [vk]: "" });
+      save({ [k]: sel.value, [vk]: "", ...(k === "when" ? { lead: "" } : {}) }); // 0.12.8: one place decides
     });
     for (const el of box.querySelectorAll("[data-pv]")) el.addEventListener("change", () => {
       const k = el.dataset.pv;
@@ -10057,7 +10075,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         saved();
       }));
     }
-    const hasTemp = (item.entities || []).some((e) => kindOf(e, hass.states[e]) === "temperature");
+    const hasTemp = (item.entities || []).some((e) => kindOf(e, hass.states[e]) === "temperature" && !T.aux(e)); // 0.12.8
     if (hasTemp && !item.bond && !item.phantom) {
       all.appendChild(this._form([{ name: "comfort", selector: { boolean: {} } }], { comfort: !!dev().comfort }, { comfort: "Use its temperature in Comfort (even if it's a device's internal sensor)" }, (v) => {
         this._saveDev(id, { comfort: v.comfort });
@@ -10082,12 +10100,24 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     } catch (_e) {
       sp = null;
     }
-    // 2. Follows: a single device with several entities (a bond counts as on by its lamps; one entity: nothing to pick).
-    if (!item.bond && !item.phantom && !camE && T.cands.length > 1) {
-      const auto = sp && sp.eid && hass.states[sp.eid] && sp.eid !== p0.lead ? sp.eid : null;
+    // 2. Follows (0.12.8): only where the followed entity changes the marker (Live, Lights, Security, own overlays),
+    // only with a real choice, never a settings / technical entity. A picture says it in "Shows as On when".
+    const defO = eng._ovDef(ov) || {};
+    const follows = ["live", "lights", "security"].includes(ov) || !!defO.custom;
+    const fits = (e) => {
+      if (T.aux(e) || NO_VALUE.has(domainOf(e))) return false;
+      const dm = domainOf(e);
+      if (ov === "lights") return ["light", "switch"].includes(dm);
+      if (ov === "security") return ["binary_sensor", "lock", "cover", "alarm_control_panel", "camera"].includes(dm);
+      return dm !== "sensor" || READ_KIND.has(kindOf(e, hass.states[e]));
+    };
+    const fcands = T.cands.filter(fits);
+    const autoF = sp && sp.eid && hass.states[sp.eid] && !T.aux(sp.eid) ? sp.eid : null;
+    if (follows && !picE && !item.bond && !item.phantom && !camE && (fcands.length > 1 || (p0.lead && !fcands.includes(p0.lead))) && (autoF || p0.lead)) {
+      const auto = autoF && autoF !== p0.lead ? autoF : null;
       const cur = p0.lead || "";
       const val = cur ? `${cesc(T.short(cur))} · ${cesc(T.val(cur))}` : auto ? `${cesc(T.short(auto))} · ${cesc(T.val(auto))}` : "its own state";
-      sec.appendChild(row("Follows", val, !cur, this._entSelect(T, { cur, autoText: `Automatic${auto ? `: ${T.short(auto)} · ${T.val(auto)}` : ""}`, list: T.cands.filter((e) => !NO_VALUE.has(domainOf(e))), onPick: (e) => {
+      sec.appendChild(row("Follows", val, !cur, this._entSelect(T, { cur, autoText: `Automatic${auto ? `: ${T.short(auto)} · ${T.val(auto)}` : ""}`, list: fcands, onPick: (e) => {
         const x0 = per().extras;
         this._savePer(id, ov, { lead: e || "", ...(Array.isArray(x0) ? { extras: x0.filter((x) => x !== e) } : {}) });
         done();
@@ -10097,7 +10127,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (item.bond) {
       const cur = p0.show || item.show || "";
       const s = document.createElement("select");
-      s.innerHTML = `<option value="">if any lamp / part is on</option><option value="count" ${cur === "count" ? "selected" : ""}>how many are on (2 of 3)</option>`;
+      const part = eng._lampBond(item) ? "lamp" : "part"; // 0.12.8: "lamp" only for a bond of lamps
+      s.innerHTML = `<option value="">if any ${part} is on</option><option value="count" ${cur === "count" ? "selected" : ""}>how many are on (2 of 3)</option>`;
       s.addEventListener("change", () => {
         this._savePer(id, ov, { show: s.value });
         done();
@@ -10108,7 +10139,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const body = eng._bodyOf(item);
     const looks = [];
     if (picE) looks.push("picture");
-    if (sp && sp.type === "chip") looks.push(sp.rd ? "chip with its values" : "chip");
+    if (sp && sp.type === "chip") looks.push(sp.rd ? "chip with its values" : sp.cl2 ? "chip with its icon" : "chip");
     if (ov === "live" && body && body.touch && !picE) looks.push("touch area");
     // 0.12.7: lamps follow the overlay's "Lights as" (glow only = no icon); a light shape is not a look.
     const glowOnly = !!(sp && sp.kind === "light" && eng._glowOnly(ov) && !looks.length);
@@ -10130,7 +10161,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         done();
       });
     }
-    const lookTxt = legacyOff ? (looks.length ? shownAs : "its readings only") : looks.length && !glowOnly ? `${shownAs} <small>(no icon)</small>` : shownAs;
+    const withIcon = sp && sp.type === "chip" && sp.cl2;
+    const lookTxt = legacyOff ? (looks.length ? shownAs : "its value, without its icon") : looks.length && !glowOnly && !withIcon && !picE ? `${shownAs} <small>(no icon)</small>` : shownAs;
     sec.appendChild(row("Shown as", lookTxt, false, iconBox.childNodes.length ? iconBox : null));
     // 4. Also shows: the real lines, with their values, where they are drawn.
     if (!picE || ov !== "live") this._mpExtras(sec, row, { item, id, ov, per, eng, T, sp, camE, done, saved });
@@ -10150,7 +10182,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (!picE && (!camE || (p0.popup !== "off" && p0.popup !== false))) {
         const autoT = !p0.when ? eng._liveWhen(item) : null;
         const list = T.cands.filter((e) => !NO_VALUE.has(domainOf(e)) || domainOf(e) === "event");
-        const auto = camE ? (autoT ? `when ${T.short(autoT)} fires` : "nothing (no sensor of its own)") : added ? "always (you added it)" : "while it's on";
+        const auto = camE ? (autoT ? `when ${T.short(autoT)} fires` : "nothing (no sensor of its own)") : added ? "always (you added it)" : `while ${eng._onWords(item, sp)}`;
         const cur = p0.when || "";
         const ctl = this._entSelect(T, { cur, autoText: `Automatic: ${auto}`, list, onPick: (e) => {
           this._savePer(id, "live", { when: e || "" });
@@ -10191,9 +10223,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const p0 = per();
     const auto = eng._autoReads(item, ov);
     const extras = Array.isArray(p0.extras) ? p0.extras : null;
-    const listed = (extras || auto).filter((e) => !(camE && domainOf(e) === "camera"));
     const inMarker = new Set([...((sp && sp.ents) || []), sp && sp.eid, item.bond ? item.main_entity : null, ...(item.bond ? item.entities || [] : [])].filter(Boolean));
     const why = (e) => (!hass.states[e] ? "not shown: it no longer exists" : NO_VALUE.has(domainOf(e)) ? "not shown: it has no value (it is an action)" : inMarker.has(e) ? `not shown: already part of this ${item.bond ? "bond" : "marker"}` : "");
+    // 0.12.8: automatic = only what is drawn; your own picks that can't be drawn still say why.
+    const listed = (extras || auto.filter((e) => !why(e))).filter((e) => !(camE && domainOf(e) === "camera"));
     const box = document.createElement("div");
     box.className = "mpx";
     const xics = p0.extra_icons || {};
