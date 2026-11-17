@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.8).
+ * Device Floorplan – dashboard card (v0.12.9).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.8";
+const CARD_VERSION = "0.12.9";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1017,7 +1017,8 @@ function ambientTemp(eid, st, item) {
   if (/(device_temperature|internal_temperature|cpu_temperature|processor_temperature|chip_temperature|_temperature_internal)/i.test(eid)) return false;
   if (st && st.attributes && st.attributes.entity_category === "diagnostic") return false;
   if (item.standalone) return true;
-  return ["sensors", "climate", "computers", "motion"].includes(item.group);
+  // 0.12.9: no computers (a NAS's or printer's temperature is its own); "Use its temperature in Comfort" adds one.
+  return ["sensors", "climate", "motion"].includes(item.group);
 }
 
 function signalTone(eid, st) {
@@ -3196,8 +3197,12 @@ class DeviceFloorplanCard extends HTMLElement {
       if (!(ph.members || []).length) continue;
       const mem = ph.members.map((m) => [m, memberOf(m)]).filter((x) => x[1]);
       const byMember = {};
-      for (const [m, d] of mem) byMember[m] = d.entities || [d.main_entity];
-      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, value: ph.value || "average", one: ph.one, group: "phantoms" });
+      const mgroup = {};
+      for (const [m, d] of mem) {
+        byMember[m] = d.entities || [d.main_entity];
+        mgroup[m] = d.group || ""; // 0.12.9: which temperatures count as a room's (Comfort)
+      }
+      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms" });
     }
     return out;
   }
@@ -3218,9 +3223,10 @@ class DeviceFloorplanCard extends HTMLElement {
   _selSpec(item, ov, name) {
     const q = this._specsFor(item, ov, true).filter((x) => x && x.item);
     if (q.length) return q.slice(0, 1);
-    const e = item.main_entity;
-    const st = e && this._hass.states[e];
-    return e && st ? [this._liveSpec(item, name, e, st, kindOf(e, st), {})] : [];
+    if (ov === "health") return item.main_entity ? [this._offChip(item, name)] : []; // shows only when offline
+    // 0.12.9: as it would look once shown (added): as itself, never a settings / technical value.
+    const sp = this._asItself(item, name, this._addedLead(item));
+    return sp ? [this._withExtras(sp, item, ov)] : [];
   }
 
   _hidden(item, overlay) {
@@ -3473,7 +3479,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _robotMarker(s) {
     const pulse = ["error", "paused"].includes(s.state) && this._overlay !== "health" ? s.state : "";
     const badge = s.badge ? `<span class="rbg ${s.tone}">${cesc(s.badge)}</span>` : "";
-    return `<button class="m robot on ${pulse} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name} · ${s.tip}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${s.head != null ? `<i class="rhd" style="transform:rotate(${s.head.toFixed(1)}deg)"></i>` : ""}</span>${badge}<span class="tip">${cesc(s.name)}<span class="tst"> · ${cesc(s.tip)}</span></span></button>`;
+    return `<button class="m robot on ${pulse} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name} · ${s.tip}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${s.head != null ? `<i class="rhd" style="transform:rotate(${s.head.toFixed(1)}deg)"></i>` : ""}</span>${badge}<span class="tip">${cesc(s.name)}<span class="tst"> · ${cesc(s.tip)}</span></span></button>`;
   }
 
   /** 0.10: the robot panel (tap on a robot): state, last run, consumables, dock, and start / pause / dock. */
@@ -3571,7 +3577,7 @@ class DeviceFloorplanCard extends HTMLElement {
 
   /** 0.11 Live camera, layer 3: a small dot where the camera is (spread like any marker). */
   _camHtml(s) {
-    return `<button class="m camdot ${edgeCls(s.x, s.y, this._em)}" style="left:${s.x}%;top:${s.y}%;background:${this._camColor(s)}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(s.name)}"><span class="tip">${cesc(s.name)}</span></button>`;
+    return `<button class="m camdot ${edgeCls(s.x, s.y, this._em)}" style="left:${s.x}%;top:${s.y}%;background:${this._camColor(s)}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(s.name)}"><span class="tip">${cesc(s.name)}</span></button>`;
   }
 
   /** Layer 4, windows: camera pictures. Placed by _placeWins() after the markers, next to their dot. */
@@ -3911,8 +3917,10 @@ class DeviceFloorplanCard extends HTMLElement {
     const per = this._per(item, ov);
     // 0.12.6: only entities with a value (a button or an update has none) and not already part of the marker.
     const list = (Array.isArray(per.extras) ? per.extras : defaults).filter((e) => e && this._hass.states[e] && !NO_VALUE.has(domainOf(e)) && !(spec.ents || []).includes(e) && e !== spec.eid);
+    spec.core = [...(spec.ents || [])]; // 0.12.9: the marker's own entities, before its extra lines
     if (per.icon) spec.icon = per.icon;
     if (per.noicon) {
+      spec.icon0 = spec.icon;
       spec.icon = null;
       spec.noicon = true;
     }
@@ -4220,10 +4228,17 @@ class DeviceFloorplanCard extends HTMLElement {
     const icon = pick;
     if (ov === "comfort" || (custom && (custom.includes("temperature") || custom.includes("humidity")))) {
       const allT = kindsOf(ents, ["temperature"]);
-      const amb = allT.filter((e) => ambientTemp(e, hass.states[e], { standalone: true }));
+      // 0.12.9: a room temperature by the rule of the device it comes from (no plug's or NAS's own temperature).
+      const ownerOf = (e) => (item.members || []).find((m) => (item.byMember[m] || []).includes(e));
+      const room = (e) => {
+        const m = ownerOf(e);
+        const g = m && (item.mgroup || {})[m];
+        return g ? ambientTemp(e, hass.states[e], { group: g, standalone: false }) || this._dev(m).comfort === true : ambientTemp(e, hass.states[e], { standalone: true });
+      };
+      const amb = allT.filter(room);
       // #98: ACs and thermostats count with the temperature / humidity they report themselves.
       const clim = ents.filter((e) => domainOf(e) === "climate" && hass.states[e]);
-      const temps = [...(amb.length ? amb : allT), ...clim.filter((e) => hass.states[e].attributes.current_temperature != null)];
+      const temps = [...amb, ...clim.filter((e) => hass.states[e].attributes.current_temperature != null)];
       const hums = [...kindsOf(ents, ["humidity"]), ...clim.filter((e) => Number(hass.states[e].attributes.current_humidity) > 0).map((e) => `${e}#h`)];
       if (!temps.length && !hums.length) return [];
       if (q) return [{ key: item.id }];
@@ -4318,10 +4333,15 @@ class DeviceFloorplanCard extends HTMLElement {
   _healthSpecs(item, name, allowed, opts, q) {
     const hass = this._hass;
     const low = Number(opts.low ?? 20);
-    let bat = (item.roles && item.roles.battery && allowed.includes(item.roles.battery) && item.roles.battery) || allowed.find((eid) => kindOf(eid, hass.states[eid]) === "battery");
-    if (item.bond) {
+    // 0.12.9: automatically the device's own battery (HA lists it under Diagnostic); "Follows" picks another
+    // (a UPS's or a car's charge level).
+    const devBat = (eid) => kindOf(eid, hass.states[eid]) === "battery" && this._aux(eid);
+    const pickd = this._per(item, "health").lead;
+    const chosen = pickd && hass.states[pickd] ? pickd : null;
+    let bat = chosen || (item.roles && item.roles.battery && allowed.includes(item.roles.battery) && devBat(item.roles.battery) && item.roles.battery) || allowed.find(devBat);
+    if (item.bond && !chosen) {
       // A bond: the lowest battery of its members.
-      const bats = allowed.filter((eid) => kindOf(eid, hass.states[eid]) === "battery" && live(hass.states[eid]) && num(hass.states[eid].state));
+      const bats = allowed.filter((eid) => devBat(eid) && live(hass.states[eid]) && num(hass.states[eid].state));
       if (bats.length) bat = bats.sort((x, y) => Number(hass.states[x].state) - Number(hass.states[y].state))[0];
     }
     const unavailable = item.bond ? (item.entities || []).some((e) => (hass.states[e] || {}).state === "unavailable") : item.main_entity && devOffline(hass, item, this._rpT() != null);
@@ -4335,7 +4355,7 @@ class DeviceFloorplanCard extends HTMLElement {
       return [this._chipSpec({ ...item, x: pos.x, y: pos.y }, name, { lines: [v != null ? `${Math.round(v)}%` : "—"], icon, ents: [bat], kind: "reading", cls: isLow ? "low" : unavailable ? "warn" : "" })];
     }
     if (q) return item.main_entity && !item.bond ? [{ key: item.id, offlineOnly: true }] : []; // shows only when offline
-    if (unavailable) return [this._chipSpec({ ...item, x: pos.x, y: pos.y }, name, { lines: ["Offline"], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" })];
+    if (unavailable) return [this._offChip({ ...item, x: pos.x, y: pos.y }, name)];
     return [];
   }
 
@@ -5646,11 +5666,12 @@ class DeviceFloorplanCard extends HTMLElement {
     let value = "";
     let color = "var(--dfc-accent)";
     if (item.bond && (!eid || eid === item.main_entity)) {
-      const sts = item.entities.map((e) => hass.states[e]).filter(Boolean);
+      const sts = this._parts(item).map((e) => hass.states[e]).filter(Boolean);
       const n = sts.filter((s) => this._isOn(s.entity_id, s, kind)).length;
       on = n > 0;
+      // 0.12.9: "how many are on" only when chosen; otherwise on if any is on, as the setting says.
       const showMode = this._per(item, this._overlay).show || item.show;
-      if (showMode === "count" ? sts.length > 1 : n && n < sts.length) value = `${n}/${sts.length}`;
+      if (showMode === "count" && sts.length > 1) value = `${n}/${sts.length}`;
     } else {
       on = this._isOn(eid, st, kind);
       if (kind === "climate" && st && st.attributes.current_temperature != null) value = this._attrVal(st, "current_temperature");
@@ -5665,15 +5686,16 @@ class DeviceFloorplanCard extends HTMLElement {
     const unavail = !(item.bond && (!eid || eid === item.main_entity)) && !live(st);
     const showVal = look.markers !== "icon" && opts.values !== false;
     const bondAll = item.bond && (!eid || eid === item.main_entity);
-    return { key: item.id, type: "marker", item, name, ents: bondAll ? item.entities : [eid], eid, st, kind, on, dim, unavail, color, value: showVal ? value : "", icon: this._dev(item.id).icon || (bondAll ? item.icon : null), x: item.x, y: item.y };
+    return { key: item.id, type: "marker", item, name, ents: bondAll ? this._parts(item) : [eid], eid, st, kind, on, dim, unavail, color, value: showVal ? value : "", icon: this._dev(item.id).icon || (bondAll ? item.icon : null), x: item.x, y: item.y };
   }
 
   /** test9: a device that only measures (nothing to switch or run) shows its value as a chip, the Comfort look,
    *  in every overlay it is in; a device you control keeps its icon. */
   /** 0.12.6: what an added device follows: your pick, else its main entity, else its first reading (no settings). */
   _addedLead(item) {
-    const ok = (e) => e && this._hass.states[e] && !this._aux(e) && !["button", "input_button", "update", "event"].includes(domainOf(e));
-    return [item.main_entity, ...this._allowed(item)].find(ok) || item.main_entity;
+    const ok = (e) => e && this._hass.states[e] && !this._aux(e) && !NO_VALUE.has(domainOf(e));
+    const all = [item.main_entity, ...this._allowed(item)];
+    return all.find((e) => ok(e) && live(this._hass.states[e])) || all.find(ok) || null; // 0.12.9: none = nothing to draw
   }
 
   /** 0.12.6: a device drawn as itself, the look of the overlay that owns its kind (Live and own overlays). */
@@ -5684,9 +5706,11 @@ class DeviceFloorplanCard extends HTMLElement {
     const k = kindOf(lead, st);
     if (domainOf(lead) === "climate") return this._climateChip(item, name, lead, null, null, { compact: true });
     if (k === "temperature" || k === "humidity") {
+      // 0.12.9: the Comfort chip: temperature first, humidity under it, whichever HA calls its main entity.
       const ents = this._allowed(item);
-      const t = k === "temperature" ? lead : null;
-      const hm = k === "humidity" ? lead : ents.find((e) => !this._aux(e) && kindOf(e, hass.states[e]) === "humidity") || null;
+      const of = (kk) => (k === kk ? lead : ents.find((e) => !this._aux(e) && kindOf(e, hass.states[e]) === kk) || null);
+      const t = of("temperature");
+      const hm = of("humidity");
       const lines = [t ? this._fmtNum(t) : "", hm ? this._fmtNum(hm) : ""].filter(Boolean);
       return { ...this._chipSpec(item, name, { lines, ents: [t, hm].filter(Boolean), kind: "reading" }), rd: { t: t ? lines[0] : "", h: hm ? lines[lines.length - 1] : "" } };
     }
@@ -5702,6 +5726,11 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!(item.group === "sensors" || (item.standalone && domainOf(item.main_entity || "") === "sensor"))) return null;
     const line = this._fmtNum(e);
     return { ...this._chipSpec(item, name, { lines: [line], ents: [e], kind: "reading" }), rd: { t: line, h: "" } };
+  }
+
+  /** Health: a device without a battery shows only while offline, as this chip. */
+  _offChip(item, name) {
+    return { ...this._chipSpec(item, name, { lines: ["Offline"], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
   }
 
   _chipSpec(item, name, { lines, ents, kind, icon, cls = "" }) {
@@ -6463,7 +6492,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const r = ROLES[s.role] || ROLES.device;
       const cls = ["m", edgeCls(s.x, s.y, this._em), "net", r.shape, s.role, s.sz || "", this._hl === s.key ? "hl" : ""].join(" ");
       const mark = s.conn === "matter" ? this._matterMark() : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`;
-      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic">${mark}</span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-fill:${r.color};--dfc-ring:${s.ring || "transparent"}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.conns.map((c) => CONNS[c].label).join(", ")}`)}"><span class="ic">${mark}</span>${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     const icon = s.icon
       ? `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`
@@ -6483,7 +6512,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const xs = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const bond = ""; // #86: a bond is one device on the card, no badge
     const label = `${s.name}${s.st ? ` · ${this._fmt(s.eid)}` : ""}`;
-    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
+    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
   }
 
   _chipHtml(s) {
@@ -6491,21 +6520,21 @@ class DeviceFloorplanCard extends HTMLElement {
     const xl0 = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const xl = xl0 + bdg;
     if (s.cl2 && s.compact) {
-      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== "Off") ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== "Off") ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.cl2) {
       const left = s.word || s.set ? `<span class="mc"><span class="mw">${cesc(s.word)}</span>${s.set ? `<span class="st">${cesc(s.set)}</span>` : ""}</span>` : "";
       const right = s.temp || s.hum ? `${left ? `<span class="vs"></span>` : ""}<span class="tc">${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${s.hum ? `<span class="h"><ha-icon icon="mdi:water"></ha-icon>${cesc(s.hum)}</span>` : ""}</span>` : "";
-      return `<button class="chip cl2 ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.set, s.temp, s.hum].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${left}${right}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="chip cl2 ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.set, s.temp, s.hum].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${left}${right}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.rd && !s.icon) {
       // #94: readings in the AC chip style: temperature large, 💧 humidity small under it.
       const t = s.rd.t ? `<span class="t">${cesc(s.rd.t.replace(/\s?°C|\s?°F/, "°"))}</span>` : "";
       const h = s.rd.h ? `<span class="${t ? "h" : "t"}"><ha-icon icon="mdi:water"></ha-icon>${cesc(s.rd.h)}</span>` : "";
-      return `<button class="chip rd ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}"><span class="tc">${t}${h}</span>${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="chip rd ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}"><span class="tc">${t}${h}</span>${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     const first = s.icon ? `<span class="ico"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.lines[0] || "")}</span>` : `<span class="l1">${cesc(s.lines[0] || "")}</span>`;
-    return `<button class="chip ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}">${first}${s.lines[1] ? `<span class="l2">${cesc(s.lines[1])}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+    return `<button class="chip ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}">${first}${s.lines[1] ? `<span class="l2">${cesc(s.lines[1])}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
   }
 
   /** Connections present on this plan (for the layers menu). */
@@ -7377,7 +7406,7 @@ ${reset}
       return this._update(true);
     }
     // 0.11.1: a bond of lights is one lamp: tap switches all its bulbs (unless a tap is set for it).
-    if (s.type !== "net" && this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return this._toggle({ ...s, ents: s.item.entities });
+    if (s.type !== "net" && this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return this._toggle({ ...s, ents: this._parts(s.item) });
     // 0.7.5: bonds and phantoms (several things in one marker) open the info card; a single device does its tap action.
     if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom)) {
       this._popup = { type: "info", key: s.key };
@@ -7505,7 +7534,7 @@ ${reset}
       this._popup = { type: "info", key: s.key };
       return this._update(true);
     }
-    const ents = this._lampBond(s.item) ? s.item.entities : s.ents;
+    const ents = this._lampBond(s.item) ? this._parts(s.item) : s.ents;
     if (act === "toggle") return this._toggle({ ...s, ents });
     return this._runAction({ ...s, ents }, act, "hold_");
   }
@@ -7673,8 +7702,15 @@ ${reset}
 
   /** 0.11.1: a bond whose members are all lights acts as one lamp. */
   _lampBond(item) {
-    const e = (item && item.bond && item.entities) || [];
-    return e.length > 1 && e.every((x) => domainOf(x) === "light");
+    const e = this._parts(item);
+    return !!(item && item.bond) && e.length > 0 && e.every((x) => domainOf(x) === "light");
+  }
+
+  /** 0.12.9: a bond's real parts: its entities without settings / technical ones (an "Internet access" switch). */
+  _parts(item) {
+    const e = (item && item.entities) || [];
+    const r = e.filter((x) => !this._aux(x));
+    return r.length ? r : e;
   }
 
   /** Entities the info card can switch (lights, switches, fans, helpers). */
@@ -7730,8 +7766,10 @@ ${reset}
       name = s.name;
       const on = s.type === "chip" ? s.cls !== "off" : s.on;
       dot = on ? s.color || "var(--dfc-accent)" : "#9e9e9e";
-      state = this._tipState(s) || "—";
-      lead = s.eid || (s.ents || [])[0];
+      // 0.12.9: a chip says its value (what the plan shows) and lists its own readings too.
+      state = this._tipState(s) || (s.type === "chip" ? (s.lines || []).filter(Boolean).join(" · ") : "") || "—";
+      state = state.split(" · ").filter((x) => x && x !== "—").join(" · ") || "—"; // no "— · Off"
+      lead = s.type === "chip" ? null : s.eid || (s.ents || [])[0];
       const picked = Array.isArray(this._per(item, this._overlay).extras) ? this._per(item, this._overlay).extras : null;
       reads = picked || [...(s.ents || []), ...(s.also || []), ...(item.entities || [])];
       // 0.11.1: a bond lists every member (its leading one too); each row opens that member's details.
@@ -7747,15 +7785,25 @@ ${reset}
         attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? "Turn off" : "Turn on"}</button>`;
       }
     }
-    reads = [...new Set(reads)].filter((e) => e && e !== lead && hass.states[e] && !this._aux(e) && !["button", "input_button"].includes(domainOf(e))).slice(0, 8);
+    // A chip's own readings are listed even when HA files them under Diagnostic (Health's battery).
+    const sp0 = !p.appl && this._specs && this._specs.get(p.key);
+    const own = new Set(sp0 ? sp0.ents || [] : []); // what the plan draws (its picked lines too); a Diagnostic one only as a number
+    reads = [...new Set([...own, ...reads])].filter((e) => e && e !== lead && hass.states[e] && (!this._aux(e) || (own.has(e) && num(hass.states[e].state))) && !NO_VALUE.has(domainOf(e)));
+    // 0.12.9: readings before switches and settings (a bond keeps its parts first).
+    const rank = (e) => (["sensor", "climate", "weather"].includes(domainOf(e)) ? 0 : domainOf(e) === "binary_sensor" ? 1 : 2);
+    if (!(item && (item.bond || item.phantom))) reads = reads.map((e, i) => [e, i]).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map((x) => x[0]);
     const pool = [...new Set([...(item.entities || []), ...(item.allEntities || [])])];
     const presses = pool.filter((e) => ["button", "input_button"].includes(domainOf(e)) && live(hass.states[e]) && !this._aux(e)).slice(0, 3);
-    const strip = (t) => {
-      const n = String(name || "").trim();
-      return n && t.toLowerCase().startsWith(`${n.toLowerCase()} `) ? t.slice(n.length + 1).replace(/^\w/, (c) => c.toUpperCase()) : t;
-    };
-    const rows = reads.map((e) => `<button class="irow" data-mi="${cesc(e)}"><span>${cesc(strip(this._entName(e)))}</span><b>${cesc(this._extraText(e))}</b></button>`).join("");
-    const pr = presses.map((e) => `<button class="ipress" data-press="${cesc(e)}">${cesc(strip(this._entName(e)))}</button>`).join("");
+    // 0.12.9: names without the card's name or Home Assistant's device name in front.
+    const strip = (e) => this._shortName(item, e, name);
+    const seen = new Set();
+    const rows = reads.filter((e) => {
+      const k = `${strip(e)}|${this._extraText(e)}`; // one row per name and value (D1)
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).slice(0, 8).map((e) => `<button class="irow" data-mi="${cesc(e)}"><span>${cesc(strip(e))}</span><b>${cesc(this._extraText(e))}</b></button>`).join("");
+    const pr = presses.map((e) => `<button class="ipress" data-press="${cesc(e)}">${cesc(strip(e))}</button>`).join("");
     // 0.8.1: redrawn for new values at the spot it already had (no fade out and in).
     const was = this._icPos && this._icPos.anc === anchor ? this._icPos : null;
     return `<div class="pop ip ${p.prev ? "prev" : ""}"><div class="icard ${was ? "placed" : ""}" ${was ? `style="left:${was.left}px;top:${was.top}px"` : ""} role="dialog" aria-label="${cesc(name)}" data-anc="${cesc(anchor)}"><div class="ih"><b>${cesc(name)}</b>${close}</div><div class="ist"><i style="background:${dot}"></i><span>${cesc(state)}</span></div>${rows ? `<div class="irows">${rows}</div>` : ""}${attention || pr ? `<div class="ibtns">${attention}${pr}</div>` : ""}${open ? `<div class="iacts">${open}</div>` : ""}</div></div>`;
@@ -7763,6 +7811,22 @@ ${reset}
 
   _entName(e) {
     return entName(this._hass, e);
+  }
+
+  /** 0.12.9: an entity's name without its device's name in front (the card's name, HA's device names). */
+  _shortName(item, e, name) {
+    const hass = this._hass;
+    const full = this._entName(e);
+    const reg = (hass.entities || {})[e];
+    const dv = reg && reg.device_id && (hass.devices || {})[reg.device_id];
+    const pre = [name, item && item.name, dv && dv.name_by_user, dv && dv.name].filter(Boolean).map((x) => String(x).trim()).sort((x, y) => y.length - x.length);
+    for (const n of pre) {
+      if (full.toLowerCase().startsWith(n.toLowerCase()) && full.length > n.length) {
+        const rest = full.slice(n.length).replace(/^[\s\-_·:]+/, "");
+        if (rest) return rest.replace(/^\w/, (c) => c.toUpperCase());
+      }
+    }
+    return full;
   }
 
   /** Put the info card next to its marker, inside the card. */
@@ -9994,7 +10058,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       }
       const def = eng._ovDef(o) || {};
       if (q) return eng._hidden(item, o) ? "hidden" : "shown";
-      if (o === "live" || def.custom) return eng._added(item, o) ? "added" : "off";
+      // 0.12.9: offered only when it has something to draw (not a dongle with settings entities only).
+      if (o === "live" || def.custom) return eng._added(item, o) ? "added" : eng._addedLead(item) ? "off" : "na";
       return "na";
     };
     const avail = ovs.filter((o) => stOf(o) !== "na");
@@ -10075,8 +10140,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         saved();
       }));
     }
-    const hasTemp = (item.entities || []).some((e) => kindOf(e, hass.states[e]) === "temperature" && !T.aux(e)); // 0.12.8
-    if (hasTemp && !item.bond && !item.phantom) {
+    // 0.12.9: only where Comfort doesn't use its temperature by itself (a thermometer needs no switch).
+    const ownT = (item.entities || []).filter((e) => kindOf(e, hass.states[e]) === "temperature" && !T.aux(e));
+    const usedT = ownT.some((e) => ambientTemp(e, hass.states[e], item));
+    if (ownT.length && !usedT && !item.bond && !item.phantom) {
       all.appendChild(this._form([{ name: "comfort", selector: { boolean: {} } }], { comfort: !!dev().comfort }, { comfort: "Use its temperature in Comfort (even if it's a device's internal sensor)" }, (v) => {
         this._saveDev(id, { comfort: v.comfort });
         saved();
@@ -10088,7 +10155,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   /** 0.12.6: the settings of one shown overlay, in reading order. */
-  _mpOverlay(sec, row, { item, id, a, eng, ov, lbl, per, dev, T, name, done, saved }) {
+  _mpOverlay(sec, row, { item, id, eng, ov, per, dev, T, name, done, saved }) {
     const hass = this._hass;
     const p0 = per();
     const camE = ov === "live" && eng._camOf(item);
@@ -10100,11 +10167,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     } catch (_e) {
       sp = null;
     }
+    // 0.12.9: Health without a battery draws only its "Offline" chip, while it is offline.
+    const hOff = ov === "health" && !!(sp && sp.offline);
     // 2. Follows (0.12.8): only where the followed entity changes the marker (Live, Lights, Security, own overlays),
     // only with a real choice, never a settings / technical entity. A picture says it in "Shows as On when".
     const defO = eng._ovDef(ov) || {};
     const follows = ["live", "lights", "security"].includes(ov) || !!defO.custom;
+    const health = ov === "health"; // 0.12.9: Health follows a battery (its own, under Diagnostic, or another)
     const fits = (e) => {
+      if (health) return kindOf(e, hass.states[e]) === "battery";
       if (T.aux(e) || NO_VALUE.has(domainOf(e))) return false;
       const dm = domainOf(e);
       if (ov === "lights") return ["light", "switch"].includes(dm);
@@ -10112,19 +10183,21 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       return dm !== "sensor" || READ_KIND.has(kindOf(e, hass.states[e]));
     };
     const fcands = T.cands.filter(fits);
-    const autoF = sp && sp.eid && hass.states[sp.eid] && !T.aux(sp.eid) ? sp.eid : null;
-    if (follows && !picE && !item.bond && !item.phantom && !camE && (fcands.length > 1 || (p0.lead && !fcands.includes(p0.lead))) && (autoF || p0.lead)) {
+    const autoH = health ? (item.roles && item.roles.battery && fits(item.roles.battery) && T.aux(item.roles.battery) && item.roles.battery) || T.cands.find((e) => fits(e) && T.aux(e)) || null : null;
+    const autoF = health ? autoH : sp && sp.eid && hass.states[sp.eid] && !T.aux(sp.eid) ? sp.eid : null;
+    if ((follows || health) && !picE && !item.bond && !item.phantom && !camE && (fcands.some((e) => e !== autoF) || (p0.lead && !fcands.includes(p0.lead))) && (autoF || p0.lead || health)) {
       const auto = autoF && autoF !== p0.lead ? autoF : null;
       const cur = p0.lead || "";
-      const val = cur ? `${cesc(T.short(cur))} · ${cesc(T.val(cur))}` : auto ? `${cesc(T.short(auto))} · ${cesc(T.val(auto))}` : "its own state";
-      sec.appendChild(row("Follows", val, !cur, this._entSelect(T, { cur, autoText: `Automatic${auto ? `: ${T.short(auto)} · ${T.val(auto)}` : ""}`, list: fcands, onPick: (e) => {
+      const none = health ? "no battery of its own" : "its own state";
+      const val = cur ? `${cesc(T.short(cur))} · ${cesc(T.val(cur))}` : auto ? `${cesc(T.short(auto))} · ${cesc(T.val(auto))}` : none;
+      sec.appendChild(row("Follows", val, !cur, this._entSelect(T, { cur, autoText: `Automatic: ${auto ? `${T.short(auto)} · ${T.val(auto)}` : none}`, list: fcands, onPick: (e) => {
         const x0 = per().extras;
         this._savePer(id, ov, { lead: e || "", ...(Array.isArray(x0) ? { extras: x0.filter((x) => x !== e) } : {}) });
         done();
       } }), true));
     }
-    // Bonds: on if any is on, or how many.
-    if (item.bond) {
+    // Bonds: on if any is on, or how many (only where on / off changes the marker).
+    if (item.bond && follows) {
       const cur = p0.show || item.show || "";
       const s = document.createElement("select");
       const part = eng._lampBond(item) ? "lamp" : "part"; // 0.12.8: "lamp" only for a bond of lamps
@@ -10138,17 +10211,22 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     // 3. Shown as: its own look (picture, chip, touch area, light) or, without one, an icon.
     const body = eng._bodyOf(item);
     const looks = [];
+    // 0.12.9: said from what the plan draws: a chip's icon, a camera's dot, Health's offline chip.
+    const chipIcon = !!(sp && sp.type === "chip" && (sp.cl2 || (!sp.rd && (sp.icon || sp.icon0))));
     if (picE) looks.push("picture");
-    if (sp && sp.type === "chip") looks.push(sp.rd ? "chip with its values" : sp.cl2 ? "chip with its icon" : "chip");
+    if (sp && sp.cam) looks.push("a dot in the camera's colour");
+    if (hOff) looks.push("an “Offline” chip with its icon, only while it is offline");
+    else if (sp && sp.type === "chip") looks.push(sp.rd && !chipIcon ? "chip with its values" : chipIcon ? "chip with its icon" : "chip");
     if (ov === "live" && body && body.touch && !picE) looks.push("touch area");
     // 0.12.7: lamps follow the overlay's "Lights as" (glow only = no icon); a light shape is not a look.
     const glowOnly = !!(sp && sp.kind === "light" && eng._glowOnly(ov) && !looks.length);
     if (glowOnly) looks.push("its glow (Lights as: Glow)");
-    const legacyOff = !!p0.noicon;
-    const iconDrawn = !picE && !camE && !glowOnly && !(sp && sp.type === "chip") && !legacyOff && !(ov === "live" && body && body.touch);
+    const markerIcon = !picE && !camE && !hOff && !(sp && sp.cam) && !glowOnly && !(sp && sp.type === "chip") && !(ov === "live" && body && body.touch);
+    const legacyOff = !!p0.noicon && (markerIcon || chipIcon); // only where an icon would be drawn
+    const iconDrawn = markerIcon && !legacyOff;
     const shownAs = looks.length ? looks.join(" + ") : "an icon";
     const iconBox = document.createElement("div");
-    if (iconDrawn || (sp && sp.type === "chip" && sp.cl2)) {
+    if (iconDrawn || (chipIcon && !legacyOff)) {
       iconBox.appendChild(this._form([{ name: "icon", selector: { icon: {} } }], { icon: p0.icon || dev().icon || "" }, { icon: "Icon (empty = Home Assistant's own)" }, (v) => {
         this._savePer(id, ov, { icon: v.icon });
         saved();
@@ -10161,9 +10239,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         done();
       });
     }
-    const withIcon = sp && sp.type === "chip" && sp.cl2;
-    const lookTxt = legacyOff ? (looks.length ? shownAs : "its value, without its icon") : looks.length && !glowOnly && !withIcon && !picE ? `${shownAs} <small>(no icon)</small>` : shownAs;
+    const lookTxt = legacyOff ? (looks.length ? shownAs : "its value, without its icon") : looks.length && !glowOnly && !chipIcon && !picE && !hOff ? `${shownAs} <small>(no icon)</small>` : shownAs;
     sec.appendChild(row("Shown as", lookTxt, false, iconBox.childNodes.length ? iconBox : null));
+    if (ov === "health") {
+      const only = !!(this._config.health || {}).only_problems;
+      const when = hOff ? "only while it is offline" : only ? "only when its battery is low or it is offline (card setting)" : "always (marked when its battery is low)";
+      sec.appendChild(row("When it shows", cesc(when), true, null));
+    }
     // 4. Also shows: the real lines, with their values, where they are drawn.
     if (!picE || ov !== "live") this._mpExtras(sec, row, { item, id, ov, per, eng, T, sp, camE, done, saved });
     // 5. When it shows (Live): a trigger, when off; a camera's picture; a picture's two sentences.
@@ -10223,7 +10305,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const p0 = per();
     const auto = eng._autoReads(item, ov);
     const extras = Array.isArray(p0.extras) ? p0.extras : null;
-    const inMarker = new Set([...((sp && sp.ents) || []), sp && sp.eid, item.bond ? item.main_entity : null, ...(item.bond ? item.entities || [] : [])].filter(Boolean));
+    const inMarker = new Set([...((sp && (sp.core || sp.ents)) || []), sp && sp.eid, item.bond ? item.main_entity : null, ...(item.bond ? item.entities || [] : [])].filter(Boolean));
     const why = (e) => (!hass.states[e] ? "not shown: it no longer exists" : NO_VALUE.has(domainOf(e)) ? "not shown: it has no value (it is an action)" : inMarker.has(e) ? `not shown: already part of this ${item.bond ? "bond" : "marker"}` : "");
     // 0.12.8: automatic = only what is drawn; your own picks that can't be drawn still say why.
     const listed = (extras || auto.filter((e) => !why(e))).filter((e) => !(camE && domainOf(e) === "camera"));
@@ -10301,7 +10383,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     } finally {
       eng._overlay = ov0;
     }
-    const W = { "switch all": `switches all its ${item.bond ? "parts" : "lamps"}`, "switch on / off": "switches it on / off", details: "opens its details", "info card": "opens its info card", graphs: "opens its graphs", "readings with history": "opens its readings with history", "open a dashboard": "opens a dashboard", "a popup card": "opens a popup card", nothing: "nothing", "robot panel": "opens the robot panel", "network info": "shows its network info" };
+    const W = { "switch all": "switches all its lamps", "switch on / off": "switches it on / off", details: "opens its details", "info card": "opens its info card", graphs: "opens its graphs", "readings with history": "opens its readings with history", "open a dashboard": "opens a dashboard", "a popup card": "opens a popup card", nothing: "nothing", "robot panel": "opens the robot panel", "network info": "shows its network info" };
     const say = (w) => W[w] || w;
     const mk = (key, pre, opts, cur, words, isHold) => {
       const box = document.createElement("div");
@@ -10332,7 +10414,6 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const hcur = p0.hold || dev().hold || "";
     const hopts = [{ value: "default", label: "" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }];
     mk("hold", "hold_", hopts, hcur, holdW, true);
-    sec.insertAdjacentHTML("beforeend", `<p class="mpn">Try them on the plan: a tap or long press there does the real thing.</p>`);
   }
 
   /** People in Edit markers (#107): the same fields as card editor → People. */

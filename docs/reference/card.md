@@ -352,6 +352,25 @@ cards:
 - Prefer the card's own overlay buttons? Leave out `buttons: { position: hidden }` and the rail.
 - Card-mod styles on the floorplan card stay in place when you switch overlays. Put the layout (grid, background) on the **stack**, as above: the stack doesn't redraw, so the layout holds.
 
+### Style one marker
+
+Every marker and chip on the plan carries its name (the name on the card) as `data-name`, and the card carries the overlay that's showing as `ov-<overlay>`. With card-mod you can style one device in one overlay, without touching the others:
+
+```yaml
+type: custom:device-floorplan-card
+plan: ground_floor
+card_mod:
+  style: |
+    /* The kitchen thermometer, only in Live: teal and a little see-through */
+    ha-card.ov-live [data-name="Thermometer LCD Kitchen"] {
+      --dfc-c: #26a69a !important; /* the card sets its colour on the marker itself */
+      opacity: .8;
+    }
+```
+
+- Rename a device on the card (marker settings → For all overlays → Name) and use that name here.
+- `ov-live`, `ov-lights`, `ov-comfort`, `ov-security`, `ov-health`, … and your own overlays by their id. Leave it out to style the device everywhere.
+
 ## Button bar
 
 The overlay buttons sit in **one bar, exactly as long as the plan with its frame** (as wide as the plan above or below it, as tall as the plan on its left or right) and right next to it. What doesn't fit scrolls inside the bar: a small chevron at the end shows there is more (and one at the start once you scrolled); tap it to scroll. A faint line separates the card's overlays, your own overlays and shortcuts.
