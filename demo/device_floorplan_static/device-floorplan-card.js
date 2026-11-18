@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.9).
+ * Device Floorplan – dashboard card (v0.12.10).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.9";
+const CARD_VERSION = "0.12.10";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1331,6 +1331,27 @@ ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color,
 .m.ph.on .ic { border-color: var(--dfc-c); }
 .chip.ph { border: 2px dashed var(--primary-text-color); }
 .phsum { display:flex; align-items:center; gap:8px; padding:4px 2px 10px; }
+/* 0.12.10: readings chart (theme colours; override --dfc-rt / --dfc-rh with card-mod) */
+.popin { --dfc-rt: #f0883e; --dfc-rh: #3b9bf5; }
+.rc { position:relative; color: var(--secondary-text-color); }
+.rc svg { width:100%; height:auto; display:block; touch-action: pan-y; overflow: visible; }
+.rctip { position:absolute; top:-6px; transform: translateX(-50%); visibility:hidden; pointer-events:none; white-space:nowrap; font-size:12px; padding:3px 8px; border-radius:8px; background: var(--card-background-color, #fff); color: var(--primary-text-color); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.rcl { display:flex; gap:16px; justify-content:center; font-size:11px; }
+.rcl span::before { content:""; display:inline-block; width:10px; height:3px; border-radius:2px; background: var(--c); margin-right:6px; vertical-align:middle; }
+.rcnow { display:flex; gap:18px; align-items:baseline; }
+.rcnow span, .rcv span { display:inline-flex; align-items:center; gap:6px; }
+.rcnow span { font-size:26px; font-weight:500; }
+.rcnow span::before, .rcv span::before { content:""; width:8px; height:8px; border-radius:50%; background: var(--dfc-rt); }
+.rcnow .h::before, .rcv .h::before { background: var(--dfc-rh); }
+.rcdet { display:flex; gap:14px; flex-wrap:wrap; }
+.rcdet .more { color: var(--primary-color); }
+.rclist { display:flex; flex-direction:column; border-top: 1px solid var(--divider-color); }
+.rcrow { display:flex; align-items:center; gap:10px; padding:10px 2px; background:none; border:0; border-bottom: 1px solid var(--divider-color); color: inherit; font: inherit; text-align:left; cursor:pointer; }
+.rcrow .nm { flex:1; display:flex; flex-direction:column; gap:2px; font-size:14px; }
+.rcrow small, .rcv { font-size:12px; color: var(--secondary-text-color); display:flex; gap:10px; }
+.rcs { width:84px; height:28px; flex:none; }
+.rcrow .go { color: var(--secondary-text-color); }
+.rcback { align-self:flex-start; background:none; border:0; padding:0; color: var(--primary-color); font: inherit; cursor:pointer; }
 .phsum b { font-size:20px; font-weight:500; }
 .phsum small { color: var(--secondary-text-color); margin-left:auto; }
 .m .bn { position:absolute; top:-6px; right:-8px; min-width:17px; height:17px; border-radius:9px; background: var(--dfc-accent); color:#fff; font-size:10px; font-weight:600; display:flex; align-items:center; justify-content:center; border:2px solid var(--card-background-color, #fff); padding:0 3px; }
@@ -7342,13 +7363,18 @@ ${reset}
     }
     const mi = t.closest("[data-mi]");
     if (mi) return this._moreInfo(mi.dataset.mi);
+    const rs = t.closest("[data-rdsub]");
+    if (rs && this._popup && this._popup.type === "readings") {
+      this._popup = { ...this._popup, sub: rs.dataset.rdsub || null }; // 0.12.10: a device's own chart, "‹" back
+      return this._update(true);
+    }
     const io = t.closest("[data-iopen]");
     if (io) {
       const p0 = this._popup || {};
       this._popup = null;
       if (p0.appl) return this._moreInfo(io.dataset.iopen);
       const s0 = this._specs && this._specs.get(io.dataset.iopen);
-      if (s0) this._details(s0);
+      if (s0) s0.phantom ? (s0.type === "chip" ? this._openReadings(s0) : this._openList(s0)) : this._details(s0);
       return this._update(true);
     }
     const itg = t.closest("[data-itg]");
@@ -7408,7 +7434,8 @@ ${reset}
     // 0.11.1: a bond of lights is one lamp: tap switches all its bulbs (unless a tap is set for it).
     if (s.type !== "net" && this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return this._toggle({ ...s, ents: this._parts(s.item) });
     // 0.7.5: bonds and phantoms (several things in one marker) open the info card; a single device does its tap action.
-    if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom)) {
+    // 0.12.10: a phantom of readings works like one thermometer: its tap opens the readings (the info card is the long press).
+    if (s.type !== "net" && (s.phantom || s.item.bond || s.item.phantom) && !this._rdPhantom(s)) {
       this._popup = { type: "info", key: s.key };
       return this._update(true);
     }
@@ -7541,12 +7568,12 @@ ${reset}
 
   /** 0.12.6: what a tap / long press does, in words (Edit markers, the card editor). */
   _actWords(s, hold) {
-    const multi = s.phantom || s.item.bond || s.item.phantom;
+    const multi = (s.phantom || s.item.bond || s.item.phantom) && !this._rdPhantom(s);
     const W = { "more-info": "details", toggle: "switch on / off", readings: "readings with history", navigate: "open a dashboard", popup: "a popup card", none: "nothing", network: "network info", robot: "robot panel", info: "info card" };
     if (hold) {
       const h = this._holdAction(s);
       if (h && h !== "default") return W[h] || h;
-      return s.phantom ? "graphs" : this._lampBond(s.item) ? "info card" : "details";
+      return this._rdPhantom(s) ? "info card" : s.phantom ? "graphs" : this._lampBond(s.item) ? "info card" : "details";
     }
     if (this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return "switch all";
     if (multi && !this._per(s.item, this._overlay).tap && !this._dev(s.item.id).tap) return "info card";
@@ -7573,7 +7600,16 @@ ${reset}
   }
 
   /** Home Assistant's details of a marker: graphs for a phantom, the leading entity's dialog otherwise. */
+  /** 0.12.10: a phantom chip of readings (thermometers): tap = readings, long press = info card. */
+  _rdPhantom(s) {
+    return !!(s && s.phantom && s.type === "chip" && s.kind === "reading");
+  }
+
   _details(s) {
+    if (this._rdPhantom(s)) {
+      this._popup = { type: "info", key: s.key };
+      return this._update(true);
+    }
     if (s.phantom) return s.type === "chip" ? this._openReadings(s) : this._openList(s);
     // 0.11.1: a lamp bond's long press opens its info card (its tap switches it).
     if (s.type !== "net" && this._lampBond(s.item)) {
@@ -7795,7 +7831,7 @@ ${reset}
     const pool = [...new Set([...(item.entities || []), ...(item.allEntities || [])])];
     const presses = pool.filter((e) => ["button", "input_button"].includes(domainOf(e)) && live(hass.states[e]) && !this._aux(e)).slice(0, 3);
     // 0.12.9: names without the card's name or Home Assistant's device name in front.
-    const strip = (e) => this._shortName(item, e, name);
+    const strip = (e) => this._shortName(item, e, name, !!(item && (item.bond || item.phantom)));
     const seen = new Set();
     const rows = reads.filter((e) => {
       const k = `${strip(e)}|${this._extraText(e)}`; // one row per name and value (D1)
@@ -7814,7 +7850,7 @@ ${reset}
   }
 
   /** 0.12.9: an entity's name without its device's name in front (the card's name, HA's device names). */
-  _shortName(item, e, name) {
+  _shortName(item, e, name, multi) {
     const hass = this._hass;
     const full = this._entName(e);
     const reg = (hass.entities || {})[e];
@@ -7823,6 +7859,9 @@ ${reset}
     for (const n of pre) {
       if (full.toLowerCase().startsWith(n.toLowerCase()) && full.length > n.length) {
         const rest = full.slice(n.length).replace(/^[\s\-_·:]+/, "");
+        // 0.12.10: in a marker of several devices the device's name tells the rows apart ("TH01 · Temperature").
+        const dn = dv && (dv.name_by_user || dv.name);
+        if (rest && multi && dn && n !== name && n !== (item && item.name)) return `${dn} · ${rest.replace(/^\w/, (c) => c.toUpperCase())}`;
         if (rest) return rest.replace(/^\w/, (c) => c.toUpperCase());
       }
     }
@@ -8211,17 +8250,82 @@ ${reset}
         : "";
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">Details ›</button>` : ""}</div></div>`;
     }
-    const rows = p.ents.map((e) => {
-      const st = this._hass.states[e];
+    return this._rdHtml(s, p, close);
+  }
+
+  /** 0.12.10: the readings popup. Temperature and humidity share one chart; a marker of several devices (a phantom,
+   *  a bond) shows its total first, then one row per device; a row opens that device's own chart. */
+  _rdHtml(s, p, close) {
+    const hass = this._hass;
+    const groups = this._rdGroups(s, p.ents);
+    const multi = groups.length > 1;
+    const sub = multi && p.sub ? groups.find((g) => g.id === p.sub) : null;
+    const view = multi && !sub ? null : sub || groups[0];
+    this._rdCharts = [];
+    const chart = (t, h, mode, small) => {
+      this._rdCharts.push({ t, h, mode });
+      const i = this._rdCharts.length - 1;
+      return small ? `<svg class="rcs" data-rc="${i}" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>` : `<div class="rc" data-rc="${i}"><svg viewBox="0 0 320 150"></svg><div class="rctip"></div><div class="rcl"></div></div>`;
+    };
+    const tv = (e) => (domainOf(e) === "climate" ? (hass.states[e] ? this._attrVal(hass.states[e], "current_temperature") : "—") : this._fmtNum(e));
+    const now = (g, cls = "rcnow") => `<div class="${cls}">${g.t ? `<span class="t">${cesc(tv(g.t))}</span>` : ""}${g.h ? `<span class="h">${cesc(this._fmtNum(g.h))}</span>` : ""}</div>`;
+    const one = (e) => {
+      const st = hass.states[e];
       const k = domainOf(e) === "climate" ? "temperature" : kindOf(e, st);
       const icon = { temperature: "mdi:thermometer", humidity: "mdi:water-percent", battery: "mdi:battery", signal: "mdi:signal" }[k] || "mdi:chart-line";
-      const multi = s.phantom || (s.item.bond && p.ents.length > 2);
-      const label = multi ? entName(this._hass, e) : { temperature: "Temperature", humidity: "Humidity", battery: "Battery", signal: "Signal" }[k] || entName(this._hass, e);
+      const label = { temperature: "Temperature", humidity: "Humidity", battery: "Battery", signal: "Signal" }[k] || this._shortName(s.item, e, s.name);
       const big = domainOf(e) === "climate" && st ? this._attrVal(st, "current_temperature") : this._fmtNum(e);
       return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>24 h ago</span><span class="range"></span><span>now</span></div><button class="more" data-mi="${cesc(e)}">Details ›</button></div>`;
-    }).join("");
-    const sum = s.phantom || (s.item.bond && s.lines && p.ents.length > 2) ? `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(s.icon || "dfp:phantom")}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[this._dev(s.item.id).value || (s.item.phantom && s.item.value) || this._ov("comfort").combine] || "average")} · ${s.item.names ? s.item.names.length : p.ents.length} devices</small></div>` : "";
-    return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3>${sum}${rows}</div></div>`;
+    };
+    const det = (g) => [g.t, g.h].filter(Boolean).map((e) => `<button class="more" data-mi="${cesc(e)}">${domainOf(e) === "climate" || kindOf(e, hass.states[e]) === "temperature" ? "Temperature" : "Humidity"} details ›</button>`).join("");
+    let body;
+    if (!view) {
+      // The total, worked out as the marker works it out (average, lowest, highest, one sensor).
+      const mode = this._dev(s.item.id).value || (s.item.phantom && s.item.value) || this._ov("comfort").combine || "average";
+      const ts = groups.map((g) => g.t).filter(Boolean);
+      const hs = groups.map((g) => g.h).filter(Boolean);
+      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(s.icon || "dfp:phantom")}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[mode] || "average")} · ${groups.length} devices</small></div>`;
+      const rows = groups.map((g) => `<button class="rcrow" data-rdsub="${cesc(g.id)}"><span class="nm">${cesc(g.name)}${g.t || g.h ? now(g, "rcv") : `<small>${cesc(g.ents.map((e) => this._fmt(e)).join(" · "))}</small>`}</span>${g.t || g.h ? chart(g.t ? [g.t] : [], g.h ? [g.h] : [], "one", true) : ""}<span class="go">›</span></button>`).join("");
+      body = `${sum}${ts.length || hs.length ? chart(ts, hs, mode) : ""}<div class="rclist">${rows}</div>`;
+    } else {
+      const back = sub ? `<button class="rcback" data-rdsub="">‹ ${cesc(s.name)}</button>` : "";
+      const tH = view.t || view.h ? `${now(view)}${chart(view.t ? [view.t] : [], view.h ? [view.h] : [], "one")}<div class="rcdet">${det(view)}</div>` : "";
+      body = `${back}${tH}${view.other.map(one).join("")}`;
+    }
+    const title = sub ? sub.name : s.name;
+    return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(title)}"><h3>${cesc(title)}${close}</h3>${body}</div></div>`;
+  }
+
+  /** The devices behind a readings marker: a phantom's members, otherwise HA's devices of its entities. Each with its
+   *  temperature (t), humidity (h) and other readings. */
+  _rdGroups(s, ents) {
+    const hass = this._hass;
+    const item = s.item;
+    const by = new Map();
+    for (const e of ents) {
+      let g = item.byMember ? (item.members || []).find((m) => (item.byMember[m] || []).includes(e)) : null;
+      if (!g) {
+        const r = (hass.entities || {})[e];
+        g = (r && r.device_id) || e;
+      }
+      if (!by.has(g)) by.set(g, []);
+      by.get(g).push(e);
+    }
+    if (!item.byMember && by.size > 1 && !item.bond) return [{ id: item.id, name: s.name, ...this._rdSplit([...ents]) }];
+    const devs = (this._a && this._a.devices) || {};
+    return [...by].map(([g, es]) => {
+      const dv = (hass.devices || {})[g];
+      const name = (devs[g] && devs[g].name) || (dv && (dv.name_by_user || dv.name)) || entName(hass, es[0]);
+      return { id: g, name, ...this._rdSplit(es) };
+    });
+  }
+
+  _rdSplit(es) {
+    const hass = this._hass;
+    const k = (e) => (domainOf(e) === "climate" ? "temperature" : kindOf(e, hass.states[e]));
+    const t = es.find((e) => k(e) === "temperature" && domainOf(e) !== "climate") || es.find((e) => k(e) === "temperature") || null;
+    const h = es.find((e) => k(e) === "humidity") || null;
+    return { t, h, ents: es, other: es.filter((e) => e !== t && e !== h) };
   }
 
   /** 24 h history sparklines for the readings popup. */
@@ -8263,6 +8367,147 @@ ${reset}
       const unit = (this._hass.states[eid] && this._hass.states[eid].attributes.unit_of_measurement) || "";
       el.querySelector(".range").textContent = `${Math.round(min * 10) / 10}–${Math.round(max * 10) / 10} ${unit}`;
     }
+    for (const el of this.shadowRoot.querySelectorAll("[data-rc]")) this._drawRc(el, (this._rdCharts || [])[Number(el.dataset.rc)]);
+  }
+
+  /** 0.12.10: one 24 h series on a 10-minute grid (the value then), or several combined as the marker combines them. */
+  _rdSeries(eids, mode) {
+    const N = 145;
+    const t0 = Date.now() - 24 * 3600 * 1000;
+    const step = (24 * 3600 * 1000) / (N - 1);
+    const one = (eid) => {
+      const rows = ((this._hist && this._hist.data[eid]) || []).map((r) => ({ t: (r.lu || r.lc || 0) * 1000, v: Number(r.s) })).filter((r) => r.t && Number.isFinite(r.v)).sort((a, b) => a.t - b.t);
+      const out = [];
+      let j = -1;
+      for (let i = 0; i < N; i++) {
+        const t = t0 + i * step;
+        while (j + 1 < rows.length && rows[j + 1].t <= t) j++;
+        out.push(j >= 0 ? rows[j].v : null);
+      }
+      return out;
+    };
+    const all = eids.map(one);
+    if (!all.length) return null;
+    const res = all[0].map((_v, i) => {
+      const vs = all.map((a) => a[i]).filter((v) => v != null);
+      if (!vs.length) return null;
+      if (mode === "min") return Math.min(...vs);
+      if (mode === "max") return Math.max(...vs);
+      if (mode === "one") return all[0][i];
+      return vs.reduce((a, b) => a + b, 0) / vs.length;
+    });
+    return res.filter((v) => v != null).length >= 2 ? res : null;
+  }
+
+  /** 0.12.10: temperature (left axis) and humidity (right axis) in one chart; touch it for the values at a time.
+   *  Colours and text follow the theme (--dfc-rt / --dfc-rh can be set, e.g. with card-mod). */
+  _drawRc(el, def) {
+    if (!def) return;
+    const hass = this._hass;
+    const unitOf = (eids, dflt) => {
+      const st = eids[0] && hass.states[eids[0]];
+      if (st && domainOf(eids[0]) === "climate") return (hass.config && hass.config.unit_system && hass.config.unit_system.temperature) || "°C";
+      return (st && st.attributes.unit_of_measurement) || dflt;
+    };
+    const ser = [];
+    const T = this._rdSeries(def.t, def.mode);
+    const H = this._rdSeries(def.h, def.mode);
+    if (T) ser.push({ v: T, c: "var(--dfc-rt)", u: unitOf(def.t, "°C"), d: 1 });
+    if (H) ser.push({ v: H, c: "var(--dfc-rh)", u: unitOf(def.h, "%"), d: 0 });
+    const small = el.tagName.toLowerCase() === "svg";
+    const svg = small ? el : el.querySelector("svg");
+    if (!ser.length) {
+      svg.innerHTML = small ? "" : `<text x="160" y="80" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">Not enough history yet</text>`;
+      return;
+    }
+    const W = small ? 100 : 320;
+    const x0 = small ? 0 : 34;
+    const x1 = small ? 100 : ser.length > 1 ? 286 : 312;
+    const y0 = small ? 3 : 12;
+    const y1 = small ? 25 : 120;
+    const N = ser[0].v.length;
+    const X = (i) => x0 + (i / (N - 1)) * (x1 - x0);
+    for (const s0 of ser) {
+      const vs = s0.v.filter((v) => v != null);
+      s0.min = Math.min(...vs);
+      s0.max = Math.max(...vs);
+      const pad = (s0.max - s0.min) * 0.12 || 0.5;
+      s0.lo = s0.min - pad;
+      s0.hi = s0.max + pad;
+      s0.Y = (v) => y1 - ((v - s0.lo) / (s0.hi - s0.lo)) * (y1 - y0);
+    }
+    // Smooth lines (Catmull-Rom as curves), broken where there is no value.
+    const path = (s0) => {
+      const P = s0.v.map((v, i) => (v == null ? null : [X(i), s0.Y(v)]));
+      let d = "";
+      for (let i = 0; i < N; i++) {
+        if (!P[i]) continue;
+        if (!P[i - 1]) {
+          d += `M${P[i][0].toFixed(1)},${P[i][1].toFixed(1)}`;
+          continue;
+        }
+        const a = P[i - 2] || P[i - 1];
+        const b = P[i - 1];
+        const c = P[i];
+        const e = P[i + 1] || c;
+        d += `C${(b[0] + (c[0] - a[0]) / 6).toFixed(1)},${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)},${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
+      }
+      return d;
+    };
+    const fmt = (s0, v) => `${(Math.round(v * (s0.d ? 10 : 1)) / (s0.d ? 10 : 1)).toLocaleString(hass.locale && hass.locale.language)}${s0.u === "%" ? "%" : "°"}`;
+    if (small) {
+      svg.innerHTML = ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`).join("");
+      return;
+    }
+    const gid = `rcg${Math.random().toString(36).slice(2, 8)}`;
+    const first = ser[0];
+    const fi = first.v.findIndex((v) => v != null);
+    const li = N - 1 - [...first.v].reverse().findIndex((v) => v != null);
+    const area = `${path(first)}L${X(li).toFixed(1)},${y1}L${X(fi).toFixed(1)},${y1}Z`;
+    const grid = [0, 0.5, 1].map((f) => {
+      const y = y1 - f * (y1 - y0);
+      const lab = (s0, x, anchor) => `<text x="${x}" y="${(y + 3.5).toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${s0.c}">${cesc(fmt(s0, s0.lo + f * (s0.hi - s0.lo)))}</text>`;
+      return `<line x1="${x0}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>${lab(ser[0], x0 - 4, "end")}${ser[1] ? lab(ser[1], x1 + 4, "start") : ""}`;
+    }).join("");
+    const t0 = Date.now() - 24 * 3600 * 1000;
+    const hm = (ms) => new Date(ms).toLocaleTimeString(hass.locale && hass.locale.language, { hour: "2-digit", minute: "2-digit" });
+    const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? "now" : f ? "12 h ago" : "24 h ago"}</text>`).join("");
+    svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${first.c};stop-opacity:.28"/><stop offset="1" style="stop-color:${first.c};stop-opacity:0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#${gid})"/>${ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="2.2" stroke-linecap="round"/>`).join("")}${times}<line class="cx" y1="${y0}" y2="${y1}" stroke="currentColor" stroke-opacity=".35" visibility="hidden"/>${ser.map((s0, k) => `<circle class="cd${k}" r="3.5" fill="${s0.c}" stroke="var(--card-background-color, #fff)" stroke-width="1.5" visibility="hidden"/>`).join("")}`;
+    el.querySelector(".rcl").innerHTML = ser.map((s0) => `<span style="--c:${s0.c}">${cesc(fmt(s0, s0.min))}–${cesc(fmt(s0, s0.max))}</span>`).join("");
+    // Touch / hover: the values at that time.
+    const tip = el.querySelector(".rctip");
+    const cx = svg.querySelector(".cx");
+    const show = (ev) => {
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const fx = ((ev.clientX - r.left) / r.width) * W;
+      const i = Math.max(0, Math.min(N - 1, Math.round(((fx - x0) / (x1 - x0)) * (N - 1))));
+      const x = X(i);
+      cx.setAttribute("x1", x);
+      cx.setAttribute("x2", x);
+      cx.setAttribute("visibility", "visible");
+      const parts = [];
+      ser.forEach((s0, k) => {
+        const dot = svg.querySelector(`.cd${k}`);
+        const v = s0.v[i];
+        if (v == null) return dot.setAttribute("visibility", "hidden");
+        dot.setAttribute("cx", x);
+        dot.setAttribute("cy", s0.Y(v));
+        dot.setAttribute("visibility", "visible");
+        parts.push(`<b style="color:${s0.c}">${cesc(fmt(s0, v))}</b>`);
+      });
+      tip.innerHTML = `${cesc(hm(t0 + (i / (N - 1)) * 24 * 3600 * 1000))} · ${parts.join(" · ")}`;
+      tip.style.left = `${Math.max(12, Math.min(88, (x / W) * 100))}%`;
+      tip.style.visibility = "visible";
+    };
+    const hide = () => {
+      cx.setAttribute("visibility", "hidden");
+      for (const d of svg.querySelectorAll("circle")) d.setAttribute("visibility", "hidden");
+      tip.style.visibility = "hidden";
+    };
+    svg.addEventListener("pointermove", show);
+    svg.addEventListener("pointerdown", show);
+    svg.addEventListener("pointerleave", hide);
   }
 
   _setOverlay(o) {
