@@ -4,16 +4,18 @@
 
 ### 🖼️ Device pictures (new)
 
-- **A device can stand on the plan as a top-down picture** instead of an icon: 50 built-in pictures, or your own transparent PNG / WebP (up to 2 MB). Pick it in the Floorplan Editor (a grid of thumbnails), then set size and turn. Your own pictures are reused across devices and stored privately in `config/device_floorplan/pictures`.
-- **Looks per state**: On, Off and Unavailable each as full picture, faint, outline, dotted outline or hidden; an optional tint; a traced outline.
+<img width="1389" alt="Assign Pictures to Devices" src="https://github.com/user-attachments/assets/80a22f2e-c1fa-4201-8038-57bbc82fdca2" />
+
+- **A device or entity can stand on the plan as a top-down picture** instead of an icon: 50 built-in pictures, or your own transparent PNG / WebP (up to 2 MB). Select the device or entity in the Floorplan Editor (on the device/entity menu 'Choose' Picture), then set size and turn. Tint it to adjust the colour. Your own pictures are reused across devices and stored privately in `config/device_floorplan/pictures`.
+- **Looks per state**: On, Off and Unavailable each as full picture, faint, outline, dotted outline or hidden; an optional tint to change its colour; a traced outline.
 - **Highlight**: a fourth look when something else happens (a car's door open, a printer printing): *Glow*, *Breathing*, *Flow* or *Tint*. Still with "reduce motion".
 - **On / Off from any entity**: *Shows as On when [entity] is [value]* in the card's marker settings, with the entity's real values to pick.
-- The Floorplan Editor previews the picture the way the card draws it (**Preview: On · Off · Unavailable · Highlight**). Pictures also for bonds and for entities placed on their own, and in Home Replay.
+- The Floorplan Editor previews the picture the way the card draws it (**Preview: On · Off · Unavailable · Highlight**). Pictures also for bonds and for entities placed on their own, *can show up in Live Overlay and in Home Replay*.
 - See [How devices behave](/using/device-rules).
 
 ### 👆 Touch areas (new)
 
-- **Your plan picture already shows the TV or the AC?** Give it a touch area in the Floorplan Editor and tap it right where it's drawn, also when it's off. *Touch areas show*: a short flash (default), a faint outline, or nothing.
+- **Your plan picture already shows the TV or the AC?** Give it a touch area in the Floorplan Editor and tap it right where it's drawn, also when it's off. *Touch areas show*: a short flash (default), a faint outline, or nothing. Works also in Live Overlay.
 - After a tap, a device **pulses until it answers** (slow IR air conditioners, shutters). A tap on an unavailable device says so.
 
 ### 🧭 Floorplan Editor
@@ -25,17 +27,18 @@
 ### 🖊️ Marker settings, reworked
 
 - **The Card Editor window acts like the card**: click a marker on the preview and its settings open; a tap or long press shows what it would do. Live states stay live.
-- **Every value is shown**, and what you didn't change says *automatic* and what it uses. *These settings are for ‹overlay› only*; the name sits under **For all overlays**.
+- **Every value is shown**, and what you didn't change says *automatic* and what it uses. *These settings are per ‹overlay› only*; the name sits under **For all overlays** and can be used for card-mod styling.
 - **Follows**, **Counts as on**, **Shown as**, **When it is off**, **Also shows**, **Tap** and **Long press** (new, per kind and per device), all as plain drop-downs. Settings say what the plan really draws.
 - **Settings and diagnostic entities never lead** a marker, never count as a bond's part (a LED strip with a router's "Internet access" switch is a lamp again) and never fill the info card.
-- **Added devices show as themselves in Live**: a thermometer as its temperature and humidity chip, the same in the preview as on the dashboard. Devices with nothing to draw aren't offered.
+- **Add your own devices/sensors in Live**: a thermometer as its temperature and humidity chip, the same in the preview as on the dashboard. Devices with nothing to draw aren't offered.
 - **Style one marker** with card-mod: every marker carries its name as `data-name` (see [the card reference](/reference/card)).
 
 ### 📈 Readings popup
+<img width="625" height="477" alt="Popup Readings Graph" src="https://github.com/user-attachments/assets/082a0b1f-7224-4a6f-bb22-e818614e5c97" />
 
 - **Temperature and humidity in one chart**, current values large on top; touch the chart for the values at any time. Follows your light or dark theme.
 - **It charts what the marker shows**, plus every temperature and humidity you add under *Also shows*. Works the same for thermometers, sensors and AC chips.
-- **Phantoms of thermometers**: tap for the total with its chart, then one row per thermometer that opens its own chart. Long press: the info card.
+- **Phantoms of thermometers**: you have more than one thermometer in a room and you want just to show the average on your floorplan for that room: Create a Phantom device in Floorplan Editor & put it in the middle of the room. In the Floorplan Card, tap on it for the total with its chart, then one row per thermometer that opens its own chart. Long press: the info card.
 
 ### 🩺 Health and 🌡️ Comfort
 
