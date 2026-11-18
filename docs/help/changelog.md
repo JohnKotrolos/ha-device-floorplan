@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.0 · Your devices, as they really are
+## 0.13.0 · You asked, we drew it
 
 ### 🖼️ Device pictures (new)
 
