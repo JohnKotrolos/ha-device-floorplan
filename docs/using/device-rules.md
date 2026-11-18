@@ -27,12 +27,12 @@ If a device lands in the wrong category, open it in the Floorplan Editor and pic
 | Water & garden | valves, irrigation, soil and plant sensors | details |
 | Buttons & remotes, Network & repeaters, Computers & servers, Helpers, Other | | details |
 
-You can change the tap of any device per overlay in the card's **Edit markers**, and the default per kind in the card settings.
+You can change the tap and the long press of any device per overlay in the card's **Edit markers**, and the default per kind in the card settings.
 
 ## Tap and hold
 
 - **Tap** does the device's tap action.
-- **Hold** opens its details.
+- **Long press** opens its details (a bond of lamps, a phantom of thermometers: its info card).
 - A tap on a device that is **unavailable** says so and does nothing.
 - After a tap, the device **pulses** until it answers (slow devices such as IR air conditioners and shutters), for at most 8 seconds.
 
@@ -58,7 +58,7 @@ In Live the picture is where you tap, also when the device is off. Its look foll
 
 You can change each of these per device (full picture, faint picture, outline, dotted outline, hidden), tint the picture with a colour (it darkens toward the colour and keeps its shading, so black makes a dark car), and move the outline a little inside the picture with **Outline inset**.
 
-**What decides On and Off** is set in the card: **Edit markers → Live → Picture**, two sentences:
+**What decides On and Off** is set in the card: **Edit markers → the device → Picture** (per overlay), two sentences:
 
 - *Shows as On when [entity] is [value]*: pick one of the device's entities (listed by short name with its current value, with a search box; "Another entity…" for anything else, such as a camera's car detection) and one of the values it really has. Numbers get "above …". Left empty, the entity that leads in Live decides, else the device's own state.
 - *Highlight when [entity] is [value]*, and whether only while it is On.

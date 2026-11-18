@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.13.0 · Your devices, as they really are
+
+### 🖼️ Device pictures (new)
+
+- **A device can stand on the plan as a top-down picture** instead of an icon: 38 built-in pictures, or your own transparent PNG / WebP (up to 2 MB). Pick it in the Floorplan Editor (a grid of thumbnails), then set size and turn. Your own pictures are reused across devices and stored privately in `config/device_floorplan/pictures`.
+- **Looks per state**: On, Off and Unavailable each as full picture, faint, outline, dotted outline or hidden; an optional tint; a traced outline.
+- **Highlight**: a fourth look when something else happens (a car's door open, a printer printing): *Glow*, *Breathing*, *Flow* or *Tint*. Still with "reduce motion".
+- **On / Off from any entity**: *Shows as On when [entity] is [value]* in the card's marker settings, with the entity's real values to pick.
+- The Floorplan Editor previews the picture the way the card draws it (**Preview: On · Off · Unavailable · Highlight**). Pictures also for bonds and for entities placed on their own, and in Home Replay.
+- See [How devices behave](/using/device-rules).
+
+### 👆 Touch areas (new)
+
+- **Your plan picture already shows the TV or the AC?** Give it a touch area in the Floorplan Editor and tap it right where it's drawn, also when it's off. *Touch areas show*: a short flash (default), a faint outline, or nothing.
+- After a tap, a device **pulses until it answers** (slow IR air conditioners, shutters). A tap on an unavailable device says so.
+
+### 🧭 Floorplan Editor
+
+- **Side plans**: several plans per floor (a garden, a garage), switched with ◀ ▶ on the floor rail.
+- **One list of 20 categories**, picked from what a device mainly is; change it per device under **Category** (it also decides Light / Switch / Fan on the card). The Editor lists and filters by category.
+- **Bond lights**: one light for the whole bond or one per lamp; light centres can be moved.
+
+### 🖊️ Marker settings, reworked
+
+- **The Card Editor window acts like the card**: click a marker on the preview and its settings open; a tap or long press shows what it would do. Live states stay live.
+- **Every value is shown**, and what you didn't change says *automatic* and what it uses. *These settings are for ‹overlay› only*; the name sits under **For all overlays**.
+- **Follows**, **Counts as on**, **Shown as**, **When it is off**, **Also shows**, **Tap** and **Long press** (new, per kind and per device), all as plain drop-downs. Settings say what the plan really draws.
+- **Settings and diagnostic entities never lead** a marker, never count as a bond's part (a LED strip with a router's "Internet access" switch is a lamp again) and never fill the info card.
+- **Added devices show as themselves in Live**: a thermometer as its temperature and humidity chip, the same in the preview as on the dashboard. Devices with nothing to draw aren't offered.
+- **Style one marker** with card-mod: every marker carries its name as `data-name` (see [the card reference](/reference/card)).
+
+### 📈 Readings popup
+
+- **Temperature and humidity in one chart**, current values large on top; touch the chart for the values at any time. Follows your light or dark theme.
+- **It charts what the marker shows**, plus every temperature and humidity you add under *Also shows*. Works the same for thermometers, sensors and AC chips.
+- **Phantoms of thermometers**: tap for the total with its chart, then one row per thermometer that opens its own chart. Long press: the info card.
+
+### 🩺 Health and 🌡️ Comfort
+
+- **Health follows the device's own battery** (the one Home Assistant lists under *Diagnostic*). A car's or a UPS's charge level is no longer a "low battery" by itself; pick it under **Follows** if you want it there. Settings say when Health shows a device.
+- **Comfort uses room temperatures only**: no more NAS, computer or smart-plug chip temperatures. *Use its temperature in Comfort* adds one where you want it.
+- A thermometer's chip shows the temperature first, whichever entity Home Assistant calls its main one.
+
+### 🗂️ Info card
+
+- A chip's info card shows its value; readings come before switches; names are shortened, but keep the device name where a bond or phantom has several; no duplicate rows; no technical texts.
+
+### ⚠️ Changes you may notice
+
+- **Bonds** show "2/5" only when you choose *how many are on*; otherwise they're on when any part is on, as the setting says.
+- **Health**: a battery Home Assistant doesn't list under *Diagnostic* (e.g. an EV's charge) needs **Follows** to show there.
+- **A phantom of thermometers** opens its readings on tap (its info card moved to long press), unless you set its tap.
+
 ## 0.12.0 · Your home, now, REPLAYED!
 
 ### ⏪ Home Replay (new)

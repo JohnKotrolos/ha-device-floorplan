@@ -165,24 +165,40 @@ Open the dashboard's edit mode and edit the card. It has two parts:
 
 ### Edit markers
 
-The **Marker Editor** opens the card full-screen. Two ways in:
+The **Card Editor window** shows the card with all its settings beside it. Two ways in:
 
 - **✎ Edit markers** in the overlay button bar, while the dashboard is in edit mode (panel and masonry dashboards). Changes are saved to the dashboard right away.
-- **Edit card → Markers → Edit markers** (on the floor picked in the tabs): works on every dashboard. On *sections* dashboards Home Assistant doesn't let you click inside cards in edit mode, so the card shows a small hint pointing here. Press **Done**, then **Save** in the card editor.
+- **Edit card** in Home Assistant: the card's editor opens the same window. On *sections* dashboards Home Assistant doesn't let you click inside cards in edit mode, so this is the way in there. Press **Done**, then **Save** in the card editor.
 
-**Pick an overlay** with the buttons under the plan: everything you change applies to **that overlay**.
+**Pick an overlay** with the buttons under the plan; the chips at the top of a marker's settings switch it too.
 
-- **Click a marker**: its settings open at the top of the right panel, and a red **✕** appears on it (✕ hides it in this overlay).
-  - **Leads in ‹overlay›**: which entity the marker uses for its icon, colour, on/off and tap. *Automatic* picks the one that fits the overlay (e.g. a presence sensor's overall presence in Security).
-  - **Also show**: add any readings of the device as small lines under the marker, e.g. a 3D printer: *Printing* · *1 h 20 min left* · *AMS 38 %*. *Back to automatic* undoes it. Each line can get its own **icon** (click the icon in front of it), and **one** line can be a **badge** on the marker's corner instead (○ → ●), e.g. the number of people a presence sensor counts. **Show an icon** off shows only the values.
-  - **Icon** and **Tap** in this overlay, **Name on the card** (all overlays), **Value on the plan** (bonds and phantoms with sensors), **Shows in** for every overlay.
-- **The list** below: search, then
-  - **Hidden here**: markers you hid, each with **↩ Show**;
-  - **On this overlay**: click one to select it;
-  - **Not in this overlay**: in your own overlays with **+ Add**. A device always appears at its spot from the Floorplan Editor; devices not on the plan yet are placed there first.
-- **People**: click a person for their person, room sensors and the overlays that show people.
+**Click a marker on the preview** (or in the list) and its settings open on the right. A tap or long press on the preview shows what it would do on the dashboard ("Would open: details"), without switching anything. The ✕ on the selected marker hides it in this overlay.
 
-Bonds list the entities of all their members (*All lights together*, *Average temperature* and so on are the automatic choices). Phantoms always show their combined value.
+The marker's settings show every value in use; what you didn't change says **automatic** and what it uses. *These settings are for ‹overlay› only*, except the last part:
+
+- **Show here**: on or off in this overlay. In Live and your own overlays you can add any device that has something to show (*you add it*); in the other overlays a device shows by itself when it fits.
+- **Follows**: which of the device's entities the marker follows (icon, colour, on / off, value). Offered only where there's a real choice; settings and diagnostic entities never lead. In **Health** it's the battery: automatically the device's own (the one Home Assistant lists under *Diagnostic*); pick another one, such as a UPS's or a car's charge level, here.
+- **Counts as on** (bonds, where on / off changes the marker): *if any part is on*, or *how many are on* (shows 2/5).
+- **Shown as**: what the plan draws: icon, chip, picture, touch area, glow, a camera's dot. **Icon**: change it where an icon is drawn.
+- **When it shows** (Health) and **When it is off** (Live): hidden, or faint so it can be tapped on again.
+- **Picture** (devices with a picture): *Shows as On when [entity] is [value]* and *Highlight when [entity] is [value]*.
+- **Also shows**: readings drawn under the marker, e.g. a 3D printer: *Printing* · *1 h 20 min left* · *AMS 38 %*. *Automatic* lists only lines that are really drawn. **+ Add a reading**; *Show settings entities too* for the rest. One line can be a **badge** on the marker's corner.
+- **Tap** and **Long press**: *Automatic* says in words what it does here (switches it, opens its details, readings with history, info card); or pick an action, a page or a popup.
+- **For all overlays**: the **Name on the card**, and *Use its temperature in Comfort* for a device whose temperature Comfort doesn't use by itself.
+
+**The list** below the settings: search, then the markers on this overlay, the ones hidden here (**↩ Show**) and, in Live and your own overlays, devices you can add. **People**: click a person for their person, room sensors and the overlays that show people.
+
+**Style one marker with card-mod**: see *Style one marker* above; every marker carries its name as `data-name`.
+
+### Readings popup
+
+Thermometers, sensors and AC chips open a readings popup (tap or long press, as set). It shows the current values large, with the last 24 hours below:
+
+- **Temperature and humidity share one chart**: temperature on the left axis, humidity on the right. Touch or hover the chart for both values at that time.
+- **It charts what the marker shows**: its own values, plus every temperature and humidity you add under *Also shows* (one line each; a second line of the same kind is dashed and named in the legend). Other readings (battery, CO₂, …) get their own small graph below.
+- **A phantom of thermometers** shows its own value first (worked out the phantom's way: average, lowest, highest or one sensor), then one row per thermometer with a mini chart. Tap a row for that thermometer's chart; **‹** goes back. A tap on such a phantom opens the readings, a long press its info card.
+- **Details ›** opens Home Assistant's own dialog for each sensor.
+- The colours follow your theme. Change the lines with card-mod: `--dfc-rt` (temperature) and `--dfc-rh` (humidity).
 
 ### Light scenes
 
