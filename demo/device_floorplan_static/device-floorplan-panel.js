@@ -72,7 +72,7 @@ const PIC_LIB = {
   "Climate & air": ["ac-wall", "ac-ceiling-cassette", "fan-ceiling", "air-purifier", "radiator"],
   "Media & network": ["tv-wall", "tv-stand", "soundbar", "speaker-smart", "projector", "streaming-box", "router", "access-point-ceiling", "hub-box", "nas", "server-mini"],
   Lights: ["light-ceiling", "light-pendant", "lamp-floor", "lamp-desk", "lamp-table"],
-  "Kitchen & appliances": ["cooktop", "range-hood", "coffee-machine", "printer-3d", "printer-3d-filament-unit", "pet-feeder", "aquarium"],
+  "Kitchen & appliances": ["washing-machine", "dishwasher", "fridge", "cooktop", "range-hood", "coffee-machine", "printer-3d", "printer-3d-filament-unit", "pet-feeder", "aquarium"],
   "Moving things": ["robot-vacuum", "robot-vacuum-dock", "lawn-mower-robot", "car-sedan", "car-suv", "car-offroad", "car-pickup", "car-sedan-dashed", "car-suv-dashed", "motorcycle", "bicycle"],
   Security: ["camera-bullet"],
   Plants: ["plant-flowers", "plant-cactus"],
