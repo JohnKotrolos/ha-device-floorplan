@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.10).
+ * Device Floorplan – dashboard card (v0.12.11).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.10";
+const CARD_VERSION = "0.12.11";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -4319,14 +4319,19 @@ class DeviceFloorplanCard extends HTMLElement {
     if (room.h && Number((this._hass.states[room.h] || {}).state) > 0) hum = this._fmtNum(room.h);
     else if (own && a.current_humidity != null && Number(a.current_humidity) > 0) hum = `${Math.round(Number(a.current_humidity))}%`;
     else if (own && humEid && Number((this._hass.states[humEid] || {}).state) > 0) hum = this._fmtNum(humEid);
+    // 0.12.10: where the chip's temperature / humidity come from (its readings popup charts these).
+    const src = {
+      t: room.t || (own && a.current_temperature != null ? clim : own ? tempEid : null) || null,
+      h: (room.h && Number((this._hass.states[room.h] || {}).state) > 0 && room.h) || (own && Number(a.current_humidity) > 0 ? `${clim}#h` : own && humEid && Number((this._hass.states[humEid] || {}).state) > 0 ? humEid : null) || null,
+    };
     const icon = this._dev(item.id).icon || climateIcon(clim, st);
     const ents = [clim];
     const heatEnts = room.t ? [room.t] : own ? [clim, tempEid].filter(Boolean) : [];
     // Compact (Live, custom overlays, #99): icon + room temperature in the mode colour; "Off" when off.
     // 0.7.4: off needs no word: the grey chip already says it (a narrower chip); offline still says so.
     const shown = live(st) && st.state === "off" ? "" : word;
-    if (compact) return { key: `${item.id}|${clim}`, type: "chip", cl2: true, compact: true, item, name, lines: [temp || "—", word], word: on ? "" : shown, set: "", temp, hum: "", ents, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
-    return { key: `${item.id}|${clim}`, type: "chip", cl2: true, item, name, lines: [temp || "—", word], word: shown, set, temp, hum, ents, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
+    if (compact) return { key: `${item.id}|${clim}`, type: "chip", cl2: true, compact: true, item, name, lines: [temp || "—", word], word: on ? "" : shown, set: "", temp, hum: "", ents, src, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
+    return { key: `${item.id}|${clim}`, type: "chip", cl2: true, item, name, lines: [temp || "—", word], word: shown, set, temp, hum, ents, src, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
   }
 
   /** Room thermometer / humidity sensor bonded with a climate unit (from another device than the unit). */
@@ -8162,7 +8167,9 @@ ${reset}
   }
 
   _openReadings(s) {
-    this._popup = { type: "readings", key: s.key, ents: [...s.ents] };
+    // 0.12.10: an AC chip charts what it shows (room thermometer, humidity), not only the unit.
+    const src = s.src ? [s.src.t, s.src.h].filter(Boolean) : [];
+    this._popup = { type: "readings", key: s.key, ents: src.length ? src : [...s.ents] };
     this._hist = null;
     this._update(true);
   }
@@ -8257,7 +8264,7 @@ ${reset}
    *  a bond) shows its total first, then one row per device; a row opens that device's own chart. */
   _rdHtml(s, p, close) {
     const hass = this._hass;
-    const groups = this._rdGroups(s, p.ents);
+    const groups = this._rdGroups(s, p.ents && p.ents.length ? p.ents : s.ents || []);
     const multi = groups.length > 1;
     const sub = multi && p.sub ? groups.find((g) => g.id === p.sub) : null;
     const view = multi && !sub ? null : sub || groups[0];
@@ -8267,8 +8274,8 @@ ${reset}
       const i = this._rdCharts.length - 1;
       return small ? `<svg class="rcs" data-rc="${i}" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>` : `<div class="rc" data-rc="${i}"><svg viewBox="0 0 320 150"></svg><div class="rctip"></div><div class="rcl"></div></div>`;
     };
-    const tv = (e) => (domainOf(e) === "climate" ? (hass.states[e] ? this._attrVal(hass.states[e], "current_temperature") : "—") : this._fmtNum(e));
-    const now = (g, cls = "rcnow") => `<div class="${cls}">${g.t ? `<span class="t">${cesc(tv(g.t))}</span>` : ""}${g.h ? `<span class="h">${cesc(this._fmtNum(g.h))}</span>` : ""}</div>`;
+    const tv = (e) => (domainOf(e) === "climate" ? (hass.states[e] && hass.states[e].attributes.current_temperature != null ? `${this._num1(hass.states[e].attributes.current_temperature)} ${hass.states[e].attributes.temperature_unit || (hass.config && hass.config.unit_system && hass.config.unit_system.temperature) || "°C"}` : "—") : this._fmtNum(e));
+    const now = (g, cls = "rcnow") => `<div class="${cls}">${g.t ? `<span class="t">${cesc(tv(g.t))}</span>` : ""}${g.h ? `<span class="h">${cesc(this._hv(g.h))}</span>` : ""}</div>`;
     const one = (e) => {
       const st = hass.states[e];
       const k = domainOf(e) === "climate" ? "temperature" : kindOf(e, st);
@@ -8277,7 +8284,7 @@ ${reset}
       const big = domainOf(e) === "climate" && st ? this._attrVal(st, "current_temperature") : this._fmtNum(e);
       return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>24 h ago</span><span class="range"></span><span>now</span></div><button class="more" data-mi="${cesc(e)}">Details ›</button></div>`;
     };
-    const det = (g) => [g.t, g.h].filter(Boolean).map((e) => `<button class="more" data-mi="${cesc(e)}">${domainOf(e) === "climate" || kindOf(e, hass.states[e]) === "temperature" ? "Temperature" : "Humidity"} details ›</button>`).join("");
+    const det = (g) => [...new Set([g.t, g.h].filter(Boolean).map((e) => e.replace(/#h$/, "")))].map((e) => `<button class="more" data-mi="${cesc(e)}">${domainOf(e) === "climate" ? "Details" : kindOf(e, hass.states[e]) === "temperature" ? "Temperature details" : "Humidity details"} ›</button>`).join("");
     let body;
     if (!view) {
       // The total, worked out as the marker works it out (average, lowest, highest, one sensor).
@@ -8320,9 +8327,16 @@ ${reset}
     });
   }
 
+  /** A humidity value; "climate.x#h" = the thermostat's own humidity. */
+  _hv(e) {
+    if (!e.endsWith("#h")) return this._fmtNum(e);
+    const st = this._hass.states[e.slice(0, -2)];
+    return st && Number(st.attributes.current_humidity) > 0 ? `${Math.round(Number(st.attributes.current_humidity))}%` : "—";
+  }
+
   _rdSplit(es) {
     const hass = this._hass;
-    const k = (e) => (domainOf(e) === "climate" ? "temperature" : kindOf(e, hass.states[e]));
+    const k = (e) => (e.endsWith("#h") ? "humidity" : domainOf(e) === "climate" ? "temperature" : kindOf(e, hass.states[e]));
     const t = es.find((e) => k(e) === "temperature" && domainOf(e) !== "climate") || es.find((e) => k(e) === "temperature") || null;
     const h = es.find((e) => k(e) === "humidity") || null;
     return { t, h, ents: es, other: es.filter((e) => e !== t && e !== h) };
@@ -8341,8 +8355,12 @@ ${reset}
         if (plain.length) Object.assign(data, await this._hass.callWS({ type: "history/history_during_period", start_time: start, entity_ids: plain, minimal_response: true, no_attributes: true, significant_changes_only: false }));
         // Thermostats keep their room temperature in an attribute.
         if (clim.length) {
-          const res = await this._hass.callWS({ type: "history/history_during_period", start_time: start, entity_ids: clim, minimal_response: false, no_attributes: false, significant_changes_only: false });
-          for (const [eid, rows] of Object.entries(res || {})) data[eid] = rows.map((r) => ({ s: r.a ? r.a.current_temperature : null, lu: r.lu || r.lc }));
+          const base = [...new Set(clim.map((e) => e.replace(/#h$/, "")))];
+          const res = await this._hass.callWS({ type: "history/history_during_period", start_time: start, entity_ids: base, minimal_response: false, no_attributes: false, significant_changes_only: false });
+          for (const e of clim) {
+            const at = e.endsWith("#h") ? "current_humidity" : "current_temperature"; // 0.12.10: its humidity too
+            data[e] = ((res || {})[e.replace(/#h$/, "")] || []).map((r) => ({ s: r.a ? r.a[at] : null, lu: r.lu || r.lc }));
+          }
         }
       } catch (_e) {
         /* no history: the popup still shows the current values */
@@ -8406,6 +8424,7 @@ ${reset}
     const hass = this._hass;
     const unitOf = (eids, dflt) => {
       const st = eids[0] && hass.states[eids[0]];
+      if (eids[0] && eids[0].endsWith("#h")) return "%";
       if (st && domainOf(eids[0]) === "climate") return (hass.config && hass.config.unit_system && hass.config.unit_system.temperature) || "°C";
       return (st && st.attributes.unit_of_measurement) || dflt;
     };
