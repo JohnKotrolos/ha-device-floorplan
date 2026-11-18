@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.12.11).
+ * Device Floorplan – dashboard card (v0.12.12).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.12.11";
+const CARD_VERSION = "0.12.12";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -1336,7 +1336,8 @@ ha-card.ov-security .m.unavail .ic { opacity:1; border-color: var(--error-color,
 .rc { position:relative; color: var(--secondary-text-color); }
 .rc svg { width:100%; height:auto; display:block; touch-action: pan-y; overflow: visible; }
 .rctip { position:absolute; top:-6px; transform: translateX(-50%); visibility:hidden; pointer-events:none; white-space:nowrap; font-size:12px; padding:3px 8px; border-radius:8px; background: var(--card-background-color, #fff); color: var(--primary-text-color); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
-.rcl { display:flex; gap:16px; justify-content:center; font-size:11px; }
+.rcl { display:flex; gap:6px 16px; justify-content:center; flex-wrap:wrap; font-size:11px; }
+.rcl .dash::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
 .rcl span::before { content:""; display:inline-block; width:10px; height:3px; border-radius:2px; background: var(--c); margin-right:6px; vertical-align:middle; }
 .rcnow { display:flex; gap:18px; align-items:baseline; }
 .rcnow span, .rcv span { display:inline-flex; align-items:center; gap:6px; }
@@ -8167,9 +8168,12 @@ ${reset}
   }
 
   _openReadings(s) {
-    // 0.12.10: an AC chip charts what it shows (room thermometer, humidity), not only the unit.
-    const src = s.src ? [s.src.t, s.src.h].filter(Boolean) : [];
-    this._popup = { type: "readings", key: s.key, ents: src.length ? src : [...s.ents] };
+    // 0.12.11: the popup charts what the marker shows: its own values (for a chip, where its numbers come from)
+    // and every reading picked in "Also shows".
+    const core = s.core || s.ents;
+    const extra = s.ents.filter((e) => !core.includes(e));
+    const vals = s.src ? [s.src.t, s.src.h].filter(Boolean) : core;
+    this._popup = { type: "readings", key: s.key, ents: [...new Set([...(vals.length ? vals : core), ...extra])], lead: s.eid || core[0] };
     this._hist = null;
     this._update(true);
   }
@@ -8284,7 +8288,13 @@ ${reset}
       const big = domainOf(e) === "climate" && st ? this._attrVal(st, "current_temperature") : this._fmtNum(e);
       return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>24 h ago</span><span class="range"></span><span>now</span></div><button class="more" data-mi="${cesc(e)}">Details ›</button></div>`;
     };
-    const det = (g) => [...new Set([g.t, g.h].filter(Boolean).map((e) => e.replace(/#h$/, "")))].map((e) => `<button class="more" data-mi="${cesc(e)}">${domainOf(e) === "climate" ? "Details" : kindOf(e, hass.states[e]) === "temperature" ? "Temperature details" : "Humidity details"} ›</button>`).join("");
+    // One button per charted entity; named by its device where a kind has several lines.
+    const det = (g) => [...new Set([p.lead, ...g.ts, ...g.hs].filter(Boolean).map((e) => e.replace(/#h$/, "")))].map((e) => {
+      const kd = domainOf(e) === "climate" ? "" : kindOf(e, hass.states[e]) === "temperature" ? "Temperature" : "Humidity";
+      const many = kd && (kd === "Temperature" ? g.ts : g.hs).length > 1;
+      const lab = !kd ? "Details" : many ? `${this._rdName(e)} · ${kd.toLowerCase()}` : `${kd} details`;
+      return `<button class="more" data-mi="${cesc(e)}">${cesc(lab)} ›</button>`;
+    }).join("");
     let body;
     if (!view) {
       // The total, worked out as the marker works it out (average, lowest, highest, one sensor).
@@ -8296,7 +8306,7 @@ ${reset}
       body = `${sum}${ts.length || hs.length ? chart(ts, hs, mode) : ""}<div class="rclist">${rows}</div>`;
     } else {
       const back = sub ? `<button class="rcback" data-rdsub="">‹ ${cesc(s.name)}</button>` : "";
-      const tH = view.t || view.h ? `${now(view)}${chart(view.t ? [view.t] : [], view.h ? [view.h] : [], "one")}<div class="rcdet">${det(view)}</div>` : "";
+      const tH = view.t || view.h ? `${now(view)}${chart(view.ts, view.hs, "each")}<div class="rcdet">${det(view)}</div>` : "";
       body = `${back}${tH}${view.other.map(one).join("")}`;
     }
     const title = sub ? sub.name : s.name;
@@ -8327,6 +8337,15 @@ ${reset}
     });
   }
 
+  /** A chart line's name: its device (an AC, a room thermometer), else the entity's name. */
+  _rdName(e) {
+    const hass = this._hass;
+    const id = e.replace(/#h$/, "");
+    const reg = (hass.entities || {})[id];
+    const dv = reg && reg.device_id && (hass.devices || {})[reg.device_id];
+    return (dv && (dv.name_by_user || dv.name)) || entName(hass, id);
+  }
+
   /** A humidity value; "climate.x#h" = the thermostat's own humidity. */
   _hv(e) {
     if (!e.endsWith("#h")) return this._fmtNum(e);
@@ -8337,9 +8356,10 @@ ${reset}
   _rdSplit(es) {
     const hass = this._hass;
     const k = (e) => (e.endsWith("#h") ? "humidity" : domainOf(e) === "climate" ? "temperature" : kindOf(e, hass.states[e]));
-    const t = es.find((e) => k(e) === "temperature" && domainOf(e) !== "climate") || es.find((e) => k(e) === "temperature") || null;
-    const h = es.find((e) => k(e) === "humidity") || null;
-    return { t, h, ents: es, other: es.filter((e) => e !== t && e !== h) };
+    const ts = es.filter((e) => k(e) === "temperature");
+    const hs = es.filter((e) => k(e) === "humidity");
+    // t / h: the first of each (the marker's own value comes first); ts / hs: all of them, all charted.
+    return { t: ts[0] || null, h: hs[0] || null, ts, hs, ents: es, other: es.filter((e) => !ts.includes(e) && !hs.includes(e)) };
   }
 
   /** 24 h history sparklines for the readings popup. */
@@ -8429,10 +8449,15 @@ ${reset}
       return (st && st.attributes.unit_of_measurement) || dflt;
     };
     const ser = [];
-    const T = this._rdSeries(def.t, def.mode);
-    const H = this._rdSeries(def.h, def.mode);
-    if (T) ser.push({ v: T, c: "var(--dfc-rt)", u: unitOf(def.t, "°C"), d: 1 });
-    if (H) ser.push({ v: H, c: "var(--dfc-rh)", u: unitOf(def.h, "%"), d: 0 });
+    const add = (eids, c, dflt, d) => {
+      const each = def.mode === "each" ? eids.map((e) => [e]) : [eids];
+      each.forEach((es, n) => {
+        const v = this._rdSeries(es, def.mode === "each" ? "one" : def.mode);
+        if (v) ser.push({ v, c, u: unitOf(es, dflt), d, dash: n > 0, nm: each.length > 1 ? this._rdName(es[0]) : "" });
+      });
+    };
+    add(def.t, "var(--dfc-rt)", "°C", 1);
+    add(def.h, "var(--dfc-rh)", "%", 0);
     const small = el.tagName.toLowerCase() === "svg";
     const svg = small ? el : el.querySelector("svg");
     if (!ser.length) {
@@ -8441,19 +8466,29 @@ ${reset}
     }
     const W = small ? 100 : 320;
     const x0 = small ? 0 : 34;
-    const x1 = small ? 100 : ser.length > 1 ? 286 : 312;
+    const axes = [...new Set(ser.map((x) => x.c))].map((c) => ser.find((x) => x.c === c));
+    const x1 = small ? 100 : axes.length > 1 ? 286 : 312;
     const y0 = small ? 3 : 12;
     const y1 = small ? 25 : 120;
     const N = ser[0].v.length;
     const X = (i) => x0 + (i / (N - 1)) * (x1 - x0);
+    const kinds = [...new Set(ser.map((x) => x.c))];
+    for (const c of kinds) {
+      const same = ser.filter((x) => x.c === c);
+      const vs = same.flatMap((x) => x.v).filter((v) => v != null);
+      const min = Math.min(...vs);
+      const max = Math.max(...vs);
+      const pad = (max - min) * 0.12 || 0.5;
+      for (const s0 of same) {
+        s0.lo = min - pad;
+        s0.hi = max + pad;
+        s0.Y = (v) => y1 - ((v - s0.lo) / (s0.hi - s0.lo)) * (y1 - y0);
+      }
+    }
     for (const s0 of ser) {
       const vs = s0.v.filter((v) => v != null);
       s0.min = Math.min(...vs);
       s0.max = Math.max(...vs);
-      const pad = (s0.max - s0.min) * 0.12 || 0.5;
-      s0.lo = s0.min - pad;
-      s0.hi = s0.max + pad;
-      s0.Y = (v) => y1 - ((v - s0.lo) / (s0.hi - s0.lo)) * (y1 - y0);
     }
     // Smooth lines (Catmull-Rom as curves), broken where there is no value.
     const path = (s0) => {
@@ -8486,13 +8521,13 @@ ${reset}
     const grid = [0, 0.5, 1].map((f) => {
       const y = y1 - f * (y1 - y0);
       const lab = (s0, x, anchor) => `<text x="${x}" y="${(y + 3.5).toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${s0.c}">${cesc(fmt(s0, s0.lo + f * (s0.hi - s0.lo)))}</text>`;
-      return `<line x1="${x0}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>${lab(ser[0], x0 - 4, "end")}${ser[1] ? lab(ser[1], x1 + 4, "start") : ""}`;
+      return `<line x1="${x0}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>${lab(axes[0], x0 - 4, "end")}${axes[1] ? lab(axes[1], x1 + 4, "start") : ""}`;
     }).join("");
     const t0 = Date.now() - 24 * 3600 * 1000;
     const hm = (ms) => new Date(ms).toLocaleTimeString(hass.locale && hass.locale.language, { hour: "2-digit", minute: "2-digit" });
     const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? "now" : f ? "12 h ago" : "24 h ago"}</text>`).join("");
-    svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${first.c};stop-opacity:.28"/><stop offset="1" style="stop-color:${first.c};stop-opacity:0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#${gid})"/>${ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="2.2" stroke-linecap="round"/>`).join("")}${times}<line class="cx" y1="${y0}" y2="${y1}" stroke="currentColor" stroke-opacity=".35" visibility="hidden"/>${ser.map((s0, k) => `<circle class="cd${k}" r="3.5" fill="${s0.c}" stroke="var(--card-background-color, #fff)" stroke-width="1.5" visibility="hidden"/>`).join("")}`;
-    el.querySelector(".rcl").innerHTML = ser.map((s0) => `<span style="--c:${s0.c}">${cesc(fmt(s0, s0.min))}–${cesc(fmt(s0, s0.max))}</span>`).join("");
+    svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${first.c};stop-opacity:.28"/><stop offset="1" style="stop-color:${first.c};stop-opacity:0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#${gid})"/>${ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="2.2" stroke-linecap="round"${s0.dash ? ' stroke-dasharray="5 4"' : ""}/>`).join("")}${times}<line class="cx" y1="${y0}" y2="${y1}" stroke="currentColor" stroke-opacity=".35" visibility="hidden"/>${ser.map((s0, k) => `<circle class="cd${k}" r="3.5" fill="${s0.c}" stroke="var(--card-background-color, #fff)" stroke-width="1.5" visibility="hidden"/>`).join("")}`;
+    el.querySelector(".rcl").innerHTML = ser.map((s0) => `<span class="${s0.dash ? "dash" : ""}" style="--c:${s0.c}">${s0.nm ? `${cesc(s0.nm)} ` : ""}${cesc(fmt(s0, s0.min))}–${cesc(fmt(s0, s0.max))}</span>`).join("");
     // Touch / hover: the values at that time.
     const tip = el.querySelector(".rctip");
     const cx = svg.querySelector(".cx");
