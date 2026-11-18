@@ -4,7 +4,7 @@
 
 ### 🖼️ Device pictures (new)
 
-- **A device can stand on the plan as a top-down picture** instead of an icon: 38 built-in pictures, or your own transparent PNG / WebP (up to 2 MB). Pick it in the Floorplan Editor (a grid of thumbnails), then set size and turn. Your own pictures are reused across devices and stored privately in `config/device_floorplan/pictures`.
+- **A device can stand on the plan as a top-down picture** instead of an icon: 47 built-in pictures, or your own transparent PNG / WebP (up to 2 MB). Pick it in the Floorplan Editor (a grid of thumbnails), then set size and turn. Your own pictures are reused across devices and stored privately in `config/device_floorplan/pictures`.
 - **Looks per state**: On, Off and Unavailable each as full picture, faint, outline, dotted outline or hidden; an optional tint; a traced outline.
 - **Highlight**: a fourth look when something else happens (a car's door open, a printer printing): *Glow*, *Breathing*, *Flow* or *Tint*. Still with "reduce motion".
 - **On / Off from any entity**: *Shows as On when [entity] is [value]* in the card's marker settings, with the entity's real values to pick.

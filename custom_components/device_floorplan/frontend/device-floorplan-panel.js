@@ -70,10 +70,12 @@ const GROUPS = {
 /** 0.12.2: the built-in picture library (frontend/pictures/<name>.webp), grouped for the picker. */
 const PIC_LIB = {
   "Climate & air": ["ac-wall", "ac-ceiling-cassette", "fan-ceiling", "air-purifier", "radiator"],
-  "Media & network": ["tv-wall", "tv-stand", "soundbar", "speaker-smart", "projector", "router", "access-point-ceiling", "nas", "server-mini"],
-  Lights: ["light-ceiling", "light-pendant", "lamp-floor", "lamp-desk"],
-  "Kitchen & appliances": ["cooktop", "range-hood", "coffee-machine", "printer-3d", "pet-feeder", "aquarium"],
-  "Moving things": ["robot-vacuum", "robot-vacuum-dock", "lawn-mower-robot", "car-sedan", "car-suv", "car-sedan-dashed", "car-suv-dashed", "motorcycle", "bicycle"],
+  "Media & network": ["tv-wall", "tv-stand", "soundbar", "speaker-smart", "projector", "streaming-box", "router", "access-point-ceiling", "hub-box", "nas", "server-mini"],
+  Lights: ["light-ceiling", "light-pendant", "lamp-floor", "lamp-desk", "lamp-table"],
+  "Kitchen & appliances": ["cooktop", "range-hood", "coffee-machine", "printer-3d", "printer-3d-filament-unit", "pet-feeder", "aquarium"],
+  "Moving things": ["robot-vacuum", "robot-vacuum-dock", "lawn-mower-robot", "car-sedan", "car-suv", "car-offroad", "car-pickup", "car-sedan-dashed", "car-suv-dashed", "motorcycle", "bicycle"],
+  Security: ["camera-bullet"],
+  Plants: ["plant-flowers", "plant-cactus"],
   "Outside": ["solar-panels", "pool", "hot-tub", "grill", "plant-irrigation"],
 };
 const PIC_LOOKS = [["full", "Full picture"], ["faint", "Faint picture"], ["outline", "Outline"], ["dotted", "Dotted outline"], ["hidden", "Hidden"]];
