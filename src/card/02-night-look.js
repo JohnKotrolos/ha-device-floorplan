@@ -307,10 +307,10 @@ function phantomSummary(hass, ph) {
   const op = by("opening");
   if (op.length) {
     const n = op.filter((e) => ["on", "open"].includes((hass.states[e] || {}).state)).length;
-    return n ? `${n} open` : "All closed";
+    return n ? dfT("sec.n_open", { n }) : dfT("sec.all_closed");
   }
   const mo = by("motion");
-  if (mo.length) return mo.some((e) => (hass.states[e] || {}).state === "on") ? "Detected" : "Clear";
+  if (mo.length) return mo.some((e) => (hass.states[e] || {}).state === "on") ? dfT("motion.detected") : dfT("motion.clear");
   const li = ents.filter((e) => domainOf(e) === "light");
   if (li.length) return `${li.filter((e) => (hass.states[e] || {}).state === "on").length} of ${li.length} on`;
   return "";

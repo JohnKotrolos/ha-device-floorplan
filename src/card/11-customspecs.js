@@ -138,7 +138,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Health: a device without a battery shows only while offline, as this chip. */
   _offChip(item, name) {
-    return { ...this._chipSpec(item, name, { lines: ["Offline"], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
+    return { ...this._chipSpec(item, name, { lines: [dfT("offline")], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
   },
 
   _chipSpec(item, name, { lines, ents, kind, icon, cls = "" }) {
@@ -256,7 +256,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const roomVars = dark ? "--dfc-roomfg:#fff; --dfc-roomhalo: rgba(0,0,0,.85);" : "--dfc-roomfg:#263238; --dfc-roomhalo: rgba(255,255,255,.95);";
     const style = `<style>${CARD_CSS}</style>`;
     if (!sensor) {
-      setShadow(this, `${style}<ha-card><div class="msg">Plan “${cesc(this._floor || c.plan)}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.</div></ha-card>`);
+      setShadow(this, `${style}<ha-card><div class="msg">${dfT("card.plan_missing", { p: cesc(this._floor || c.plan) })}</div></ha-card>`);
       return;
     }
     const a = sensor.attributes;
@@ -333,7 +333,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     const nNew = Number((this._hass.states["sensor.device_floorplan_new_devices"] || {}).state) || 0;
     // 0.11.1: top left, away from Layers and the floor button; on a narrow card a short badge.
-    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint && !this._pick ? `<button class="admin" data-new="1" title="${nNew} new devices · only admins see this">${this._narrow ? `${nNew} new` : `${nNew} new · Place them`}</button>` : "";
+    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint && !this._pick ? `<button class="admin" data-new="1" title="${dfT("admin.new_title", { n: nNew })}">${this._narrow ? dfT("admin.new_short", { n: nNew }) : dfT("admin.new_place", { n: nNew })}</button>` : "";
     const names = look.names === "always" ? "names-always" : look.names === "off" ? "names-off" : "";
     const dock = this._overlays();
     const labels = c.overlay_names || {};
@@ -381,15 +381,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const oa = btn.actions[o] || {};
         return { g: OVERLAYS[o] ? 0 : 1, html: this._barBtn({ cls: o === ov ? "on" : "", attrs: `data-ov="${cesc(o)}" ${oa.hold_action ? 'data-bh="1"' : ""} aria-pressed="${o === ov}"`, icon: d.icon, label: labels[o] || d.label, st: this._btnStatus(oa.status, autoSt[o]) }) };
       }),
-      ...btn.shortcuts.map((sc, i) => sc.hidden ? null : ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || "Shortcut", st: this._btnStatus(sc.status, null) }) })).filter(Boolean),
+      ...btn.shortcuts.map((sc, i) => sc.hidden ? null : ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || dfT("shortcut"), st: this._btnStatus(sc.status, null) }) })).filter(Boolean),
       // 0.11.1: Replay is a mode, not an overlay: last, after a divider.
-      ...(rpPos === "bar" ? [{ g: 3, html: this._barBtn({ cls: "rpgo", attrs: 'data-rpgo="1"', icon: "mdi:history", label: "Replay" }) }] : []),
+      ...(rpPos === "bar" ? [{ g: 3, html: this._barBtn({ cls: "rpgo", attrs: 'data-rpgo="1"', icon: "mdi:history", label: dfT("rp.short") }) }] : []),
     ];
     const barHtml = barItems.map((x, i) => (i && x.g !== barItems[i - 1].g ? '<i class="bsep" aria-hidden="true"></i>' : "") + x.html).join("");
-    const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? "Scroll back" : "More buttons"}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
+    const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? dfT("bar.scroll_back") : dfT("bar.more")}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
     const barBg = btn.bar === "contrast" ? (this._hass.themes && this._hass.themes.darkMode ? "light" : "dark") : btn.bar;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="${dfT("bar.overlays")}" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -409,7 +409,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
@@ -568,19 +568,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const sides = here.length > 1;
     const hf = ((this._hass && this._hass.floors) || {})[cur.floor_id];
     const full = sides && hf && hf.name && hf.name.toLowerCase() !== cur.name.toLowerCase() ? `${hf.name} · ${cur.name}` : cur.name;
-    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(full)}: change floor" aria-label="Floor ${cesc(full)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
+    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${dfT("floor.change_t", { f: cesc(full) })}" aria-label="${dfT("floor.change_a", { f: cesc(full) })}" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
     const btn = (g, i) => {
       const f = i === li ? cur : g.plans[si] || g.plans[0];
       const nm = i === li ? full : f.name;
       return `<button class="fl ${i === li ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${i === li}" aria-label="${cesc(nm)}" title="${cesc(nm)}">${cesc(f.label)}<span class="pill">${cesc(nm)}</span></button>`;
     };
     const side = sides
-      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="Plan to the left${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="Plan to the right${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
+      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="${dfT("floor.left")}${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="${dfT("floor.right")}${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
       : "";
-    return `<div class="rail" role="toolbar" aria-label="Floors">
-      <button class="arrow" data-step="1" aria-label="Floor up" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+    return `<div class="rail" role="toolbar" aria-label="${dfT("floor.floors")}">
+      <button class="arrow" data-step="1" aria-label="${dfT("floor.up")}" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
       ${lv.map(btn).join("")}
-      <button class="arrow" data-step="-1" aria-label="Floor down" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
+      <button class="arrow" data-step="-1" aria-label="${dfT("floor.down")}" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
   },
 
   /** 0.8.1: the floor rail opens towards the plan: downwards from a button in the upper half, else upwards. */

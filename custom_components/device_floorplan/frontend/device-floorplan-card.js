@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.9.11).
+ * Device Floorplan – dashboard card (v0.13.9.12).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,24 +18,24 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.11";
+const CARD_VERSION = "0.13.9.12";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
-const RELEASE_TIP = { v: "0.13.9", text: "Christmas lights and trees", go: "Try them" };
+const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
 const TIP_KEY = "device_floorplan_release_tip";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
-  plan: { label: "Plan", icon: "mdi:floor-plan" },
-  live: { label: "Live", icon: "mdi:home-lightbulb-outline" },
-  lights: { label: "Lights", icon: "mdi:lightbulb-group-outline" },
-  comfort: { label: "Comfort", icon: "mdi:thermometer" },
-  security: { label: "Security", icon: "mdi:shield-home-outline" },
-  network: { label: "Network", icon: "mdi:access-point-network" },
-  health: { label: "Health", icon: "mdi:battery-heart-variant" },
-  energy: { label: "Energy", icon: "mdi:lightning-bolt" },
-  cleaning: { label: "Cleaning", icon: "mdi:robot-vacuum" },
-  people: { label: "People", icon: "mdi:account-group-outline" },
+  plan: { get label() { return dfT("ov.plan"); }, icon: "mdi:floor-plan" },
+  live: { get label() { return dfT("ov.live"); }, icon: "mdi:home-lightbulb-outline" },
+  lights: { get label() { return dfT("ov.lights"); }, icon: "mdi:lightbulb-group-outline" },
+  comfort: { get label() { return dfT("ov.comfort"); }, icon: "mdi:thermometer" },
+  security: { get label() { return dfT("ov.security"); }, icon: "mdi:shield-home-outline" },
+  network: { get label() { return dfT("ov.network"); }, icon: "mdi:access-point-network" },
+  health: { get label() { return dfT("ov.health"); }, icon: "mdi:battery-heart-variant" },
+  energy: { get label() { return dfT("ov.energy"); }, icon: "mdi:lightning-bolt" },
+  cleaning: { get label() { return dfT("ov.cleaning"); }, icon: "mdi:robot-vacuum" },
+  people: { get label() { return dfT("ov.people"); }, icon: "mdi:account-group-outline" },
 };
 /** 0.11: overlays added by recent updates (offered once to cards that list their own overlays). */
 const NEW_OVERLAYS = ["energy"];
@@ -161,20 +161,20 @@ const CONNS = {
   matter: { label: "Matter", icon: "mdi:home-automation" },
   network: { label: "Wi-Fi / LAN", icon: "mdi:wifi" },
   bluetooth: { label: "Bluetooth", icon: "mdi:bluetooth" },
-  radio: { label: "Wireless", icon: "mdi:signal" },
+  radio: { get label() { return dfT("conn.radio"); }, icon: "mdi:signal" },
 };
 const CONN_ORDER = ["zigbee", "zwave", "matter", "network", "bluetooth", "radio"];
 const ROLES = {
-  coordinator: { label: "Coordinator", color: "#f5a623", shape: "diamond" },
-  ap: { label: "Router / access point", color: "#f5a623", shape: "diamond" },
-  btproxy: { label: "Bluetooth proxy", color: "#f5a623", shape: "diamond" }, // test12: Bluetooth's access point
-  router: { label: "Router / repeater", color: "#3b82f6", shape: "square" },
-  hub: { label: "Hub / bridge", color: "#3b82f6", shape: "square" },
-  end: { label: "End device", color: "#43a047", shape: "round" },
-  gp: { label: "Battery-free (Green Power)", color: "#9ccc65", shape: "round" }, // 0.8.1: HA 2026.11, no parent line
-  device: { label: "Device", color: "#78909c", shape: "round" },
-  unavailable: { label: "Unavailable", color: "#e53935", shape: "round" },
-  unknown: { label: "Unknown", color: "#9e9e9e", shape: "round" },
+  coordinator: { get label() { return dfT("role.coordinator"); }, color: "#f5a623", shape: "diamond" },
+  ap: { get label() { return dfT("role.ap"); }, color: "#f5a623", shape: "diamond" },
+  btproxy: { get label() { return dfT("role.btproxy"); }, color: "#f5a623", shape: "diamond" }, // test12: Bluetooth's access point
+  router: { get label() { return dfT("role.router"); }, color: "#3b82f6", shape: "square" },
+  hub: { get label() { return dfT("role.hub"); }, color: "#3b82f6", shape: "square" },
+  end: { get label() { return dfT("role.end"); }, color: "#43a047", shape: "round" },
+  gp: { get label() { return dfT("role.gp"); }, color: "#9ccc65", shape: "round" }, // 0.8.1: HA 2026.11, no parent line
+  device: { get label() { return dfT("role.device"); }, color: "#78909c", shape: "round" },
+  unavailable: { get label() { return dfT("role.unavailable"); }, color: "#e53935", shape: "round" },
+  unknown: { get label() { return dfT("role.unknown"); }, color: "#9e9e9e", shape: "round" },
 };
 const LQI_BANDS = [
   { min: 200, color: "#43a047", label: "200–255" },
@@ -199,16 +199,24 @@ const CLIMATE_MODES = {
 
 // Climate chip v2: what the unit is doing (hvac_action) or its mode.
 const CLIMATE_ACTION = {
-  cooling: { word: "Cooling", color: "#29b6f6" },
-  heating: { word: "Heating", color: "#ff7043" },
-  drying: { word: "Drying", color: "#26a69a" },
-  fan: { word: "Fan", color: "#26a69a" },
-  idle: { word: "Idle", color: "#90a4ae" },
-  preheating: { word: "Preheating", color: "#ff7043" },
-  defrosting: { word: "Defrosting", color: "#29b6f6" },
-  off: { word: "Off", color: "#9e9e9e" },
+  cooling: { get word() { return dfT("climate.cooling"); }, color: "#29b6f6" },
+  heating: { get word() { return dfT("climate.heating"); }, color: "#ff7043" },
+  drying: { get word() { return dfT("climate.drying"); }, color: "#26a69a" },
+  fan: { get word() { return dfT("climate.fan"); }, color: "#26a69a" },
+  idle: { get word() { return dfT("climate.idle"); }, color: "#90a4ae" },
+  preheating: { get word() { return dfT("climate.preheating"); }, color: "#ff7043" },
+  defrosting: { get word() { return dfT("climate.defrosting"); }, color: "#29b6f6" },
+  off: { get word() { return dfT("climate.off"); }, color: "#9e9e9e" },
 };
-const CLIMATE_MODE_WORD = { cool: "Cooling", heat: "Heating", dry: "Dry", fan_only: "Fan", heat_cool: "Auto", auto: "Auto", off: "Off" };
+const CLIMATE_MODE_WORD = {
+  get cool() { return dfT("climate.cooling"); },
+  get heat() { return dfT("climate.heating"); },
+  get dry() { return dfT("climate.dry"); },
+  get fan_only() { return dfT("climate.fan"); },
+  get heat_cool() { return dfT("climate.auto"); },
+  get auto() { return dfT("climate.auto"); },
+  get off() { return dfT("climate.off"); },
+};
 function climateIcon(eid, st) {
   if (domainOf(eid) === "water_heater") return "mdi:water-boiler";
   if (domainOf(eid) === "humidifier") return "mdi:air-humidifier";
@@ -232,7 +240,7 @@ function bondName(b) {
     if (!names.every((n) => n.length === p.length || /[\s\-_·.,]/.test(n[p.length]))) p = (p.match(/^(.*[\s\-_·.,])/) || ["", ""])[1];
   } else p = "";
   p = p.replace(/[\s\-_·.,]+$/, "").trim();
-  return p.length >= 3 ? `${p} ×${names.length}` : names[0] || "Bond";
+  return p.length >= 3 ? `${p} ×${names.length}` : names[0] || dfT("bond");
 }
 /** 0.8.1: an entity's display name. HA 2026.11 plans to drop friendly_name: then device name + entity name from the
  *  registries (hass.devices / hass.entities), else the entity id. One place for every name on the card and in the Editor. */
@@ -255,7 +263,7 @@ const RP_RANGES = [6, 12, 24, 48]; // hours
 // test10: Energy is out again: it is hourly amounts, with its own hours under the plan (the last 24 hours).
 const RP_SKIP = new Set(["plan", "energy"]); // test11: Network replays too (online / offline, signal where recorded)
 const CAM_SIZES = { s: [120, 0.22], m: [160, 0.3], l: [240, 0.42] }; // max px, max share of the plan width
-const rpClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const rpClock = (t) => new Date(t).toLocaleTimeString(dfLocale(), { hour: "2-digit", minute: "2-digit" });
 /** 0.11.1 test8: the replay timeline. One rule: it shows only what the overlay itself shows, in three forms
  *  with one meaning each: bars = how much happened in a slot, spans = how long something ran, a line = a measured
  *  value. Kinds (and colours): lt lights, dv devices, op doors / windows / shutters / locks / doorbell, mv motion,
@@ -383,6 +391,44 @@ const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
 
+
+// ---- translations (joined from src/i18n by tools/build.mjs: edit those files) ----
+const DF_I18N = {"de":{"action":"Aktion","actions":"Aktionen","admin.new_place":"{n} neu · Platzieren","admin.new_short":"{n} neu","admin.new_title":{"one":"{n} neues Gerät · nur Admins sehen das","other":"{n} neue Geräte · nur Admins sehen das"},"alloff.n_on":{"one":"{n} Licht ist an.","other":"{n} Lichter sind an."},"alloff.none":"Gerade ist kein Licht an.","alloff.q":"Alle Lichter ausschalten?","appl.appliances":"Haushaltsgeräte","appl.done_unload":"Fertig · zum Ausräumen tippen","appl.door_open":"Tür offen","appl.drying":"Trocknet","appl.error":"Fehler","appl.finished":"Fertig","appl.idle":"Inaktiv","appl.min_elapsed":"seit {n} Min.","appl.min_left":"noch {n} Min.","appl.paused":"Pausiert","appl.pct_done":"{n}% erledigt","appl.running":"Läuft","appl.unavailable":"Status nicht verfügbar","appl.unloaded":"Ausgeräumt","bar.more":"Weitere Schaltflächen","bar.overlays":"Ansichten","bar.scroll_back":"Zurückscrollen","battery":"Batterie","bond":"Gruppe","cancel":"Abbrechen","card.choose_plan":"Wähle einen Plan (plan: <plan id>)","card.description":"Dein Grundriss mit Live-Ansichten: Live, Licht, Komfort, Sicherheit, Netzwerk, Zustand und deine eigenen.","card.plan_missing":"Plan „{p}“ nicht gefunden. Prüfe die Plan-ID oder öffne den Floorplan Editor in der Seitenleiste.","chip.n_of_on":"{n} von {t} an","chip.n_of_open":"{n} von {t} offen","chip.n_on":"{n} an","chip.n_open":"{n} offen","chip.off":"Aus","chip.on":"An","clean.cant_room":"Dein Roboter kann aus Home Assistant keinen einzelnen Raum reinigen (braucht seine Raumzuordnung, Home Assistant 2026.3+).","clean.clean_now":"Jetzt reinigen","clean.cleaned":"Gereinigt {t}.","clean.cleaned_by":"Gereinigt {t} von {by}.","clean.cleaning_l":"wird gereinigt","clean.cleaning_now":"Wird gerade gereinigt","clean.due":"Fällig","clean.every_d":"alle {n} T.","clean.in_d":"in {n} T.","clean.last7":"Letzte 7 Tage","clean.last_cleaned":"Zuletzt gereinigt","clean.last_time":"Beim letzten Mal gereinigt","clean.leg_fresh":"Frisch","clean.leg_now":"Jetzt","clean.map_hint":"Ordne diesen Raum in den Einstellungen des Roboters einem seiner Räume zu (Map vacuum segments to areas), um ihn von hier zu reinigen.","clean.never":"nie","clean.none_yet":"Hier wurde noch keine Reinigung erfasst.","clean.not_cleaned":"nicht gereinigt","clean.now":"jetzt","clean.now_with":"Jetzt mit {r} reinigen","clean.robot_usually":"Roboter reinigt meist","clean.usually_takes":"Dauert meist","climate.auto":"Auto","climate.cooling":"Kühlen","climate.defrosting":"Abtauen","climate.dry":"Entfeuchten","climate.drying":"Entfeuchten","climate.fan":"Lüfter","climate.heating":"Heizen","climate.idle":"Inaktiv","climate.off":"Aus","climate.preheating":"Vorheizen","close":"Schließen","conn.radio":"Funk","cover.all":"Alle","cover.close":"Schließen","cover.close_all":"Alle schließen","cover.open":"Öffnen","cover.open_all":"Alle öffnen","cover.position":"Position","cover.stop":"Stopp","cover.stop_all":"Alle stoppen","details":"Details","details_more":"Details ›","edit.hide_here":"Hier ausblenden (nur in dieser Ansicht)","edit.markers":"Marker bearbeiten","edit.pen_title":"Tippe auf Marker, um sie auszublenden oder Anzeige, Symbol, Name und Tippen zu wählen","energy.grid":"Netz","energy.last24":"Letzte 24 h","energy.loading":"Energie wird geladen…","energy.no_data":"Energiedaten nicht verfügbar","energy.none_yet":"Noch keine Geräte in den Energie-Einstellungen von Home Assistant. Füge sie unter Einstellungen → Dashboards → Energie hinzu, dann erscheinen sie hier.","energy.not_on_plan":"Nicht auf diesem Plan","energy.now_live":"Jetzt (live)","energy.on_plan":"Auf dem Plan","energy.panel":"Stromverteiler","energy.place_panel":"Platziere den Stromverteiler im Floorplan Editor (Schritt 3, Energiepunkte), um die Flusslinien zu sehen.","energy.rooms_darker":"Räume: dunkler = mehr Energie","energy.scrub":"Energie: die letzten 24 Stunden, Stunde für Stunde","energy.solar":"Solar","floor.change_a":"Etage {f}, Etage wechseln","floor.change_t":"{f}: Etage wechseln","floor.down":"Etage nach unten","floor.floors":"Etagen","floor.left":"Plan links","floor.right":"Plan rechts","floor.up":"Etage nach oben","graphs_more":"Verläufe ›","heat.estimated":"Geschätzt zwischen den Sensoren","heat.room_temp":"Raumtemperatur","heat.strength":"Stärke der Heatmap","hist.not_enough":"Noch nicht genug Verlauf","humidity":"Luftfeuchtigkeit","humidity_details":"Details zur Luftfeuchtigkeit","humidity_l":"Luftfeuchtigkeit","lay.air":"Luftstrom der Klimageräte","lay.all_sensors":"Alle Sensoren","lay.cams":"Kameras","lay.cams_not_replay":"Kameras (nicht im Replay)","lay.clim":"Klimageräte","lay.fill":"Raumschattierung","lay.flow":"Flusslinien","lay.heat":"Heatmap","lay.labels":"Temperaturanzeigen","lay.no_cam_replay":"Kein Kameravideo im Replay","lay.pall":"Ringe um alle Proxys","lay.path":"Reinigungsweg","lay.path_last":"Weg der letzten Reinigung","lay.pdist":"Abstand von Personen","lay.reset":"Zurück zu den Standards der Karte","lay.rooms":"Raumnamen","layers":"Ebenen","leg.colour_strength":"Farbstärke","motion.clear":"Keine Bewegung","motion.detected":"Bewegung","n_devices":{"one":"{n} Gerät","other":"{n} Geräte"},"net.ap":"Zugangspunkt","net.cable":"Kabel","net.cable_lan":"Kabel (LAN)","net.connected_devices":"Verbundene Geräte ({n})","net.connected_here":"Hier verbunden","net.connection":"Verbindung","net.connections":"Verbindungen","net.default":"Standard","net.fair":"mittel","net.good":"gut","net.hub_links":"Verbindungen über Hub / Bridge","net.includes":"Enthält","net.legend":"Legende","net.link":"Verbindung","net.no_lqi":"Noch keine Verbindungsqualität bekannt (ZHA-Daten werden für Admins geladen).","net.no_signal":"Kein Signalwert: aktiviere den Signalsensor dieses Geräts in Home Assistant, um ihn hier zu sehen.","net.not_connected":"nicht verbunden","net.not_on_floor":"nicht auf dieser Etage","net.on_floor":"auf dieser Etage","net.path":"Weg","net.refresh":"Aktualisieren","net.rescan":"Zigbee-Netzwerk neu scannen","net.role":"Rolle","net.router":"Router","net.scanning":"Scannt…","net.show_hide":"Ein- / ausblenden","net.show_hide_range":"Verbindungen in diesem Bereich ein- / ausblenden","net.signal":"Signal","net.through":"Über {d}","net.through_k":"Über","net.via_hub":"über Hub / Bridge","net.weak":"schwach","net.wifi_links":"WLAN- / LAN-Verbindungen","net.wifi_net":"WLAN-Netz","net.zha_at":"Zigbee-Daten aktualisiert um {t}","net.zigbee_links":"Zigbee-Verbindungen","newov.add":"Zu dieser Karte hinzufügen","newov.energy":". Platziere dann deine Energiesensoren im Floorplan Editor (Schritt 3, Energiepunkte) für die Flusslinien.","newov.not_now":"Nicht jetzt","newov.save_add":"Konnte nicht im Dashboard speichern: füge {o} in den Einstellungen der Karte hinzu (Ansichten)","newov.save_later":"Konnte nicht im Dashboard speichern: es erscheint nach dem Neuladen wieder","newov.text":"Neu: Ansicht {o}","offline":"Offline","open_more":"Öffnen ›","ov.cleaning":"Reinigung","ov.comfort":"Komfort","ov.custom":"Eigene","ov.energy":"Energie","ov.health":"Zustand","ov.lights":"Licht","ov.live":"Live","ov.network":"Netzwerk","ov.people":"Personen","ov.plan":"Plan","ov.security":"Sicherheit","people.home":"Zuhause","people.home_unknown":"zuhause, Raum unbekannt","people.not_sure":"unsicher","ph.average":"Durchschnitt","ph.highest":"höchster Wert","ph.lowest":"niedrigster Wert","ph.one":"ein Sensor","phantom":"Phantom","phantom.place_hint":"Platziere diese Geräte im Floorplan Editor auf dem Plan, um jedes einzeln zu sehen.","robot.area":"Fläche","robot.charging":"Lädt","robot.charging_l":"lädt","robot.cleaning":"Reinigt","robot.consumables":"Verschleißteile","robot.continue":"Fortsetzen","robot.dock":"Station","robot.docked":"In der Station","robot.error":"Fehler","robot.idle":"Inaktiv","robot.last_cleaning":"Letzte Reinigung","robot.pause":"Pause","robot.paused":"Pausiert","robot.returning":"Kehrt zurück","robot.settings":"Einstellungen","robot.start":"Start","robot.this_run":"Dieser Durchgang","robot.took":"Dauer","role.ap":"Router / Zugangspunkt","role.btproxy":"Bluetooth-Proxy","role.coordinator":"Koordinator","role.device":"Gerät","role.end":"Endgerät","role.gp":"Batterielos (Green Power)","role.hub":"Hub / Bridge","role.router":"Router / Repeater","role.unavailable":"Nicht verfügbar","role.unknown":"Unbekannt","rp.avg_temp":"Durchschnittliche Raumtemperatur ({u}), niedrigste–höchste","rp.back_now":"Zurück zu jetzt","rp.before":"Vor den geladenen {n} h: ihr Anfang wird gezeigt","rp.close":"Home Replay schließen","rp.day":"Tag","rp.future":"Diese Zeit liegt noch in der Zukunft: Jetzt wird gezeigt","rp.go":"Los","rp.goto":"Zu Tag und Uhrzeit springen","rp.name":"Home Replay","rp.next":"Nächstes Ereignis","rp.no_switch":"Replay: tippe auf ← Jetzt, um Geräte zu schalten","rp.now":"Jetzt","rp.overlay":"Ansicht für das Replay","rp.pause":"Pause","rp.play":"Abspielen","rp.prev":"Vorheriges Ereignis","rp.range":"Zeitraum","rp.short":"Replay","rp.speed":"Geschwindigkeit","rp.tap_goto":"Tippen, um zu Tag und Uhrzeit zu springen","rp.time":"Replay-Zeit","rp.time_input":"Uhrzeit (Sekunden optional)","rp.today":"Heute","rp.yesterday":"Gestern","save.cam_failed":"Der Kameraplatz konnte nicht im Dashboard gespeichert werden.","save.cam_yaml":"Dieses Dashboard wird in YAML gepflegt: der Kameraplatz gilt bis zum Neuladen der Seite.","save.failed":"Konnte nicht im Dashboard speichern. Nutze stattdessen Karte bearbeiten → Marker bearbeiten.","save.notfound":"Diese Karte wurde außerhalb des Marker-Editors geändert. Schließe ihn (Fertig) und öffne Marker bearbeiten erneut.","save.yaml":"Dieses Dashboard wird in YAML gepflegt: nutze dort Karte bearbeiten → Marker bearbeiten und kopiere das YAML.","scene.all_off":"Alle aus","scene.all_on":"Alle an","scene.bar":"Lichtszenen","scene.n":"Szene {n}","sec.all_closed":"Alles zu","sec.all_secure":"Alles sicher","sec.n_open":"{n} offen","shortcut":"Kurzbefehl","temperature":"Temperatur","temperature_details":"Details zur Temperatur","temperature_l":"Temperatur","this_device":"Dieses Gerät","time.ago":"vor {t}","time.just_now":"gerade eben","time.now":"jetzt","tip.close":"Tipp schließen","tip.go":"Ausprobieren","tip.new_in":"Neu in {v}","tip.text":"Weihnachtslichter und Bäume","toast.cleaning_started":"Reinigung gestartet","toast.no_shortcuts_editing":"Kurzbefehle laufen beim Bearbeiten nicht","toast.preview_not_run":"Vorschau: „{b}“ läuft beim Bearbeiten nicht","toast.unavailable":"{d} ist nicht verfügbar","toast.would_open":"Würde öffnen: {u}","turn_off":"Ausschalten","turn_on":"Einschalten","unavailable_l":"nicht verfügbar","unit.d":"{n} T.","unit.h":"{n} Std.","unit.min":"{n} Min.","yes":"ja"},"el":{"action":"Ενέργεια","actions":"Ενέργειες","admin.new_place":"{n} νέες · Τοποθέτησέ τες","admin.new_short":"{n} νέες","admin.new_title":{"one":"{n} νέα συσκευή · τη βλέπουν μόνο οι διαχειριστές","other":"{n} νέες συσκευές · τις βλέπουν μόνο οι διαχειριστές"},"alloff.n_on":{"one":"{n} φως είναι αναμμένο.","other":"{n} φώτα είναι αναμμένα."},"alloff.none":"Κανένα φως δεν είναι αναμμένο αυτή τη στιγμή.","alloff.q":"Να σβήσουν όλα τα φώτα;","appl.appliances":"Συσκευές","appl.done_unload":"Τελείωσε · πάτα όταν αδειάσει","appl.door_open":"Ανοιχτή πόρτα","appl.drying":"Στεγνώνει","appl.error":"Σφάλμα","appl.finished":"Τελείωσε","appl.idle":"Αδρανές","appl.min_elapsed":"{n} λεπ. από την έναρξη","appl.min_left":"απομένουν {n} λεπ.","appl.paused":"Σε παύση","appl.pct_done":"{n}% ολοκληρώθηκε","appl.running":"Λειτουργεί","appl.unavailable":"Η κατάσταση δεν είναι διαθέσιμη","appl.unloaded":"Άδειασε","bar.more":"Περισσότερα κουμπιά","bar.overlays":"Επίπεδα","bar.scroll_back":"Κύλιση πίσω","battery":"Μπαταρία","bond":"Ομάδα","cancel":"Άκυρο","card.choose_plan":"Επίλεξε μια κάτοψη (plan: <plan id>)","card.description":"Η κάτοψή σου με ζωντανά επίπεδα: Ζωντανά, Φώτα, Άνεση, Ασφάλεια, Δίκτυο, Υγεία και τα δικά σου.","card.plan_missing":"Η κάτοψη “{p}” δεν βρέθηκε. Έλεγξε το plan id ή άνοιξε το Floorplan Editor από την πλαϊνή μπάρα.","chip.n_of_on":"{n} από {t} αναμμένα","chip.n_of_open":"{n} από {t} ανοιχτά","chip.n_on":"{n} αναμμένα","chip.n_open":"{n} ανοιχτά","chip.off":"Σβηστά","chip.on":"Αναμμένα","clean.cant_room":"Η σκούπα σου δεν μπορεί να καθαρίσει ένα μόνο δωμάτιο από το Home Assistant (χρειάζεται αντιστοίχιση δωματίων, Home Assistant 2026.3+).","clean.clean_now":"Καθάρισε τώρα","clean.cleaned":"Καθαρίστηκε {t}.","clean.cleaned_by":"Καθαρίστηκε {t} από {by}.","clean.cleaning_l":"καθαρίζεται","clean.cleaning_now":"Καθαρίζεται τώρα","clean.due":"Επόμενος","clean.every_d":"κάθε {n} ημ.","clean.in_d":"σε {n} ημ.","clean.last7":"Τελευταίες 7 ημέρες","clean.last_cleaned":"Τελευταίος καθαρισμός","clean.last_time":"Καθαρίστηκε την τελευταία φορά","clean.leg_fresh":"Πρόσφατα","clean.leg_now":"Τώρα","clean.map_hint":"Αντιστοίχισε αυτό το δωμάτιο με ένα από τα δωμάτια της σκούπας στις ρυθμίσεις της (Map vacuum segments to areas) για να το καθαρίζεις από εδώ.","clean.never":"ποτέ","clean.none_yet":"Δεν έχει καταγραφεί καθαρισμός εδώ ακόμα.","clean.not_cleaned":"δεν καθαρίστηκε","clean.now":"τώρα","clean.now_with":"Καθάρισε τώρα με {r}","clean.robot_usually":"Η σκούπα καθαρίζει συνήθως","clean.usually_takes":"Διαρκεί συνήθως","climate.auto":"Αυτόματο","climate.cooling":"Ψύξη","climate.defrosting":"Απόψυξη","climate.dry":"Αφύγρανση","climate.drying":"Αφύγρανση","climate.fan":"Ανεμιστήρας","climate.heating":"Θέρμανση","climate.idle":"Αδρανές","climate.off":"Κλειστό","climate.preheating":"Προθέρμανση","close":"Κλείσιμο","conn.radio":"Ασύρματο","cover.all":"Όλα","cover.close":"Κλείσιμο","cover.close_all":"Κλείσιμο όλων","cover.open":"Άνοιγμα","cover.open_all":"Άνοιγμα όλων","cover.position":"Θέση","cover.stop":"Στοπ","cover.stop_all":"Στοπ όλων","details":"Λεπτομέρειες","details_more":"Λεπτομέρειες ›","edit.hide_here":"Απόκρυψη εδώ (μόνο σε αυτό το επίπεδο)","edit.markers":"Επεξεργασία δεικτών","edit.pen_title":"Πάτα σε δείκτες για να τους κρύψεις ή να διαλέξεις τι δείχνουν, εικονίδιο, όνομα, πάτημα","energy.grid":"Δίκτυο ρεύματος","energy.last24":"Τελευταίες 24 ώρες","energy.loading":"Φόρτωση ενέργειας…","energy.no_data":"Τα δεδομένα ενέργειας δεν είναι διαθέσιμα","energy.none_yet":"Δεν υπάρχουν ακόμα συσκευές στις ρυθμίσεις Ενέργειας του Home Assistant. Πρόσθεσέ τες στις Ρυθμίσεις → Πίνακες εργαλείων → Ενέργεια και θα εμφανιστούν εδώ.","energy.not_on_plan":"Εκτός κάτοψης","energy.now_live":"Τώρα (ζωντανά)","energy.on_plan":"Στην κάτοψη","energy.panel":"Ηλεκτρικός πίνακας","energy.place_panel":"Τοποθέτησε τον Ηλεκτρικό πίνακα στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για να δεις τις γραμμές ροής.","energy.rooms_darker":"Δωμάτια: πιο σκούρο = περισσότερη ενέργεια","energy.scrub":"Ενέργεια: οι τελευταίες 24 ώρες, ώρα με την ώρα","energy.solar":"Ηλιακά","floor.change_a":"Όροφος {f}, αλλαγή ορόφου","floor.change_t":"{f}: αλλαγή ορόφου","floor.down":"Όροφος κάτω","floor.floors":"Όροφοι","floor.left":"Κάτοψη αριστερά","floor.right":"Κάτοψη δεξιά","floor.up":"Όροφος πάνω","graphs_more":"Γραφήματα ›","heat.estimated":"Εκτίμηση ανάμεσα στους αισθητήρες","heat.room_temp":"Θερμοκρασία δωματίων","heat.strength":"Ένταση θερμικού χάρτη","hist.not_enough":"Δεν υπάρχει ακόμα αρκετό ιστορικό","humidity":"Υγρασία","humidity_details":"Λεπτομέρειες υγρασίας","humidity_l":"υγρασία","lay.air":"Ροή αέρα κλιματιστικών","lay.all_sensors":"Όλοι οι αισθητήρες","lay.cams":"Κάμερες","lay.cams_not_replay":"Κάμερες (όχι στην Αναπαραγωγή)","lay.clim":"Συσκευές κλιματισμού","lay.fill":"Σκίαση δωματίων","lay.flow":"Γραμμές ροής","lay.heat":"Θερμικός χάρτης","lay.labels":"Ετικέτες θερμοκρασίας","lay.no_cam_replay":"Χωρίς βίντεο κάμερας στην Αναπαραγωγή","lay.pall":"Κύκλοι γύρω από όλους τους proxies","lay.path":"Διαδρομή καθαρισμού","lay.path_last":"Διαδρομή του τελευταίου καθαρισμού","lay.pdist":"Απόσταση ατόμων","lay.reset":"Πίσω στις προεπιλογές της κάρτας","lay.rooms":"Ονόματα δωματίων","layers":"Στρώσεις","leg.colour_strength":"Ένταση χρώματος","motion.clear":"Καμία κίνηση","motion.detected":"Κίνηση","n_devices":{"one":"{n} συσκευή","other":"{n} συσκευές"},"net.ap":"Σημείο πρόσβασης","net.cable":"καλώδιο","net.cable_lan":"Καλώδιο (LAN)","net.connected_devices":"Συνδεδεμένες συσκευές ({n})","net.connected_here":"Συνδεδεμένες εδώ","net.connection":"Σύνδεση","net.connections":"Συνδέσεις","net.default":"Προεπιλογή","net.fair":"μέτριο","net.good":"καλό","net.hub_links":"Συνδέσεις μέσω hub / γέφυρας","net.includes":"Περιλαμβάνει","net.legend":"Υπόμνημα","net.link":"Σύνδεσμος","net.no_lqi":"Δεν είναι γνωστή ακόμα η ποιότητα σύνδεσης (τα δεδομένα ZHA φορτώνονται για διαχειριστές).","net.no_signal":"Χωρίς τιμή σήματος: ενεργοποίησε τον αισθητήρα σήματος της συσκευής στο Home Assistant για να το δεις εδώ.","net.not_connected":"δεν είναι συνδεδεμένο","net.not_on_floor":"όχι σε αυτόν τον όροφο","net.on_floor":"σε αυτόν τον όροφο","net.path":"Διαδρομή","net.refresh":"Ανανέωση","net.rescan":"Νέα σάρωση του δικτύου Zigbee","net.role":"Ρόλος","net.router":"Router","net.scanning":"Σάρωση…","net.show_hide":"Εμφάνιση / απόκρυψη","net.show_hide_range":"Εμφάνιση / απόκρυψη συνδέσεων σε αυτό το εύρος","net.signal":"Σήμα","net.through":"Μέσω {d}","net.through_k":"Μέσω","net.via_hub":"μέσω hub / γέφυρας","net.weak":"αδύναμο","net.wifi_links":"Συνδέσεις Wi-Fi / LAN","net.wifi_net":"Δίκτυο Wi-Fi","net.zha_at":"Τα δεδομένα Zigbee ενημερώθηκαν στις {t}","net.zigbee_links":"Συνδέσεις Zigbee","newov.add":"Προσθήκη σε αυτή την κάρτα","newov.energy":". Μετά τοποθέτησε τους αισθητήρες ενέργειας στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για τις γραμμές ροής.","newov.not_now":"Όχι τώρα","newov.save_add":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: πρόσθεσε το {o} στις ρυθμίσεις της κάρτας (Επίπεδα)","newov.save_later":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: θα ξαναεμφανιστεί μετά από ανανέωση","newov.text":"Νέο: επίπεδο {o}","offline":"Εκτός σύνδεσης","open_more":"Άνοιγμα ›","ov.cleaning":"Καθαρισμός","ov.comfort":"Άνεση","ov.custom":"Προσαρμοσμένο","ov.energy":"Ενέργεια","ov.health":"Υγεία","ov.lights":"Φώτα","ov.live":"Ζωντανά","ov.network":"Δίκτυο","ov.people":"Άτομα","ov.plan":"Κάτοψη","ov.security":"Ασφάλεια","people.home":"Σπίτι","people.home_unknown":"στο σπίτι, άγνωστο δωμάτιο","people.not_sure":"όχι σίγουρο","ph.average":"μέσος όρος","ph.highest":"υψηλότερη","ph.lowest":"χαμηλότερη","ph.one":"ένας αισθητήρας","phantom":"Εικονική","phantom.place_hint":"Τοποθέτησε αυτές τις συσκευές στην κάτοψη στο Floorplan Editor για να βλέπεις την καθεμία χωριστά.","robot.area":"Επιφάνεια","robot.charging":"Φορτίζει","robot.charging_l":"φορτίζει","robot.cleaning":"Καθαρίζει","robot.consumables":"Αναλώσιμα","robot.continue":"Συνέχεια","robot.dock":"Βάση","robot.docked":"Στη βάση","robot.error":"Σφάλμα","robot.idle":"Αδρανής","robot.last_cleaning":"Τελευταίος καθαρισμός","robot.pause":"Παύση","robot.paused":"Σε παύση","robot.returning":"Επιστρέφει","robot.settings":"Ρυθμίσεις","robot.start":"Έναρξη","robot.this_run":"Αυτός ο κύκλος","robot.took":"Διάρκεια","role.ap":"Router / σημείο πρόσβασης","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Συσκευή","role.end":"Τελική συσκευή","role.gp":"Χωρίς μπαταρία (Green Power)","role.hub":"Hub / γέφυρα","role.router":"Router / αναμεταδότης","role.unavailable":"Μη διαθέσιμη","role.unknown":"Άγνωστο","rp.avg_temp":"Μέση θερμοκρασία δωματίων ({u}), χαμηλότερη–υψηλότερη","rp.back_now":"Πίσω στο τώρα","rp.before":"Πριν από τις {n} ώρες που φορτώθηκαν: εμφανίζεται η αρχή τους","rp.close":"Κλείσιμο Home Replay","rp.day":"Ημέρα","rp.future":"Αυτή η ώρα δεν έχει έρθει ακόμα: εμφανίζεται το Τώρα","rp.go":"Μετάβαση","rp.goto":"Μετάβαση σε ημέρα και ώρα","rp.name":"Home Replay","rp.next":"Επόμενο συμβάν","rp.no_switch":"Αναπαραγωγή: πάτα ← Τώρα για να χειριστείς συσκευές","rp.now":"Τώρα","rp.overlay":"Επίπεδο για αναπαραγωγή","rp.pause":"Παύση","rp.play":"Αναπαραγωγή","rp.prev":"Προηγούμενο συμβάν","rp.range":"Εύρος","rp.short":"Αναπαραγωγή","rp.speed":"Ταχύτητα","rp.tap_goto":"Πάτα για να πας σε ημέρα και ώρα","rp.time":"Ώρα αναπαραγωγής","rp.time_input":"Ώρα (τα δευτερόλεπτα προαιρετικά)","rp.today":"Σήμερα","rp.yesterday":"Χθες","save.cam_failed":"Δεν ήταν δυνατή η αποθήκευση της θέσης της κάμερας στον πίνακα.","save.cam_yaml":"Αυτός ο πίνακας είναι σε YAML: η θέση της κάμερας κρατά μέχρι να ανανεωθεί η σελίδα.","save.failed":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα. Χρησιμοποίησε Επεξεργασία κάρτας → Επεξεργασία δεικτών.","save.notfound":"Η κάρτα άλλαξε εκτός του Marker Editor. Κλείσ’ τον (Τέλος) και άνοιξε ξανά την Επεξεργασία δεικτών.","save.yaml":"Αυτός ο πίνακας είναι σε YAML: χρησιμοποίησε εκεί Επεξεργασία κάρτας → Επεξεργασία δεικτών και αντίγραψε το YAML.","scene.all_off":"Όλα σβηστά","scene.all_on":"Όλα αναμμένα","scene.bar":"Σκηνές φωτισμού","scene.n":"Σκηνή {n}","sec.all_closed":"Όλα κλειστά","sec.all_secure":"Όλα ασφαλή","sec.n_open":"{n} ανοιχτά","shortcut":"Συντόμευση","temperature":"Θερμοκρασία","temperature_details":"Λεπτομέρειες θερμοκρασίας","temperature_l":"θερμοκρασία","this_device":"Αυτή η συσκευή","time.ago":"πριν από {t}","time.just_now":"μόλις τώρα","time.now":"τώρα","tip.close":"Κλείσιμο συμβουλής","tip.go":"Δοκίμασέ τα","tip.new_in":"Νέο στην {v}","tip.text":"Χριστουγεννιάτικα φωτάκια και δέντρα","toast.cleaning_started":"Ο καθαρισμός ξεκίνησε","toast.no_shortcuts_editing":"Οι συντομεύσεις δεν εκτελούνται κατά την επεξεργασία","toast.preview_not_run":"Προεπισκόπηση: το “{b}” δεν εκτελείται κατά την επεξεργασία","toast.unavailable":"{d}: μη διαθέσιμη","toast.would_open":"Θα άνοιγε: {u}","turn_off":"Σβήσιμο","turn_on":"Άναμμα","unavailable_l":"μη διαθέσιμο","unit.d":"{n} ημ.","unit.h":"{n} ώρ.","unit.min":"{n} λεπ.","yes":"ναι"},"en":{"action":"Action","actions":"Actions","admin.new_place":"{n} new · Place them","admin.new_short":"{n} new","admin.new_title":{"one":"{n} new device · only admins see this","other":"{n} new devices · only admins see this"},"alloff.n_on":{"one":"{n} light is on.","other":"{n} lights are on."},"alloff.none":"No light is on right now.","alloff.q":"Turn all lights off?","appl.appliances":"Appliances","appl.done_unload":"Done · tap to unload","appl.door_open":"Door open","appl.drying":"Drying","appl.error":"Error","appl.finished":"Finished","appl.idle":"Idle","appl.min_elapsed":"{n} min elapsed","appl.min_left":"{n} min remaining","appl.paused":"Paused","appl.pct_done":"{n}% done","appl.running":"Running","appl.unavailable":"Status unavailable","appl.unloaded":"Unloaded","bar.more":"More buttons","bar.overlays":"Overlays","bar.scroll_back":"Scroll back","battery":"Battery","bond":"Bond","cancel":"Cancel","card.choose_plan":"Choose a plan (plan: <plan id>)","card.description":"Your floorplan with live overlays: Live, Lights, Comfort, Security, Network, Health and your own.","card.plan_missing":"Plan “{p}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.","chip.n_of_on":"{n} of {t} on","chip.n_of_open":"{n} of {t} open","chip.n_on":"{n} on","chip.n_open":"{n} open","chip.off":"Off","chip.on":"On","clean.cant_room":"Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+).","clean.clean_now":"Clean now","clean.cleaned":"Cleaned {t}.","clean.cleaned_by":"Cleaned {t} by {by}.","clean.cleaning_l":"cleaning","clean.cleaning_now":"Cleaning now","clean.due":"Due","clean.every_d":"every {n} d","clean.in_d":"in {n} d","clean.last7":"Last 7 days","clean.last_cleaned":"Last cleaned","clean.last_time":"Cleaned last time","clean.leg_fresh":"Fresh","clean.leg_now":"Now","clean.map_hint":"Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.","clean.never":"never","clean.none_yet":"No cleaning recorded here yet.","clean.not_cleaned":"not cleaned","clean.now":"now","clean.now_with":"Clean now with {r}","clean.robot_usually":"Robot usually cleans","clean.usually_takes":"Usually takes","climate.auto":"Auto","climate.cooling":"Cooling","climate.defrosting":"Defrosting","climate.dry":"Dry","climate.drying":"Drying","climate.fan":"Fan","climate.heating":"Heating","climate.idle":"Idle","climate.off":"Off","climate.preheating":"Preheating","close":"Close","conn.radio":"Wireless","cover.all":"All","cover.close":"Close","cover.close_all":"Close all","cover.open":"Open","cover.open_all":"Open all","cover.position":"Position","cover.stop":"Stop","cover.stop_all":"Stop all","details":"Details","details_more":"Details ›","edit.hide_here":"Hide it here (in this overlay only)","edit.markers":"Edit markers","edit.pen_title":"Click markers to hide them, choose what they show, icon, name, tap","energy.grid":"Grid","energy.last24":"Last 24 h","energy.loading":"Loading energy…","energy.no_data":"Energy data not available","energy.none_yet":"No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here.","energy.not_on_plan":"Not on this plan","energy.now_live":"Now (live)","energy.on_plan":"On the plan","energy.panel":"Electrical panel","energy.place_panel":"Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.","energy.rooms_darker":"Rooms: darker = more energy","energy.scrub":"Energy: the last 24 hours, hour by hour","energy.solar":"Solar","floor.change_a":"Floor {f}, change floor","floor.change_t":"{f}: change floor","floor.down":"Floor down","floor.floors":"Floors","floor.left":"Plan to the left","floor.right":"Plan to the right","floor.up":"Floor up","graphs_more":"Graphs ›","heat.estimated":"Estimated between sensors","heat.room_temp":"Room temperature","heat.strength":"Heatmap strength","hist.not_enough":"Not enough history yet","humidity":"Humidity","humidity_details":"Humidity details","humidity_l":"humidity","lay.air":"AC air flow","lay.all_sensors":"All sensors","lay.cams":"Cameras","lay.cams_not_replay":"Cameras (not in Replay)","lay.clim":"Climate devices","lay.fill":"Room shading","lay.flow":"Flow lines","lay.heat":"Heatmap","lay.labels":"Temperature labels","lay.no_cam_replay":"No camera video in Replay","lay.pall":"Rings around all proxies","lay.path":"Cleaning path","lay.path_last":"Path of the last run","lay.pdist":"People distance","lay.reset":"Back to the card's defaults","lay.rooms":"Room names","layers":"Layers","leg.colour_strength":"Colour strength","motion.clear":"Clear","motion.detected":"Detected","n_devices":{"one":"{n} device","other":"{n} devices"},"net.ap":"Access point","net.cable":"cable","net.cable_lan":"Cable (LAN)","net.connected_devices":"Connected devices ({n})","net.connected_here":"Connected here","net.connection":"Connection","net.connections":"Connections","net.default":"Default","net.fair":"fair","net.good":"good","net.hub_links":"Hub / bridge links","net.includes":"Includes","net.legend":"Legend","net.link":"Link","net.no_lqi":"No link quality known yet (ZHA data is loaded for admins).","net.no_signal":"No signal value: enable this device's signal sensor in Home Assistant to see it here.","net.not_connected":"not connected","net.not_on_floor":"not on this floor","net.on_floor":"on this floor","net.path":"Path","net.refresh":"Refresh","net.rescan":"Scan the Zigbee network again","net.role":"Role","net.router":"Router","net.scanning":"Scanning…","net.show_hide":"Show / hide","net.show_hide_range":"Show / hide links in this range","net.signal":"Signal","net.through":"Through {d}","net.through_k":"Through","net.via_hub":"through hub / bridge","net.weak":"weak","net.wifi_links":"Wi-Fi / LAN links","net.wifi_net":"Wi-Fi network","net.zha_at":"Zigbee data updated at {t}","net.zigbee_links":"Zigbee links","newov.add":"Add to this card","newov.energy":". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines.","newov.not_now":"Not now","newov.save_add":"Couldn't save to the dashboard: add {o} in the card's settings (Overlays)","newov.save_later":"Couldn't save to the dashboard: it shows again after a reload","newov.text":"New: {o} overlay","offline":"Offline","open_more":"Open ›","ov.cleaning":"Cleaning","ov.comfort":"Comfort","ov.custom":"Custom","ov.energy":"Energy","ov.health":"Health","ov.lights":"Lights","ov.live":"Live","ov.network":"Network","ov.people":"People","ov.plan":"Plan","ov.security":"Security","people.home":"Home","people.home_unknown":"home, room unknown","people.not_sure":"not sure","ph.average":"average","ph.highest":"highest","ph.lowest":"lowest","ph.one":"one sensor","phantom":"Phantom","phantom.place_hint":"Place these devices on the plan in the Floorplan Editor to see each one on its own.","robot.area":"Area","robot.charging":"Charging","robot.charging_l":"charging","robot.cleaning":"Cleaning","robot.consumables":"Consumables","robot.continue":"Continue","robot.dock":"Dock","robot.docked":"Docked","robot.error":"Error","robot.idle":"Idle","robot.last_cleaning":"Last cleaning","robot.pause":"Pause","robot.paused":"Paused","robot.returning":"Returning","robot.settings":"Settings","robot.start":"Start","robot.this_run":"This run","robot.took":"Took","role.ap":"Router / access point","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Device","role.end":"End device","role.gp":"Battery-free (Green Power)","role.hub":"Hub / bridge","role.router":"Router / repeater","role.unavailable":"Unavailable","role.unknown":"Unknown","rp.avg_temp":"Average room temperature ({u}), lowest–highest","rp.back_now":"Back to now","rp.before":"Before the loaded {n} h: showing their start","rp.close":"Close Home Replay","rp.day":"Day","rp.future":"That time is still to come: showing Now","rp.go":"Go","rp.goto":"Go to a day and time","rp.name":"Home Replay","rp.next":"Next event","rp.no_switch":"Replay: tap ← Now to switch devices","rp.now":"Now","rp.overlay":"Overlay to replay","rp.pause":"Pause","rp.play":"Play","rp.prev":"Previous event","rp.range":"Range","rp.short":"Replay","rp.speed":"Speed","rp.tap_goto":"Tap to go to a day and time","rp.time":"Replay time","rp.time_input":"Time (seconds optional)","rp.today":"Today","rp.yesterday":"Yesterday","save.cam_failed":"Couldn't save the camera spot to the dashboard.","save.cam_yaml":"This dashboard is kept in YAML: the camera spot lasts until the page reloads.","save.failed":"Couldn't save to the dashboard. Use Edit card → Edit markers instead.","save.notfound":"This card changed outside the Marker Editor. Close it (Done) and open Edit markers again.","save.yaml":"This dashboard is kept in YAML: use Edit card → Edit markers there and copy the YAML.","scene.all_off":"All off","scene.all_on":"All on","scene.bar":"Light scenes","scene.n":"Scene {n}","sec.all_closed":"All closed","sec.all_secure":"All secure","sec.n_open":"{n} open","shortcut":"Shortcut","temperature":"Temperature","temperature_details":"Temperature details","temperature_l":"temperature","this_device":"This device","time.ago":"{t} ago","time.just_now":"just now","time.now":"now","tip.close":"Close this tip","tip.go":"Try them","tip.new_in":"New in {v}","tip.text":"Christmas lights and trees","toast.cleaning_started":"Cleaning started","toast.no_shortcuts_editing":"Shortcuts aren't run while editing","toast.preview_not_run":"Preview: “{b}” isn't run while editing","toast.unavailable":"{d} is unavailable","toast.would_open":"Would open: {u}","turn_off":"Turn off","turn_on":"Turn on","unavailable_l":"unavailable","unit.d":"{n} d","unit.h":"{n} h","unit.min":"{n} min","yes":"yes"}};
+// 0.14 (L1): the card's texts in the user's Home Assistant language (English when a text has no translation).
+// tools/build.mjs joins this file and the language files of src/i18n into each bundle that uses dfT().
+let dfLang = "en";
+let dfLoc = "en";
+/** Pick the language: "el", "de", "de-CH" → "de"; anything else → English. */
+function dfSetLang(lang) {
+  const s = String(lang || "en");
+  const low = s.toLowerCase();
+  dfLoc = s;
+  dfLang = DF_I18N[low] ? low : DF_I18N[low.split("-")[0]] ? low.split("-")[0] : "en";
+}
+/** The language of this Home Assistant user (profile → Language). */
+function dfLangOf(hass) {
+  if (hass) dfSetLang((hass.locale && hass.locale.language) || hass.language);
+}
+/** For dates and times: the user's language, so "Mon" / "Δευ" / "Mo." follow it. */
+const dfLocale = () => dfLoc;
+/** A text by key, with {name} placeholders; a {one, other} text picks its plural from vars.n. */
+function dfT(key, vars) {
+  let s = (DF_I18N[dfLang] || {})[key];
+  if (s == null) s = DF_I18N.en[key];
+  if (s == null) return key;
+  if (typeof s === "object") {
+    let cat = "other";
+    try {
+      cat = new Intl.PluralRules(dfLang).select(Number(vars && vars.n));
+    } catch (_e) {
+      cat = "other";
+    }
+    s = s[cat] ?? s.other;
+  }
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m)) : s;
+}
+dfSetLang(typeof document !== "undefined" && document.documentElement ? document.documentElement.lang : "en");
+// ---- end of translations ----
 // ---- 0.10: robot vacuums. A map integration (Xiaomi Cloud Map Extractor, Dreame, Roborock Custom Map, AnyVac…)
 // gives the robot, dock, path and rooms in its own units; m turns them into % of the plan image.
 const RB_ACTIVE = ["cleaning", "returning", "paused", "error"];
@@ -840,10 +886,10 @@ function phantomSummary(hass, ph) {
   const op = by("opening");
   if (op.length) {
     const n = op.filter((e) => ["on", "open"].includes((hass.states[e] || {}).state)).length;
-    return n ? `${n} open` : "All closed";
+    return n ? dfT("sec.n_open", { n }) : dfT("sec.all_closed");
   }
   const mo = by("motion");
-  if (mo.length) return mo.some((e) => (hass.states[e] || {}).state === "on") ? "Detected" : "Clear";
+  if (mo.length) return mo.some((e) => (hass.states[e] || {}).state === "on") ? dfT("motion.detected") : dfT("motion.clear");
   const li = ents.filter((e) => domainOf(e) === "light");
   if (li.length) return `${li.filter((e) => (hass.states[e] || {}).state === "on").length} of ${li.length} on`;
   return "";
@@ -1933,7 +1979,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config || !(config.plan || (Array.isArray(config.plans) && config.plans.length))) throw new Error("Choose a plan (plan: <plan id>)");
+    if (!config || !(config.plan || (Array.isArray(config.plans) && config.plans.length))) throw new Error(dfT("card.choose_plan"));
     this._raw = config; // as stored in the dashboard (to find and save this card, #97)
     const c = { ...config };
     // 0.11: the Electricity overlay of the test builds is called Energy.
@@ -1981,6 +2027,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   set hass(hass) {
+    dfLangOf(hass); // 0.14 L1: texts in this user's language
     const first = !this._hass;
     this._live = hass;
     // 0.11.1 Home Replay: while replaying, the card sees Home Assistant as it was at the replay time.
@@ -2074,7 +2121,7 @@ class DeviceFloorplanCard extends HTMLElement {
         await this._saveToDashboard({ type: "custom:device-floorplan-card", ...ed._config });
       } catch (e) {
         const why = e && e.message;
-        const msg = why === "yaml" ? "This dashboard is kept in YAML: use Edit card → Edit markers there and copy the YAML." : why === "notfound" ? "This card changed outside the Marker Editor. Close it (Done) and open Edit markers again." : "Couldn't save to the dashboard. Use Edit card → Edit markers instead.";
+        const msg = why === "yaml" ? dfT("save.yaml") : why === "notfound" ? dfT("save.notfound") : dfT("save.failed");
         if (ed._big) {
           const side = ed._big.wrap.querySelector(".bg-side");
           if (side && !side.querySelector(".bg-err")) side.insertAdjacentHTML("afterbegin", `<p class="bg-err">${cesc(msg)}</p>`);
@@ -2442,7 +2489,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _ovDef(o) {
     if (OVERLAYS[o]) return OVERLAYS[o];
     const c = this._custom().find((x) => x.id === o);
-    return c ? { label: c.name || "Custom", icon: c.icon || "mdi:layers-outline", custom: c } : null;
+    return c ? { label: c.name || dfT("ov.custom"), icon: c.icon || "mdi:layers-outline", custom: c } : null;
   }
 
   _overlays() {
@@ -2513,7 +2560,7 @@ class DeviceFloorplanCard extends HTMLElement {
   /** The round Replay button. In Replay it turns into the overlay that is replayed (with the list of the others). */
   _rpRoundBtn() {
     const on = !!(this._rp && this._rp.mode);
-    return (on && this._rpOvBtn()) || `<button class="layers rpr ${on ? "on" : ""}" data-rpgo="1" title="${on ? "Close Home Replay" : "Home Replay"}" aria-label="Home Replay" aria-pressed="${on}"><ha-icon icon="mdi:history"></ha-icon></button>`;
+    return (on && this._rpOvBtn()) || `<button class="layers rpr ${on ? "on" : ""}" data-rpgo="1" title="${on ? dfT("rp.close") : dfT("rp.name")}" aria-label="${dfT("rp.name")}" aria-pressed="${on}"><ha-icon icon="mdi:history"></ha-icon></button>`;
   }
 
   _defaultOverlay() {
@@ -2710,6 +2757,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (phase === "idle" && this._applDone[key] && (doneFor === "unloaded" || doneLeft > 0)) phase = "done";
     // Time: a finish timestamp becomes a countdown, minutes stay minutes; else time since it started.
     let time = "";
+    let tshort = "";
     const rem = S(ap.remaining);
     if (active && rem && live(rem)) {
       const v = rem.state;
@@ -2719,20 +2767,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const [h, m] = v.split(":").map(Number);
         min = h * 60 + m;
       } else if (num(v)) min = Math.round(Number(v) * ((rem.attributes || {}).unit_of_measurement === "h" ? 60 : (rem.attributes || {}).unit_of_measurement === "s" ? 1 / 60 : 1));
-      if (min != null && min >= 0) time = `${min} min remaining`;
+      if (min != null && min >= 0) {
+        time = dfT("appl.min_left", { n: min });
+        tshort = dfT("unit.min", { n: min });
+      }
     }
     const pr = S(ap.progress);
-    if (active && !time && pr && live(pr) && num(pr.state)) time = `${Math.round(Number(pr.state))}% done`;
+    if (active && !time && pr && live(pr) && num(pr.state)) time = tshort = dfT("appl.pct_done", { n: Math.round(Number(pr.state)) });
     if (active && !time) {
       const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
-      if (since) time = `${Math.max(0, Math.round((this._now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
+      if (since) {
+        const n = Math.max(0, Math.round((this._now() - new Date(since.last_changed).getTime()) / 60000));
+        time = dfT("appl.min_elapsed", { n });
+        tshort = dfT("unit.min", { n });
+      }
     }
     const pretty = (t) => String(t).replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
-    const word = phase === "unavailable" ? "Status unavailable" : phase === "done" ? "Finished" : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? "Door open" : "Paused") : phase === "error" ? "Error" : phase === "idle" ? "Idle"
-      : ap.status && !deadStatus && applPhase(S(ap.status).state) !== "run" ? pretty(S(ap.status).state) : ap.status && !deadStatus ? pretty(S(ap.status).state) : ap.type === "dryer" ? "Drying" : "Running";
+    const said = (s) => (this._hass.formatEntityState ? this._hass.formatEntityState(s) : pretty(s.state)); // 0.14 L1: HA's own translated state
+    const word = phase === "unavailable" ? dfT("appl.unavailable") : phase === "done" ? dfT("appl.finished") : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? dfT("appl.door_open") : dfT("appl.paused")) : phase === "error" ? dfT("appl.error") : phase === "idle" ? dfT("appl.idle")
+      : ap.status && !deadStatus ? said(S(ap.status)) : ap.type === "dryer" ? dfT("appl.drying") : dfT("appl.running");
     const w = ap.power && live(S(ap.power)) ? `${Math.round(Number(S(ap.power).state))} W` : "";
     const col = APPL_COL[phase] || (phase === "run" ? (ap.type === "dryer" ? APPL_COL.heat : APPL_COL.water) : null);
-    return { phase, col, word, time, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
+    return { phase, col, word, time, tshort, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
   },
 
   /** Live: appliances glow on their drum (front view) or along their line (seen from above) while they work;
@@ -2796,7 +2852,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const x = grp.reduce((t, o) => t + o.x, 0) / grp.length;
       const y = Math.min(...grp.map((o) => o.y));
       const att = grp.some((o) => ["done", "attention", "error"].includes(o.st.phase));
-      const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? "Done · tap to unload" : `${cesc(this._applWord(o))}${o.st.time ? ` · ${cesc(o.st.time.replace(" remaining", "").replace(" elapsed", ""))}` : ""}`}</span>`).join("");
+      const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? dfT("appl.done_unload") : `${cesc(this._applWord(o))}${o.st.tshort ? ` · ${cesc(o.st.tshort)}` : ""}`}</span>`).join("");
       const anc = grp.map((o) => `${o.x},${o.y},${o.st.col || "150,150,150"}`).join(";");
       html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-anc="${anc}" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => this._applTip(o)).join(", "))}">${rows}</button>`;
     }
@@ -2805,8 +2861,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.8.1: "name · state · time" for the hover label, like the info card's headline. */
   _applTip(o) {
-    const t = o.st.time ? o.st.time.replace(" remaining", "").replace(" elapsed", "") : "";
-    return [this._dev(o.ap.item.id).name || o.ap.item.name, o.st.phase === "done" ? "Finished" : this._applWord(o), t].filter(Boolean).join(" · ");
+    const t = o.st.tshort || "";
+    return [this._dev(o.ap.item.id).name || o.ap.item.name, o.st.phase === "done" ? dfT("appl.finished") : this._applWord(o), t].filter(Boolean).join(" · ");
   },
 
   /** The appliance's word on its label: the leading entity chosen in Edit markers, else its status. */
@@ -3328,8 +3384,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (!this._peopleShown()) return { plan: "", row: "" };
     const { placed, home, rings } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
-    const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
-    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
+    const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? ` (${dfT("people.not_sure")})` : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
+    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>${dfT("people.home")}</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${dfT("people.home_unknown")}`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   },
 
@@ -3441,7 +3497,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** Tap / hold of a shortcut or an overlay's hold: Home Assistant actions, plus reload and back. */
   _barRun(act, ent) {
     if (!act || act.action === "none") return;
-    if (this._pick) return this._toast("Shortcuts aren't run while editing");
+    if (this._pick) return this._toast(dfT("toast.no_shortcuts_editing"));
     if (act.action === "reload") return location.reload();
     if (act.action === "back") return history.back();
     this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: ent, tap_action: act }, action: "tap" }, bubbles: true, composed: true }));
@@ -3539,7 +3595,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         byMember[m] = d.entities || [d.main_entity];
         mgroup[m] = d.group || ""; // 0.12.9: which temperatures count as a room's (Comfort)
       }
-      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms", ...(ph.pic ? { pic: ph.pic } : {}), ...(ph.touch ? { touch: ph.touch } : {}) });
+      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || dfT("phantom"), icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms", ...(ph.pic ? { pic: ph.pic } : {}), ...(ph.touch ? { touch: ph.touch } : {}) });
     }
     return out;
   },
@@ -3696,7 +3752,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // How it cleans: suction, water, mode (attributes and select entities of the robot).
     const settings = [];
     if (vs && vs.attributes.fan_speed != null && vs.attributes.fan_speed !== "") settings.push(String(vs.attributes.fan_speed));
-    let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "Error" : "";
+    let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "\u0000" : "";
     const OK = /^(ok|normal|none|no_error|no error|idle|off|installed|not_full|0|false|unknown|unavailable|completed|clean|good)$/i;
     for (const e of ents) {
       const st = h.states[e];
@@ -3728,10 +3784,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Hover line: state, room and battery, or the robot's own error text. */
   _rbTip(st, d, info, a, cfg) {
-    const word = { cleaning: "Cleaning", returning: "Returning", paused: "Paused", error: "Error", docked: info.charging ? "Charging" : "Docked", idle: "Idle" }[d.state] || this._fmt(st.entity_id);
-    if (info.err) return info.err === "Error" ? word : `${word}: ${info.err}`;
+    const word = { cleaning: dfT("robot.cleaning"), returning: dfT("robot.returning"), paused: dfT("robot.paused"), error: dfT("robot.error"), docked: info.charging ? dfT("robot.charging") : dfT("robot.docked"), idle: dfT("robot.idle") }[d.state] || this._fmt(st.entity_id);
+    if (info.err) return info.err === "\u0000" ? word : `${word}: ${info.err}`;
     const room = this._rbRoom(a, cfg, d);
-    return [word, room, info.battery != null ? `Battery ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
+    return [word, room, info.battery != null ? `${dfT("battery")} ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
   },
 
   /** The room the robot is in: where it is on the plan's room shapes. */
@@ -3748,16 +3804,16 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** "just now", "5 min ago", "2 d ago". */
   _agoTxt(t) {
     const x = this._ageTxt(t);
-    return x === "just now" || !x ? x : `${x} ago`;
+    return x === dfT("time.just_now") || !x ? x : dfT("time.ago", { t: x });
   },
 
   _ageTxt(t) {
     const ms = this._now() - new Date(t).getTime();
     if (!t || !(ms >= 0)) return "";
     const m = Math.round(ms / 60000);
-    if (m < 60) return m < 2 ? "just now" : `${m} min`;
+    if (m < 60) return m < 2 ? dfT("time.just_now") : dfT("unit.min", { n: m });
     const hrs = Math.round(m / 60);
-    return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
+    return hrs < 24 ? dfT("unit.h", { n: hrs }) : dfT("unit.d", { n: Math.round(hrs / 24) });
   },
 
   /** A robot's name on the card: from Edit markers (placed or not), else its HA name. */
@@ -3832,23 +3888,23 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const info = this._rbInfo(eid, d);
     const name = st.attributes.friendly_name || eid;
     const col = RB_COL[d.state] || RB_COL.idle;
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     const mine = Object.values(a.cleaned || {}).filter((c) => c.by === eid).map((c) => c.t).sort().pop();
     const lastT = info.last.t || mine;
     const rows = [];
-    if (lastT) rows.push(["Last cleaning", this._agoTxt(lastT)]);
-    if (info.last.dur) rows.push(["Took", info.last.dur]);
-    if (info.last.area) rows.push([RB_ACTIVE.includes(d.state) ? "This run" : "Area", info.last.area]);
-    if (info.settings.length) rows.push(["Settings", info.settings.join(" · ")]);
-    if (info.battery != null) rows.push(["Battery", `${Math.round(info.battery)}%${info.charging ? " · charging" : ""}`]);
-    const cons = info.cons.length ? `<h4>Consumables</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
-    const dock = info.station.length ? `<h4>Dock</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
+    if (lastT) rows.push([dfT("robot.last_cleaning"), this._agoTxt(lastT)]);
+    if (info.last.dur) rows.push([dfT("robot.took"), info.last.dur]);
+    if (info.last.area) rows.push([RB_ACTIVE.includes(d.state) ? dfT("robot.this_run") : dfT("robot.area"), info.last.area]);
+    if (info.settings.length) rows.push([dfT("robot.settings"), info.settings.join(" · ")]);
+    if (info.battery != null) rows.push([dfT("battery"), `${Math.round(info.battery)}%${info.charging ? ` · ${dfT("robot.charging_l")}` : ""}`]);
+    const cons = info.cons.length ? `<h4>${dfT("robot.consumables")}</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
+    const dock = info.station.length ? `<h4>${dfT("robot.dock")}</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
     const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
-    const btns = d.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") + cmd("return_to_base", "mdi:home-import-outline", "Dock") : cmd("start", "mdi:play", d.state === "paused" ? "Continue" : "Start") + (d.state === "docked" ? "" : cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+    const btns = d.state === "cleaning" ? cmd("pause", "mdi:pause", dfT("robot.pause")) + cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")) : cmd("start", "mdi:play", d.state === "paused" ? dfT("robot.continue") : dfT("robot.start")) + (d.state === "docked" ? "" : cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")));
     return `<div class="pop"><div class="popin rbpop" role="dialog" aria-label="${cesc(name)}"><h3><ha-icon icon="${cesc(st.attributes.icon || "mdi:robot-vacuum")}" style="color:rgb(${col})"></ha-icon>${cesc(name)}${close}</h3>
       <div class="rbst" style="--c:rgb(${col})">${cesc(this._rbTip(st, d, info, a, cfg))}</div>
       ${rows.length ? `<div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : ""}${cons}${dock}
-      <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">Details ›</button></div></div>`;
+      <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">${dfT("details_more")}</button></div></div>`;
   },
 
   /** 0.10: tap a room in Cleaning: when it was cleaned, and "Clean this room" (vacuum.clean_area, HA 2026.3). */
@@ -3859,12 +3915,12 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const name = (this._rooms().names || {})[p.area] || room.name;
     const c = (a.cleaned || {})[p.area];
     const by = c && this._hass.states[c.by] ? this._hass.states[c.by].attributes.friendly_name : "";
-    const when = c && c.t ? `Cleaned ${this._agoTxt(c.t)}${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    const when = c && c.t ? (by ? dfT("clean.cleaned_by", { t: this._agoTxt(c.t), by }) : dfT("clean.cleaned", { t: this._agoTxt(c.t) })) : dfT("clean.none_yet");
     const ref = (a.room_area || {})[p.area];
     const cov = c && c.m2 != null ? `${c.m2} m²${c.pct != null ? ` (${c.pct}%)` : ""}` : "";
     const pace = this._pace(a, p.area);
     const daysAgo = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 86400000 : null;
-    const due = !pace ? "never" : daysAgo == null ? `every ${pace} d` : daysAgo >= pace ? "now" : `in ${Math.max(1, Math.round(pace - daysAgo))} d`;
+    const due = !pace ? dfT("clean.never") : daysAgo == null ? dfT("clean.every_d", { n: pace }) : daysAgo >= pace ? dfT("clean.now") : dfT("clean.in_d", { n: Math.max(1, Math.round(pace - daysAgo)) });
     // Visits of the last runs (the integration logs when a robot enters and leaves a room); one run = one clean.
     const runs = [];
     for (const v of ((a.clean_log || {})[p.area] || []).slice().sort((x, y) => (x.s < y.s ? -1 : 1))) {
@@ -3881,18 +3937,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const usual = ds.length ? Math.max(1, Math.round(ds[Math.floor(ds.length / 2)] / 60000)) : 0;
     const kv = [];
     const nw = (a.now || {})[p.area];
-    if (nw) kv.push(["Cleaning now", nw.m2 != null ? `${nw.m2} m²${nw.pct != null ? ` (${nw.pct}%)` : ""}` : "yes"]);
-    if (cov) kv.push(["Cleaned last time", cov]);
-    if (runs.length) kv.push(["Last 7 days", week ? `${week}×` : "not cleaned"]);
-    if (usual) kv.push(["Usually takes", `${usual} min`]);
-    if (ref && ref.a && ref.n >= 2) kv.push(["Robot usually cleans", `${Math.round(ref.a)} m²`]);
-    if (c && c.t) kv.push(["Due", due]);
+    if (nw) kv.push([dfT("clean.cleaning_now"), nw.m2 != null ? `${nw.m2} m²${nw.pct != null ? ` (${nw.pct}%)` : ""}` : dfT("yes")]);
+    if (cov) kv.push([dfT("clean.last_time"), cov]);
+    if (runs.length) kv.push([dfT("clean.last7"), week ? `${week}×` : dfT("clean.not_cleaned")]);
+    if (usual) kv.push([dfT("clean.usually_takes"), dfT("unit.min", { n: usual })]);
+    if (ref && ref.a && ref.n >= 2) kv.push([dfT("clean.robot_usually"), `${Math.round(ref.a)} m²`]);
+    if (c && c.t) kv.push([dfT("clean.due"), due]);
     const stats = kv.length ? `<div class="kv">${kv.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : "";
     const robots = Object.entries(a.robots || {}).filter(([e]) => this._hass.states[e]);
     const can = robots.filter(([e]) => Number(this._hass.states[e].attributes.supported_features || 0) & CLEAN_AREA);
-    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean now${can.length > 1 ? ` with ${cesc(this._hass.states[e].attributes.friendly_name || e)}` : ""}</button>`).join("");
-    const hint = btns ? "" : can.length ? `Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.` : robots.length ? "Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+)." : "";
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>${can.length > 1 ? dfT("clean.now_with", { r: cesc(this._hass.states[e].attributes.friendly_name || e) }) : dfT("clean.clean_now")}</button>`).join("");
+    const hint = btns ? "" : can.length ? dfT("clean.map_hint") : robots.length ? dfT("clean.cant_room") : "";
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${stats}${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
   },
 
@@ -3980,7 +4036,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rds = ord.length ? `<span class="crd">${ord.map(pill).join("")}</span>` : "";
       const last = (this._camLast = this._camLast || {})[sp.key];
       this._camLast[sp.key] = src;
-      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${vid ? `<div class="cvid" data-vid="${cesc(sp.eid)}"><slot name="${cesc(vidSlot(sp.eid))}"></slot></div>` : src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="Close">×</button>` : ""}</span></div>`;
+      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${vid ? `<div class="cvid" data-vid="${cesc(sp.eid)}"><slot name="${cesc(vidSlot(sp.eid))}"></slot></div>` : src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="${dfT("close")}">×</button>` : ""}</span></div>`;
     }).join("")}</div>`;
   },
 
@@ -4192,7 +4248,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     try {
       await this._saveToDashboard(raw);
     } catch (err) {
-      this._toast(err && err.message === "yaml" ? "This dashboard is kept in YAML: the camera spot lasts until the page reloads." : "Couldn't save the camera spot to the dashboard.");
+      this._toast(err && err.message === "yaml" ? dfT("save.cam_yaml") : dfT("save.cam_failed"));
     }
   },
 
@@ -4648,8 +4704,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const n = list.filter((e, i) => this._isOn(e, hass.states[e], kinds[i])).length;
     const kind = kinds.every((k) => k === kinds[0]) ? kinds[0] : kinds.includes("opening") ? "opening" : kinds[0];
     let value = "";
-    if (kind === "opening") value = n ? `${n} open` : "All closed";
-    else if (kind === "motion") value = n ? "Detected" : "Clear";
+    if (kind === "opening") value = n ? dfT("sec.n_open", { n }) : dfT("sec.all_closed");
+    else if (kind === "motion") value = n ? dfT("motion.detected") : dfT("motion.clear");
     else if (["light", "switch", "fan"].includes(kind)) {
       // 0.7.4: a bond counts once (on while any of its members is on).
       const units = (item.units || list.map((e) => [e])).map((u) => u.filter((e) => list.includes(e))).filter((u) => u.length);
@@ -4668,7 +4724,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const on = live(st) && st.state !== "off";
     const act = on && a.hvac_action && CLIMATE_ACTION[a.hvac_action] ? CLIMATE_ACTION[a.hvac_action] : null;
     const mode = live(st) ? st.state : "off";
-    const word = !live(st) ? "Offline" : act ? act.word : CLIMATE_MODE_WORD[mode] || (this._hass.formatEntityState ? this._hass.formatEntityState(st) : mode);
+    const word = !live(st) ? dfT("offline") : act ? act.word : CLIMATE_MODE_WORD[mode] || (this._hass.formatEntityState ? this._hass.formatEntityState(st) : mode);
     const color = !on ? "#9e9e9e" : act ? act.color : (CLIMATE_MODES[mode] || CLIMATE_MODES.auto).color;
     let set = "";
     if (on) {
@@ -4800,7 +4856,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         this._eErr = null;
       })
       .catch((e) => {
-        this._eErr = (e && (e.message || e.code)) || "Energy data not available";
+        this._eErr = (e && (e.message || e.code)) || dfT("energy.no_data");
         this._eData = { day, t: Date.now(), devs: [], srcs: [], hours: {} };
       })
       .finally(() => {
@@ -5018,7 +5074,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const v = val[cls] > 0 ? this._eFmt(val[cls]) : "";
       return `<div class="epin ${cls} ${dummy[cls] ? "dummy" : ""} ${v ? "val" : ""}" style="left:${p.x}%;top:${p.y}%" title="${cesc(label)}${v ? ` · ${cesc(v)}` : ""}"><ha-icon icon="${icon}"></ha-icon>${v ? `<span>${cesc(v)}</span>` : ""}</div>`;
     };
-    return `${pin(panel, "mdi:flash", "Electrical panel", "panel")}${source ? pin(source, "mdi:solar-power-variant", "Solar", "source") : ""}${battery ? pin(battery, "mdi:home-battery", "Battery", "battery") : ""}`;
+    return `${pin(panel, "mdi:flash", dfT("energy.panel"), "panel")}${source ? pin(source, "mdi:solar-power-variant", dfT("energy.solar"), "source") : ""}${battery ? pin(battery, "mdi:home-battery", dfT("battery"), "battery") : ""}`;
   },
 
   /** Flow lines in pixels (drawn after the layout, to each chip's final spot), like Home Assistant's energy
@@ -5073,19 +5129,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** Under the plan: total, top 3, sources, and the day scrubber (00:00 → now; left end Today, right end Now). */
   _eLegendHtml() {
     if (this._overlay !== "energy") return "";
-    if (!this._eData) return `<div class="heatleg eleg">Loading energy…</div>`;
-    if (!this._eData.devs.length) return `<div class="heatleg eleg">${this._eErr ? cesc(this._eErr) : "No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here."}</div>`;
+    if (!this._eData) return `<div class="heatleg eleg">${dfT("energy.loading")}</div>`;
+    if (!this._eData.devs.length) return `<div class="heatleg eleg">${this._eErr ? cesc(this._eErr) : dfT("energy.none_yet")}</div>`;
     const specs = [...(this._specs ? this._specs.values() : [])].filter((sp) => sp.energy > 0).sort((x, y) => y.energy - x.energy);
     const sum = specs.reduce((x, sp) => x + (sp.eSum ?? sp.energy), 0); // an upstream device's meter counts once
     const it = (icon, label, v, c) => `<span class="cl"><ha-icon icon="${icon}" style="color:${c}"></ha-icon>${cesc(label)} <b>${cesc(v)}</b></span>`;
     // 0.11: no device list (the chips and their colours say it); explain the room shading instead.
-    const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>Rooms: darker = more energy</span>` : "";
+    const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>${dfT("energy.rooms_darker")}</span>` : "";
     const sol = this._eSum("solar");
     const grid = this._eSum("grid");
     const batt = this._eSum("battery_out");
-    const sumTxt = `${this._eSel() === "day" ? "" : `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>`}${it("mdi:flash", "On the plan", this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", "Not on this plan", this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
-    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", "Battery", this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
-    const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.</span>` : "";
+    const sumTxt = `${this._eSel() === "day" ? "" : `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>`}${it("mdi:flash", dfT("energy.on_plan"), this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", dfT("energy.not_on_plan"), this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
+    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", dfT("energy.grid"), this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", dfT("energy.solar"), this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", dfT("battery"), this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
+    const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">${dfT("energy.place_panel")}</span>` : "";
     return `${this._eScrubHtml()}<div class="heatleg eleg">${sumTxt}${srcTxt}${top}${hint}</div>`;
   },
 });
@@ -5220,7 +5276,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     }
     // Nothing is switched in the past: a tap says how to get back.
     const callService = () => {
-      this._toast("Replay: tap ← Now to switch devices");
+      this._toast(dfT("rp.no_switch"));
       return Promise.resolve();
     };
     rp.snap = { ...real, states, callService };
@@ -5277,7 +5333,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** The time at the thumb, in words: the clock (+ the line's value). */
   _rpLabel() {
     const rp = this._rp;
-    if (rp.t == null) return "Now";
+    if (rp.t == null) return dfT("rp.now");
     const T = rp.t;
     const m = this._rpModel();
     let lab = rpClock(T);
@@ -5296,7 +5352,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   _rpPill() {
-    return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="Tap to go to a day and time" aria-label="Replay time: ${cesc(this._rpPillTxt())}. Tap to go to a day and time"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
+    return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="${dfT("rp.tap_goto")}" aria-label="${dfT("rp.time")}: ${cesc(this._rpPillTxt())}. ${dfT("rp.tap_goto")}"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
   },
 
   /** test9: on a side rail the time bubble is drawn on the card itself, level with the thumb and right beside it
@@ -5356,10 +5412,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const curDay = new Date(T).setHours(0, 0, 0, 0);
     const el = document.createElement("div");
     el.setAttribute("role", "dialog");
-    el.setAttribute("aria-label", "Go to a day and time");
+    el.setAttribute("aria-label", dfT("rp.goto"));
     el.style.cssText = "position:fixed;z-index:10001;display:flex;align-items:center;gap:6px;padding:8px;border-radius:12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#111);box-shadow:0 8px 24px rgba(0,0,0,.35);font:14px var(--paper-font-body1_-_font-family, Roboto, sans-serif)";
     const fld = "font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:6px 8px;min-height:36px;box-sizing:border-box";
-    el.innerHTML = `<select aria-label="Day" style="${fld}">${days.map((x) => `<option value="${x}" ${x === curDay ? "selected" : ""}>${cesc(this._rpWhen(x + 43200000).day)}</option>`).join("")}</select><input type="time" step="1" aria-label="Time (seconds optional)" value="${p2(cur.getHours())}:${p2(cur.getMinutes())}:00" style="${fld}"><button data-go="1" style="font:inherit;font-weight:600;border:0;border-radius:8px;padding:0 14px;min-height:36px;cursor:pointer;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)">Go</button><button data-x="1" aria-label="Close" style="font:inherit;border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;cursor:pointer">✕</button>`;
+    el.innerHTML = `<select aria-label="${dfT("rp.day")}" style="${fld}">${days.map((x) => `<option value="${x}" ${x === curDay ? "selected" : ""}>${cesc(this._rpWhen(x + 43200000).day)}</option>`).join("")}</select><input type="time" step="1" aria-label="${dfT("rp.time_input")}" value="${p2(cur.getHours())}:${p2(cur.getMinutes())}:00" style="${fld}"><button data-go="1" style="font:inherit;font-weight:600;border:0;border-radius:8px;padding:0 14px;min-height:36px;cursor:pointer;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)">${dfT("rp.go")}</button><button data-x="1" aria-label="${dfT("close")}" style="font:inherit;border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;cursor:pointer">✕</button>`;
     // Inside an open dialog (the Card Editor) the entry must live in that dialog to be reachable.
     let host = this;
     while (host && !(host instanceof HTMLDialogElement && host.open)) host = host.parentNode || host.host;
@@ -5394,13 +5450,13 @@ Object.assign(DeviceFloorplanCard.prototype, {
       let at = t.getTime();
       close();
       if (at >= Date.now() - 20000) {
-        this._toast("That time is still to come: showing Now");
+        this._toast(dfT("rp.future"));
         return this._rpLive();
       }
       const start = Date.now() - this._rpSpan();
       if (at < start) {
         at = start + 1000;
-        this._toast(`Before the loaded ${rp.range} h: showing their start`);
+        this._toast(dfT("rp.before", { n: rp.range }));
       }
       this._rpLoad().then(() => this._rpSeek(at));
     };
@@ -5504,7 +5560,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const d = new Date(T);
     const now = new Date();
     const y = new Date(now.getTime() - 86400000);
-    const day = d.toDateString() === now.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString([], { weekday: "short" });
+    const day = d.toDateString() === now.toDateString() ? dfT("rp.today") : d.toDateString() === y.toDateString() ? dfT("rp.yesterday") : d.toLocaleDateString(dfLocale(), { weekday: "short" });
     return { day, clock: rpClock(T) };
   },
 
@@ -5700,7 +5756,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const hm = this._heat && this._heat.hi > this._heat.lo ? this._heat : { lo, hi: lo + rng };
       const stops = [0, 0.25, 0.5, 0.75, 1].map((k) => `<stop offset="${k}" stop-color="rgb(${heatRgb(Math.max(0, Math.min(1, (lo + k * rng - hm.lo) / (hm.hi - hm.lo)))).map(Math.round).join(",")})"/>`).join("");
       const gr = vert ? 'x1="10" y1="0" x2="90" y2="0"' : 'x1="0" y1="90" x2="0" y2="10"';
-      line = `<svg class="rpln" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="rpg" gradientUnits="userSpaceOnUse" ${gr}>${stops}</linearGradient></defs><polyline points="${xy}" style="stroke:url(#rpg)"/></svg><span class="rpmm" title="Average room temperature (${cesc(m.unit || "°")}), lowest–highest">${cesc(f(lo))}–${cesc(f(hi))}°</span>`;
+      line = `<svg class="rpln" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="rpg" gradientUnits="userSpaceOnUse" ${gr}>${stops}</linearGradient></defs><polyline points="${xy}" style="stroke:url(#rpg)"/></svg><span class="rpmm" title="${dfT("rp.avg_temp", { u: cesc(m.unit || "°") })}">${cesc(f(lo))}–${cesc(f(hi))}°</span>`;
     }
     // Hour marks on the line (every hour up to 24 h, every 2 h beyond): where a fast drag glues to.
     let ticks = "";
@@ -5712,7 +5768,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       ticks += `<u class="${hh === 0 ? "d" : ""}" style="${side}:${(((t - t0) / span) * 100).toFixed(2)}%"></u>`;
     }
     const lab = (rp.lab = this._rpLabel());
-    return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="Replay time" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
+    return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="${dfT("rp.time")}" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
   },
 
   /** 0.11.1: the replay rail: the overlay rail itself turned into Replay, same size, shape and colours
@@ -5720,15 +5776,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
    *  replay is picked beside Layers; the time is the pill on the plan (and on the thumb while it moves). */
   _rpRail(vert) {
     const rp = this._rpState();
-    const now = `<button class="rpnow" data-rp="exit" title="Back to now"><ha-icon icon="mdi:arrow-left"></ha-icon><span>Now</span></button>`;
-    const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? "Pause" : "Play"}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
-    const pn = `<span class="rppn"><button data-rp="prev" aria-label="Previous event"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="Next event"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
-    const speed = `<select class="rpspeed" aria-label="Speed">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
-    const range = `<select class="rprange" aria-label="Range">${RP_RANGES.map((v) => `<option value="${v}" ${v === rp.range ? "selected" : ""}>${v}h</option>`).join("")}</select>`;
+    const now = `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
+    const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? dfT("rp.pause") : dfT("rp.play")}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
+    const pn = `<span class="rppn"><button data-rp="prev" aria-label="${dfT("rp.prev")}"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="${dfT("rp.next")}"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
+    const speed = `<select class="rpspeed" aria-label="${dfT("rp.speed")}">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
+    const range = `<select class="rprange" aria-label="${dfT("rp.range")}">${RP_RANGES.map((v) => `<option value="${v}" ${v === rp.range ? "selected" : ""}>${v}h</option>`).join("")}</select>`;
     const cls = `rprail ${vert ? "v" : "h"} ${rp.play || rp.drag ? "act" : ""} ${rp.loading ? "ld" : ""}`;
     return vert
-      ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">Now</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
-      : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>Now</span></span></span>${speed}${range}</div>`;
+      ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">${dfT("rp.now")}</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
+      : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>${dfT("rp.now")}</span></span></span>${speed}${range}</div>`;
   },
 
   /** 0.11.1: in Replay, beside Layers: the overlay that is replayed (its icon), with the list of the others. */
@@ -5739,7 +5795,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const labels = this._config.overlay_names || {};
     const cur = this._ovDef(this._overlay) || {};
     const menu = this._rp.menu ? `<div class="rpmenu">${ovs.map((o) => `<button data-rpov="${cesc(o)}" class="${o === this._overlay ? "on" : ""}"><ha-icon icon="${cesc(this._ovDef(o).icon)}"></ha-icon>${cesc(labels[o] || this._ovDef(o).label)}</button>`).join("")}</div>` : "";
-    return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="Overlay to replay" aria-label="Overlay to replay"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
+    return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="${dfT("rp.overlay")}" aria-label="${dfT("rp.overlay")}"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
   },
 
   /** Without a rail: the same controls as a bar under the plan (Layers → Home Replay). */
@@ -5781,18 +5837,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
         acc += h.parts[k];
         return `${E_COL[k]} ${from.toFixed(0)}% ${((acc / h.tot) * 100).toFixed(0)}%`;
       }).join(", ");
-      const lab = hh === 0 ? d.toLocaleDateString([], { weekday: "short" }) : hh % 3 === 0 ? p2(hh) : "";
+      const lab = hh === 0 ? d.toLocaleDateString(dfLocale(), { weekday: "short" }) : hh % 3 === 0 ? p2(hh) : "";
       return `<i class="hr ${sel === h.ts ? "on" : ""} ${hh === 0 ? "day" : ""}" data-at="${h.ts}" title="${cesc(`${this._rpWhen(h.ts).day} ${p2(hh)}:00–${p2((hh + 1) % 24)}:00 · ${fmtKwh(h.tot)}`)}"><b style="height:${h.tot ? Math.round(3 + 27 * (h.tot / max)) : 2}px;background:${stops ? `linear-gradient(to top, ${stops})` : "var(--divider-color, rgba(0,0,0,.15))"}"></b>${lab ? `<small>${cesc(lab)}</small>` : ""}</i>`;
     }).join("");
     const idx = sel === "day" ? 0 : sel === "now" ? 25 : 1 + hrs.findIndex((h) => h.ts === sel);
-    return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">Last 24 h</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">Now</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="Energy: the last 24 hours, hour by hour" aria-valuetext="${cesc(this._eWhen())}"></div>`;
+    return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">${dfT("energy.last24")}</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">${dfT("rp.now")}</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="${dfT("energy.scrub")}" aria-valuetext="${cesc(this._eWhen())}"></div>`;
   },
 
   /** What the scrubber points at, in words. */
   _eWhen() {
     const sel = this._eSel();
     const p = (h) => String(h).padStart(2, "0");
-    if (sel === "day" || sel === "now") return sel === "day" ? "Last 24 h" : "Now (live)";
+    if (sel === "day" || sel === "now") return sel === "day" ? dfT("energy.last24") : dfT("energy.now_live");
     const h = new Date(sel).getHours();
     return `${this._rpWhen(sel).day} ${p(h)}:00–${p((h + 1) % 24)}:00`;
   },
@@ -6135,7 +6191,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Health: a device without a battery shows only while offline, as this chip. */
   _offChip(item, name) {
-    return { ...this._chipSpec(item, name, { lines: ["Offline"], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
+    return { ...this._chipSpec(item, name, { lines: [dfT("offline")], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
   },
 
   _chipSpec(item, name, { lines, ents, kind, icon, cls = "" }) {
@@ -6253,7 +6309,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const roomVars = dark ? "--dfc-roomfg:#fff; --dfc-roomhalo: rgba(0,0,0,.85);" : "--dfc-roomfg:#263238; --dfc-roomhalo: rgba(255,255,255,.95);";
     const style = `<style>${CARD_CSS}</style>`;
     if (!sensor) {
-      setShadow(this, `${style}<ha-card><div class="msg">Plan “${cesc(this._floor || c.plan)}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.</div></ha-card>`);
+      setShadow(this, `${style}<ha-card><div class="msg">${dfT("card.plan_missing", { p: cesc(this._floor || c.plan) })}</div></ha-card>`);
       return;
     }
     const a = sensor.attributes;
@@ -6330,7 +6386,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     const nNew = Number((this._hass.states["sensor.device_floorplan_new_devices"] || {}).state) || 0;
     // 0.11.1: top left, away from Layers and the floor button; on a narrow card a short badge.
-    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint && !this._pick ? `<button class="admin" data-new="1" title="${nNew} new devices · only admins see this">${this._narrow ? `${nNew} new` : `${nNew} new · Place them`}</button>` : "";
+    const admin = isAdmin && nNew > 0 && !c.hide_admin_hint && !this._pick ? `<button class="admin" data-new="1" title="${dfT("admin.new_title", { n: nNew })}">${this._narrow ? dfT("admin.new_short", { n: nNew }) : dfT("admin.new_place", { n: nNew })}</button>` : "";
     const names = look.names === "always" ? "names-always" : look.names === "off" ? "names-off" : "";
     const dock = this._overlays();
     const labels = c.overlay_names || {};
@@ -6378,15 +6434,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const oa = btn.actions[o] || {};
         return { g: OVERLAYS[o] ? 0 : 1, html: this._barBtn({ cls: o === ov ? "on" : "", attrs: `data-ov="${cesc(o)}" ${oa.hold_action ? 'data-bh="1"' : ""} aria-pressed="${o === ov}"`, icon: d.icon, label: labels[o] || d.label, st: this._btnStatus(oa.status, autoSt[o]) }) };
       }),
-      ...btn.shortcuts.map((sc, i) => sc.hidden ? null : ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || "Shortcut", st: this._btnStatus(sc.status, null) }) })).filter(Boolean),
+      ...btn.shortcuts.map((sc, i) => sc.hidden ? null : ({ g: 2, html: this._barBtn({ cls: "sc", attrs: `data-sc="${i}" data-bh="1"`, icon: sc.icon || "mdi:gesture-tap", label: sc.name || dfT("shortcut"), st: this._btnStatus(sc.status, null) }) })).filter(Boolean),
       // 0.11.1: Replay is a mode, not an overlay: last, after a divider.
-      ...(rpPos === "bar" ? [{ g: 3, html: this._barBtn({ cls: "rpgo", attrs: 'data-rpgo="1"', icon: "mdi:history", label: "Replay" }) }] : []),
+      ...(rpPos === "bar" ? [{ g: 3, html: this._barBtn({ cls: "rpgo", attrs: 'data-rpgo="1"', icon: "mdi:history", label: dfT("rp.short") }) }] : []),
     ];
     const barHtml = barItems.map((x, i) => (i && x.g !== barItems[i - 1].g ? '<i class="bsep" aria-hidden="true"></i>' : "") + x.html).join("");
-    const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? "Scroll back" : "More buttons"}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
+    const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? dfT("bar.scroll_back") : dfT("bar.more")}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
     const barBg = btn.bar === "contrast" ? (this._hass.themes && this._hass.themes.darkMode ? "light" : "dark") : btn.bar;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="Overlays" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="${dfT("bar.overlays")}" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -6406,7 +6462,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
@@ -6565,19 +6621,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const sides = here.length > 1;
     const hf = ((this._hass && this._hass.floors) || {})[cur.floor_id];
     const full = sides && hf && hf.name && hf.name.toLowerCase() !== cur.name.toLowerCase() ? `${hf.name} · ${cur.name}` : cur.name;
-    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${cesc(full)}: change floor" aria-label="Floor ${cesc(full)}, change floor" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
+    if (!this._fopen) return `<button class="fbtn" data-fbtn="1" title="${dfT("floor.change_t", { f: cesc(full) })}" aria-label="${dfT("floor.change_a", { f: cesc(full) })}" aria-expanded="false"><ha-icon icon="mdi:office-building-outline"></ha-icon><b class="badge">${cesc(cur.label)}</b></button>`;
     const btn = (g, i) => {
       const f = i === li ? cur : g.plans[si] || g.plans[0];
       const nm = i === li ? full : f.name;
       return `<button class="fl ${i === li ? "on" : ""}" data-floor="${cesc(f.id)}" aria-pressed="${i === li}" aria-label="${cesc(nm)}" title="${cesc(nm)}">${cesc(f.label)}<span class="pill">${cesc(nm)}</span></button>`;
     };
     const side = sides
-      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="Plan to the left${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="Plan to the right${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
+      ? `<span class="sides"><button class="arrow" data-side="-1" aria-label="${dfT("floor.left")}${si > 0 ? `: ${cesc(here[si - 1].name)}` : ""}" ${si <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="arrow" data-side="1" aria-label="${dfT("floor.right")}${si < here.length - 1 ? `: ${cesc(here[si + 1].name)}` : ""}" ${si >= here.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-right"></ha-icon></button></span>`
       : "";
-    return `<div class="rail" role="toolbar" aria-label="Floors">
-      <button class="arrow" data-step="1" aria-label="Floor up" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+    return `<div class="rail" role="toolbar" aria-label="${dfT("floor.floors")}">
+      <button class="arrow" data-step="1" aria-label="${dfT("floor.up")}" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
       ${lv.map(btn).join("")}
-      <button class="arrow" data-step="-1" aria-label="Floor down" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
+      <button class="arrow" data-step="-1" aria-label="${dfT("floor.down")}" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
   },
 
   /** 0.8.1: the floor rail opens towards the plan: downwards from a button in the upper half, else upwards. */
@@ -6841,7 +6897,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   _cleanLegendHtml() {
     if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true) || !Object.keys((this._a || {}).robots || {}).length) return "";
     const sw = (c, t) => `<span class="cl"><i style="background:${c}"></i>${t}</span>`;
-    return `<div class="heatleg cleanleg"><span class="ht">Last cleaned</span>${sw("rgba(33,150,243,.55)", "Now")}${sw("rgba(76,175,80,.85)", "Fresh")}${sw("rgba(255,152,0,.7)", "Due")}<span class="hb"></span><label class="hop" title="Colour strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="Colour strength"></label></div>`;
+    return `<div class="heatleg cleanleg"><span class="ht">${dfT("clean.last_cleaned")}</span>${sw("rgba(33,150,243,.55)", dfT("clean.leg_now"))}${sw("rgba(76,175,80,.85)", dfT("clean.leg_fresh"))}${sw("rgba(255,152,0,.7)", dfT("clean.due"))}<span class="hb"></span><label class="hop" title="${dfT("leg.colour_strength")}"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="${dfT("leg.colour_strength")}"></label></div>`;
   },
 
   _heatOp() {
@@ -6854,7 +6910,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const h = this._heat;
     const f = (v) => `${this._num1 ? this._num1(v) : v.toFixed(1)}°`;
     const grad = HEAT_STOPS.map(([t, c]) => `rgb(${c.join(",")}) ${Math.round(t * 100)}%`).join(", ");
-    return `<div class="heatleg"><span class="ht">Room temperature</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">Estimated between sensors</span><label class="hop" title="Heatmap strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="Heatmap strength"></label></div>`;
+    return `<div class="heatleg"><span class="ht">${dfT("heat.room_temp")}</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">${dfT("heat.estimated")}</span><label class="hop" title="${dfT("heat.strength")}"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="${dfT("heat.strength")}"></label></div>`;
   },
 
   /** Rooms (#53): names at their spots, in the overlays chosen in the editor. */
@@ -6882,7 +6938,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
       // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
-      const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `cleaning · ${nw.pct}%` : "cleaning")}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
+      const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `${dfT("clean.cleaning_l")} · ${nw.pct}%` : dfT("clean.cleaning_l"))}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
       return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}</div>`;
     }).join("");
@@ -6932,7 +6988,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const xs = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const bond = ""; // #86: a bond is one device on the card, no badge
     const label = `${s.name}${s.st ? ` · ${this._fmt(s.eid)}` : ""}`;
-    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
+    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>${dfT("net.through", { d: cesc(s.item.ofName) })}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
   },
 
   _chipHtml(s) {
@@ -6940,7 +6996,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const xl0 = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const xl = xl0 + bdg;
     if (s.cl2 && s.compact) {
-      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== "Off") ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== dfT("climate.off")) ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.cl2) {
       const left = s.word || s.set ? `<span class="mc"><span class="mw">${cesc(s.word)}</span>${s.set ? `<span class="st">${cesc(s.set)}</span>` : ""}</span>` : "";
@@ -6966,7 +7022,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   _layersBtn(rail = false) {
-    return `<button class="layers ${this._menu ? "on" : ""}" data-menu="1" title="Layers" aria-label="Layers" aria-expanded="${this._menu}"><ha-icon icon="mdi:layers-outline"></ha-icon>${rail ? "" : "<span>Layers</span>"}</button>`;
+    return `<button class="layers ${this._menu ? "on" : ""}" data-menu="1" title="${dfT("layers")}" aria-label="${dfT("layers")}" aria-expanded="${this._menu}"><ha-icon icon="mdi:layers-outline"></ha-icon>${rail ? "" : `<span>${dfT("layers")}</span>`}</button>`;
   },
 
   _layersMenu(a) {
@@ -6986,28 +7042,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const on = this._layerOn(ov, name, this._layerDefault(ov, name));
       return `<button class="${on ? "on" : ""}" data-lay="${name}">${tick(on)}<ha-icon icon="${icon}"></ha-icon>${label}</button>`;
     };
-    const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
-    const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
+    const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", dfT("lay.heat"))}${lay("labels", "mdi:thermometer", dfT("lay.labels"))}${lay("clim", "mdi:air-conditioner", dfT("lay.clim"))}${lay("air", "mdi:weather-windy", dfT("lay.air"))}` : "";
+    const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>${dfT("lay.reset")}</button>` : "";
     const running = (this._rb || []).some((r) => r.active);
-    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? "Path of the last run" : "Cleaning path") : "";
-    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "Last cleaned") : "";
-    const secAll = ov === "security" ? lay("all", "mdi:shield-search", "All sensors") : "";
+    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? dfT("lay.path_last") : dfT("lay.path")) : "";
+    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", dfT("clean.last_cleaned")) : "";
+    const secAll = ov === "security" ? lay("all", "mdi:shield-search", dfT("lay.all_sensors")) : "";
     // 0.11: Cameras, and with 2+ cameras one tick per camera (this screen only; triggers still pop up).
     const camItems = (ov === "live" || ov === "security") && this._a ? this._items(this._a).filter((it) => this._camOf(it)) : [];
     const camsOn = camItems.length && this._layerOn(ov, "cams", false);
-    const snaps = camItems.length && this._rpOn() ? `<button class="dis" disabled title="No camera video in Replay"><ha-icon class="eye" icon="mdi:eye-off-outline"></ha-icon><ha-icon icon="mdi:cctv-off"></ha-icon>Cameras (not in Replay)</button>` : camItems.length ? lay("cams", "mdi:cctv", "Cameras") + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
-    const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", "Room shading")}${lay("flow", "mdi:transit-connection-variant", "Flow lines")}` : "";
-    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
+    const snaps = camItems.length && this._rpOn() ? `<button class="dis" disabled title="${dfT("lay.no_cam_replay")}"><ha-icon class="eye" icon="mdi:eye-off-outline"></ha-icon><ha-icon icon="mdi:cctv-off"></ha-icon>${dfT("lay.cams_not_replay")}</button>` : camItems.length ? lay("cams", "mdi:cctv", dfT("lay.cams")) + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
+    const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", dfT("lay.fill"))}${lay("flow", "mdi:transit-connection-variant", dfT("lay.flow"))}` : "";
+    const general = `<h4>${dfT("layers")}</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>${dfT("lay.rooms")}</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
-    return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
-      <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
+    return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>${dfT("net.connections")}</h4>
+      <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>${dfT("net.default")}</button>
       ${present.map((cn) => `<button class="chk ${custom && shown.includes(cn) ? "on" : ""}" data-conn="${cn}">${chk(custom && shown.includes(cn))}<ha-icon icon="${CONNS[cn].icon}"></ha-icon>${cesc(CONNS[cn].label)}</button>`).join("")}
       <hr>
-      ${hasZ ? `<button class="${n.links ? "on" : ""}" data-tg="links">${tick(n.links)}Zigbee links</button>` : ""}
-      ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}Wi-Fi / LAN links</button>` : ""}
-      ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>` : ""}
-      <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}Legend</button>
-      ${shown.includes("bluetooth") && this._people().some((p) => p.distance) ? `<hr><h4>People</h4>${lay("pdist", "mdi:account-badge-outline", "People distance")}${this._layerOn(ov, "pdist", true) ? lay("pall", "mdi:radar", "Rings around all proxies") : ""}` : ""}
+      ${hasZ ? `<button class="${n.links ? "on" : ""}" data-tg="links">${tick(n.links)}${dfT("net.zigbee_links")}</button>` : ""}
+      ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}${dfT("net.wifi_links")}</button>` : ""}
+      ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}${dfT("net.hub_links")}</button>` : ""}
+      <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}${dfT("net.legend")}</button>
+      ${shown.includes("bluetooth") && this._people().some((p) => p.distance) ? `<hr><h4>${dfT("ov.people")}</h4>${lay("pdist", "mdi:account-badge-outline", dfT("lay.pdist"))}${this._layerOn(ov, "pdist", true) ? lay("pall", "mdi:radar", dfT("lay.pall")) : ""}` : ""}
 ${reset}
     </div>`;
   },
@@ -7034,19 +7090,19 @@ ${reset}
     if (this._net.legend) {
       const hidden = this._net.roles || [];
       const roles = this._rolesPresent();
-      if (roles.length) groups.push(roles.map((r) => `<button class="lg ${hidden.includes(r) ? "off" : ""}" data-role="${r}" aria-pressed="${!hidden.includes(r)}" title="Show / hide"><i class="${ROLES[r].shape}" style="background:${ROLES[r].color}"></i>${ROLES[r].label}</button>`).join(""));
+      if (roles.length) groups.push(roles.map((r) => `<button class="lg ${hidden.includes(r) ? "off" : ""}" data-role="${r}" aria-pressed="${!hidden.includes(r)}" title="${dfT("net.show_hide")}"><i class="${ROLES[r].shape}" style="background:${ROLES[r].color}"></i>${ROLES[r].label}</button>`).join(""));
       // The LQI ranges switch their Zigbee links on and off, like the roles do.
-      if (specs.some((s) => s.z && s.z.lqi != null)) groups.push(`<span class="lt">LQI</span>${LQI_BANDS.slice().reverse().map((b) => `<button class="lg ${(this._net.lqiOff || []).includes(b.min) ? "off" : ""}" data-lqi="${b.min}" aria-pressed="${!(this._net.lqiOff || []).includes(b.min)}" title="Show / hide links in this range"><i class="ring" style="border-color:${b.color}"></i>${b.label}</button>`).join("")}`);
-      if (specs.some((s) => s.sigEid && !(s.z && s.z.lqi != null))) groups.push(`<span class="lt">Signal</span><span><i class="ring" style="border-color:#43a047"></i>good</span><span><i class="ring" style="border-color:#fb8c00"></i>fair</span><span><i class="ring" style="border-color:#e53935"></i>weak</span>`);
+      if (specs.some((s) => s.z && s.z.lqi != null)) groups.push(`<span class="lt">LQI</span>${LQI_BANDS.slice().reverse().map((b) => `<button class="lg ${(this._net.lqiOff || []).includes(b.min) ? "off" : ""}" data-lqi="${b.min}" aria-pressed="${!(this._net.lqiOff || []).includes(b.min)}" title="${dfT("net.show_hide_range")}"><i class="ring" style="border-color:${b.color}"></i>${b.label}</button>`).join("")}`);
+      if (specs.some((s) => s.sigEid && !(s.z && s.z.lqi != null))) groups.push(`<span class="lt">${dfT("net.signal")}</span><span><i class="ring" style="border-color:#43a047"></i>${dfT("net.good")}</span><span><i class="ring" style="border-color:#fb8c00"></i>${dfT("net.fair")}</span><span><i class="ring" style="border-color:#e53935"></i>${dfT("net.weak")}</span>`);
       // Lines: only the kinds actually drawn (same rules as the lines themselves).
       const lines = [];
       const hubDrawn = this._net.hubs && (specs.some((s) => {
         const pa = s.item && s.item.via && this._specs.get(s.item.via);
         return s.type === "net" && pa && pa.type === "net" && !(s.conns.includes("zigbee") && pa.conns.includes("zigbee"));
       }) || (this._ghosts || []).some((g) => g.links.some((l) => l.cls === "hub")));
-      if (hubDrawn) lines.push(`<span><i class="dash"></i>through hub / bridge</span>`);
+      if (hubDrawn) lines.push(`<span><i class="dash"></i>${dfT("net.via_hub")}</span>`);
       const rts = showWifi ? specs.filter((s) => s.rt && s.rt.home) : [];
-      if (rts.length && this._net.wlinks) lines.push(`<span><i class="cab"></i>cable</span><span><i class="dash wf"></i>Wi-Fi</span>`);
+      if (rts.length && this._net.wlinks) lines.push(`<span><i class="cab"></i>${dfT("net.cable")}</span><span><i class="dash wf"></i>Wi-Fi</span>`);
       if (lines.length) groups.push(lines.join(""));
       if (rts.length) {
         const aps = this._apList();
@@ -7059,15 +7115,15 @@ ${reset}
         groups.push(Object.entries(by).map(([k, b]) => {
           const i = aps.indexOf(k);
           const ap = this._a.aps && this._a.aps[k] && this._specs.get(this._a.aps[k]);
-          const nm = ap ? ap.name : k === "?" ? "Unknown" : k;
-          return `<span class="aps"><i class="sw" style="background:${AP_COLORS[(i < 0 ? 0 : i) % AP_COLORS.length]}"></i>${cesc(nm)}: ${[b.w ? `${b.w} Wi-Fi` : "", b.c ? `${b.c} cable` : ""].filter(Boolean).join(", ")}</span>`;
+          const nm = ap ? ap.name : k === "?" ? dfT("role.unknown") : k;
+          return `<span class="aps"><i class="sw" style="background:${AP_COLORS[(i < 0 ? 0 : i) % AP_COLORS.length]}"></i>${cesc(nm)}: ${[b.w ? `${b.w} Wi-Fi` : "", b.c ? `${b.c} ${dfT("net.cable")}` : ""].filter(Boolean).join(", ")}</span>`;
         }).join(""));
       }
     }
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     if (isAdmin && this._netShow().includes("zigbee") && (this._zha || (this._a && Object.values(this._a.devices || {}).some((d) => (d.conns || []).includes("zigbee"))))) {
-      const t = this._zhaAt ? new Date(this._zhaAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–";
-      groups.push(`<span class="upd" title="Zigbee data updated at ${t}"><button class="rf ${this._scanning ? "busy" : ""}" data-refresh="1" title="Scan the Zigbee network again"><ha-icon icon="mdi:refresh"></ha-icon>${this._scanning ? "Scanning…" : "Refresh"}</button>${t}</span>`);
+      const t = this._zhaAt ? new Date(this._zhaAt).toLocaleTimeString(dfLocale(), { hour: "2-digit", minute: "2-digit" }) : "–";
+      groups.push(`<span class="upd" title="${dfT("net.zha_at", { t })}"><button class="rf ${this._scanning ? "busy" : ""}" data-refresh="1" title="${dfT("net.rescan")}"><ha-icon icon="mdi:refresh"></ha-icon>${this._scanning ? dfT("net.scanning") : dfT("net.refresh")}</button>${t}</span>`);
     }
     if (withLayers) groups.push(this._layersBtn());
     return groups.length ? `<div class="legend">${groups.map((g) => `<span class="lgrp">${g}</span>`).join("")}</div>` : "";
@@ -7083,12 +7139,12 @@ ${reset}
     const ents = this._lightEnts(specs);
     const anyOn = ents.some((e) => (this._hass.states[e] || {}).state === "on");
     const b = [];
-    if (L.all_off) b.push(`<button data-scene="all_off" class="${ents.length && !anyOn ? "on" : ""}"><ha-icon icon="mdi:lightbulb-off-outline"></ha-icon>All off</button>`);
-    if (L.all_on) b.push(`<button data-scene="all_on"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>All on</button>`);
+    if (L.all_off) b.push(`<button data-scene="all_off" class="${ents.length && !anyOn ? "on" : ""}"><ha-icon icon="mdi:lightbulb-off-outline"></ha-icon>${dfT("scene.all_off")}</button>`);
+    if (L.all_on) b.push(`<button data-scene="all_on"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>${dfT("scene.all_on")}</button>`);
     scenes.forEach(([s, i]) => {
-      b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}</button>`);
+      b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || dfT("scene.n", { n: i + 1 }))}</button>`);
     });
-    return `<div class="bar" role="toolbar" aria-label="Light scenes">${b.join("")}</div>`;
+    return `<div class="bar" role="toolbar" aria-label="${dfT("scene.bar")}">${b.join("")}</div>`;
   },
 
   /** 0.10: Overlay actions: your own buttons under the plan, per overlay and per floor (any HA action, a popup…);
@@ -7110,7 +7166,7 @@ ${reset}
       return "";
     }
     if (window.__dfcTipSeen === null || window.__dfcTipSeen === RELEASE_TIP.v) return "";
-    return `<div class="newov tipv"><ha-icon icon="mdi:information-outline"></ha-icon><span>New in ${cesc(RELEASE_TIP.v)}: <b>${cesc(RELEASE_TIP.text)}</b></span><button data-tipgo="1" data-add="1">${cesc(RELEASE_TIP.go)} ›</button><button data-tipx="1" aria-label="Close this tip">✕</button></div>`;
+    return `<div class="newov tipv"><ha-icon icon="mdi:information-outline"></ha-icon><span>${dfT("tip.new_in", { v: cesc(RELEASE_TIP.v) })}: <b>${cesc(RELEASE_TIP.text)}</b></span><button data-tipgo="1" data-add="1">${cesc(RELEASE_TIP.go)} ›</button><button data-tipx="1" aria-label="${dfT("tip.close")}">✕</button></div>`;
   },
 
   _tipClose() {
@@ -7126,7 +7182,7 @@ ${reset}
     const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
     if (!o) return "";
-    return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ New: <b>${cesc(OVERLAYS[o].label)}</b> overlay${o === "energy" ? ". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines." : ""}</span><button data-newov="${o}" data-add="1">Add to this card</button><button data-newov="${o}">Not now</button></div>`;
+    return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ ${dfT("newov.text", { o: `<b>${cesc(OVERLAYS[o].label)}</b>` })}${o === "energy" ? dfT("newov.energy") : ""}</span><button data-newov="${o}" data-add="1">${dfT("newov.add")}</button><button data-newov="${o}">${dfT("newov.not_now")}</button></div>`;
   },
 
   async _newOvAnswer(o, add) {
@@ -7139,7 +7195,7 @@ ${reset}
     try {
       await this._saveToDashboard(raw);
     } catch (_e) {
-      this._toast(add ? `Couldn't save to the dashboard: add ${OVERLAYS[o].label} in the card's settings (Overlays)` : "Couldn't save to the dashboard: it shows again after a reload");
+      this._toast(add ? dfT("newov.save_add", { o: OVERLAYS[o].label }) : dfT("newov.save_later"));
     }
     this.setConfig(raw);
     if (add) this._overlay = o;
@@ -7156,8 +7212,8 @@ ${reset}
         const pre = robots.length > 1 ? `${this._rbLabel(a, eid)}: ` : "";
         const own = rbOwn(a, eid);
         const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"${own ? ` style="color:rgb(${own})"` : ""}></ha-icon>${cesc(pre + label)}</button>`;
-        b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") : cmd("start", "mdi:play", st.state === "paused" ? "Continue" : "Start"));
-        if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+        b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", dfT("robot.pause")) : cmd("start", "mdi:play", st.state === "paused" ? dfT("robot.continue") : dfT("robot.start")));
+        if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")));
       }
     }
     this._ovActs().forEach((x, i) => {
@@ -7167,9 +7223,9 @@ ${reset}
       const s0 = st || {};
       const col = s0.color && s0.badge == null ? ` style="color:${cesc(s0.color)}"` : "";
       const mark = s0.badge != null ? `<i class="obadge"${s0.color ? ` style="background:${cesc(s0.color)}"` : ""}>${cesc(s0.badge)}</i>` : s0.dot ? `<i class="odot" style="background:${cesc(s0.dot)}"></i>` : "";
-      b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || "Action")}${mark}</button>`);
+      b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || dfT("action"))}${mark}</button>`);
     });
-    return b.length ? `<div class="bar oacts" role="toolbar" aria-label="Actions">${b.join("")}</div>` : "";
+    return b.length ? `<div class="bar oacts" role="toolbar" aria-label="${dfT("actions")}">${b.join("")}</div>` : "";
   },
 
   _ovActEnt(x) {
@@ -7590,12 +7646,12 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Marker editing: ✕ on the selected marker hides it in this overlay (#108). */
   _xb(s) {
-    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="Hide it here (in this overlay only)">✕</span>` : "";
+    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="${dfT("edit.hide_here")}">✕</span>` : "";
   },
 
   _penHtml() {
     const m = this._penMode();
-    if (m === "pen") return `<button class="pen" data-pen="1" title="Click markers to hide them, choose what they show, icon, name, tap"><ha-icon icon="mdi:pencil"></ha-icon>Edit markers</button>`;
+    if (m === "pen") return `<button class="pen" data-pen="1" title="${dfT("edit.pen_title")}"><ha-icon icon="mdi:pencil"></ha-icon>${dfT("edit.markers")}</button>`;
     return "";
   },
 
@@ -7613,7 +7669,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         return this._update(true);
       }
       const b = t.closest("[data-appldone],[data-iopen],[data-itg],[data-press],[data-mi]");
-      if (b) this._toast(`Preview: “${b.textContent.trim().slice(0, 40)}” isn't run while editing`);
+      if (b) this._toast(dfT("toast.preview_not_run", { b: b.textContent.trim().slice(0, 40) }));
       return;
     }
     if (t.closest("[data-pen]")) {
@@ -7631,7 +7687,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (cr) {
       this._hass.callService("vacuum", "clean_area", { entity_id: cr.dataset.rb, cleaning_area_id: [cr.dataset.cleanroom] });
       this._popup = null;
-      this._toast("Cleaning started");
+      this._toast(dfT("toast.cleaning_started"));
       return this._update(true);
     }
     const rm = !this._pick && !this._popup && t.closest("[data-croom]");
@@ -7939,7 +7995,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // 0.12.1: an unavailable device says so instead of trying to switch.
     if (act === "toggle") {
       const sts = (s.ents || []).map((e) => this._hass.states[e]).filter(Boolean);
-      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(`${this._dev(s.item.id).name || s.item.name || "This device"} is unavailable`);
+      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(dfT("toast.unavailable", { d: this._dev(s.item.id).name || s.item.name || dfT("this_device") }));
     }
     if (act === "robot") {
       const eid = s.type === "robot" ? s.eid : [s.eid, ...(s.ents || []), s.item.main_entity].find((e) => e && domainOf(e) === "vacuum");
@@ -7953,7 +8009,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const o0 = { ...this._dev(s.item.id), ...this._per(s.item, this._overlay) };
       const o = { nav: o0[`${pre}nav`], popup_title: o0[`${pre}popup_title`], popup_card: o0[`${pre}popup_card`] };
       // 0.12.6: in the card editor's preview a dashboard is only named (leaving would close the editor).
-      if (act === "navigate" && o.nav && this._isPreview()) return this._toast(`Would open: ${o.nav}`);
+      if (act === "navigate" && o.nav && this._isPreview()) return this._toast(dfT("toast.would_open", { u: o.nav }));
       const cfg = act === "navigate" ? (o.nav ? { action: "navigate", navigation_path: o.nav } : null) : o.popup_card ? { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(o.popup_title ? { title: o.popup_title } : {}), content: o.popup_card } } } : null;
       if (cfg) this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: s.ents[0], tap_action: cfg }, action: "tap" }, bubbles: true, composed: true }));
       else this._moreInfo(s.ents[0]);
@@ -8224,7 +8280,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     let t = "";
     if (s.type === "chip") return ""; // 0.11: a chip already shows its values: the tip only names it
     else if (s.eid || (s.ents || [])[0]) t = this._fmt(s.eid || s.ents[0]);
-    return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
+    return t && t !== "—" ? t : t === "—" ? dfT("unavailable_l") : "";
   },
 });
 Object.assign(DeviceFloorplanCard.prototype, {
@@ -8271,7 +8327,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.7.5: the info card: name, state, every reading, buttons; "Open ›" = the marker's action. */
   _infoHtml(p) {
     const hass = this._hass;
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     let name, dot, state, item, lead, reads = [], toggles = [], open = "", anchor, attention = "";
     if (p.appl) {
       const o = (this._appls || []).find((x) => x.ap.item.id === p.appl);
@@ -8285,8 +8341,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
       state = [chosen ? this._fmt(chosen) : st.word, st.time, st.w].filter(Boolean).join(" · ");
       lead = chosen || ap.status || ap.running || ap.power || ap.plug || item.main_entity;
       reads = Array.isArray(per.extras) ? per.extras : [ap.remaining || ap.progress, ap.power].filter(Boolean);
-      if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">Unloaded</button>`;
-      open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">Open ›</button>` : "";
+      if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">${dfT("appl.unloaded")}</button>`;
+      open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">${dfT("open_more")}</button>` : "";
       anchor = `[data-appl*="${CSS.escape(item.id)}"]`;
     } else {
       const s = this._specs && this._specs.get(p.key);
@@ -8307,11 +8363,11 @@ Object.assign(DeviceFloorplanCard.prototype, {
       if (item.bond) reads = [...(item.entities || []), ...(picked || s.also || [])];
       else if (s.phantom && picked) reads = [...(s.ents || []), ...picked];
       toggles = this._infoToggles(item.bond ? { ...s, ents: item.entities || [] } : s);
-      open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
+      open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? dfT("graphs_more") : dfT("open_more")}</button>`;
       anchor = `[data-k="${CSS.escape(s.key)}"]`;
       if (toggles.length) {
         const anyOn = toggles.some((e) => (hass.states[e] || {}).state === "on");
-        attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? "Turn off" : "Turn on"}</button>`;
+        attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? dfT("turn_off") : dfT("turn_on")}</button>`;
       }
     }
     // A chip's own readings are listed even when HA files them under Diagnostic (Health's battery).
@@ -8446,7 +8502,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         out.push(picMarkup({ p, url, look, hl, x: it.x, y: it.y, part }));
         continue;
       }
-      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, part, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? " · unavailable" : ""}`)}"` }));
+      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, part, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? ` · ${dfT("unavailable_l")}` : ""}`)}"` }));
     }
     return out.join("");
   },
@@ -8637,7 +8693,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       if (cur.item.via && this._specs.get(cur.item.via)) up = this._specs.get(cur.item.via);
       else if (cur.ieee && parents[ieeeKey(cur.ieee)]) {
         const pk = parents[ieeeKey(cur.ieee)].p;
-        up = specsByIeee[pk] || { name: (this._zha.byIeee[pk] || {}).role === "coordinator" ? "Coordinator" : "Router", item: {}, last: true };
+        up = specsByIeee[pk] || { name: (this._zha.byIeee[pk] || {}).role === "coordinator" ? dfT("role.coordinator") : dfT("net.router"), item: {}, last: true };
       }
       if (!up || names.includes(up.name)) break;
       names.unshift(up.name);
@@ -8694,16 +8750,16 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const p = this._popup || this._previewPop();
     this._prevShown = !this._popup && !!p;
     if (!p) return "";
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     if (p.type === "confirm") {
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="All off"><h3>Turn all lights off?${close}</h3><div>${p.n ? `${p.n} light${p.n > 1 ? "s are" : " is"} on.` : "No light is on right now."}</div><div class="acts"><button data-close="1">Cancel</button><button class="pri" data-confirm="1">All off</button></div></div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${dfT("scene.all_off")}"><h3>${dfT("alloff.q")}${close}</h3><div>${p.n ? dfT("alloff.n_on", { n: p.n }) : dfT("alloff.none")}</div><div class="acts"><button data-close="1">${dfT("cancel")}</button><button class="pri" data-confirm="1">${dfT("scene.all_off")}</button></div></div></div>`;
     }
     if (p.type === "info") return this._infoHtml(p);
     if (p.type === "elist") {
       const es = this._specs && this._specs.get(p.key);
       if (!es) return "";
       const f = (v) => (es.unit === "W" ? fmtW(v) : fmtKwh(v));
-      return `<div class="pop"><div class="popin"><h3>${cesc(es.name)}${close}</h3><div class="list">${es.elist.map((x) => `<button data-mi="${cesc(x.ent)}">${cesc(x.name)}<small>${cesc(f(x.v))}</small></button>`).join("")}</div><div class="rbhint">Place these devices on the plan in the Floorplan Editor to see each one on its own.</div></div></div>`;
+      return `<div class="pop"><div class="popin"><h3>${cesc(es.name)}${close}</h3><div class="list">${es.elist.map((x) => `<button data-mi="${cesc(x.ent)}">${cesc(x.name)}<small>${cesc(f(x.v))}</small></button>`).join("")}</div><div class="rbhint">${dfT("phantom.place_hint")}</div></div></div>`;
     }
     if (p.type === "robot") return this._robotPop(p);
     if (p.type === "room") return this._roomPop(p);
@@ -8713,10 +8769,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rows = list.map(({ ap, st }) => {
         const lead = ap.status || ap.running || ap.power || ap.plug || ap.item.main_entity;
         const sub = [st.word, st.time, st.w].filter(Boolean).join(" · ");
-        const done = st.phase === "done" ? `<button class="mini" data-appldone="${cesc(ap.item.id)}">Unloaded</button>` : "";
+        const done = st.phase === "done" ? `<button class="mini" data-appldone="${cesc(ap.item.id)}">${dfT("appl.unloaded")}</button>` : "";
         return `<div class="arow"><button data-mi="${cesc(lead)}"><span class="ad" style="--ac:${st.col || "150,150,150"}"></span><span class="nm">${cesc(ap.item.name)}<small>${cesc(sub)}</small></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>${done}</div>`;
       }).join("");
-      const title = list.length > 1 ? "Appliances" : list[0].ap.item.name;
+      const title = list.length > 1 ? dfT("appl.appliances") : list[0].ap.item.name;
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(title)}"><h3>${cesc(title)}${close}</h3><div class="alist">${rows}</div></div></div>`;
     }
     const s = this._specs && this._specs.get(p.key);
@@ -8733,26 +8789,26 @@ Object.assign(DeviceFloorplanCard.prototype, {
         if (!st) return "";
         const f = Number(st.attributes.supported_features || 0);
         const pos = st.attributes.current_position;
-        const slider = f & 4 && pos != null ? `<input type="range" min="0" max="100" step="5" value="${Number(pos)}" data-covpos="${cesc(e)}" aria-label="Position">` : "";
-        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null ? ` · ${pos}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="Open"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="Stop"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="Close"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
+        const slider = f & 4 && pos != null ? `<input type="range" min="0" max="100" step="5" value="${Number(pos)}" data-covpos="${cesc(e)}" aria-label="${dfT("cover.position")}">` : "";
+        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null ? ` · ${pos}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="${dfT("cover.open")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="${dfT("cover.stop")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="${dfT("cover.close")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
       };
       const cents = p.ents || s.ents.filter((e) => domainOf(e) === "cover");
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3><div>${cents.map(row).join("")}</div>${cents.length > 1 ? `<div class="covall">All<button data-cov="__all" data-cmd="open" aria-label="Open all"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="__all" data-cmd="stop" aria-label="Stop all"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="__all" data-cmd="close" aria-label="Close all"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>` : ""}</div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3><div>${cents.map(row).join("")}</div>${cents.length > 1 ? `<div class="covall">${dfT("cover.all")}<button data-cov="__all" data-cmd="open" aria-label="${dfT("cover.open_all")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="__all" data-cmd="stop" aria-label="${dfT("cover.stop_all")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="__all" data-cmd="close" aria-label="${dfT("cover.close_all")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>` : ""}</div></div>`;
     }
     if (p.type === "net") {
-      const rows = [["Connection", s.conns.map((cn) => CONNS[cn].label).join(" + ")], ["Role", (ROLES[s.role] || ROLES.device).label]];
+      const rows = [[dfT("net.connection"), s.conns.map((cn) => CONNS[cn].label).join(" + ")], [dfT("net.role"), (ROLES[s.role] || ROLES.device).label]];
       const chain = this._chain(s);
-      if (chain.length > 1) rows.push(["Path", chain.join(" → ")]);
+      if (chain.length > 1) rows.push([dfT("net.path"), chain.join(" → ")]);
       if (s.z && s.z.lqi != null) rows.push(["LQI", String(s.z.lqi)]);
       if (s.z && s.z.rssi != null) rows.push(["RSSI", `${s.z.rssi} dBm`]);
-      if (s.sigEid) rows.push(["Signal", this._fmt(s.sigEid)]);
+      if (s.sigEid) rows.push([dfT("net.signal"), this._fmt(s.sigEid)]);
       if (s.rt) {
         const ap = this._a.aps && this._specs.get(this._a.aps[s.rt.ap]);
-        if (!s.rt.home) rows.push(["Router", "not connected"]);
+        if (!s.rt.home) rows.push([dfT("net.router"), dfT("net.not_connected")]);
         else {
-          rows.push(["Access point", ap ? ap.name : s.rt.ap || "—"]);
-          rows.push(["Link", s.rt.lan ? "Cable (LAN)" : "Wi-Fi"]);
-          if (s.rt.ssid) rows.push(["Wi-Fi network", s.rt.ssid]);
+          rows.push([dfT("net.ap"), ap ? ap.name : s.rt.ap || "—"]);
+          rows.push([dfT("net.link"), s.rt.lan ? dfT("net.cable_lan") : "Wi-Fi"]);
+          if (s.rt.ssid) rows.push([dfT("net.wifi_net"), s.rt.ssid]);
         }
         if (s.rt.ip) rows.push(["IP", s.rt.ip]);
       }
@@ -8760,18 +8816,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const mine = Object.entries(this._a.aps || {}).filter(([, k]) => k === s.key).map(([n]) => n);
         let w = 0, c = 0;
         for (const x of this._specs.values()) if (x.rt && x.rt.home && mine.includes(x.rt.ap)) x.rt.lan ? c++ : w++;
-        if (w + c) rows.push(["Connected here", [w ? `${w} Wi-Fi` : "", c ? `${c} cable` : ""].filter(Boolean).join(", ") + " (on this floor)"]);
+        if (w + c) rows.push([dfT("net.connected_here"), [w ? `${w} Wi-Fi` : "", c ? `${c} ${dfT("net.cable")}` : ""].filter(Boolean).join(", ") + ` (${dfT("net.on_floor")})`]);
       }
-      if (s.item.parts && s.item.parts.length) rows.push(["Includes", s.item.parts.join(", ")]);
+      if (s.item.parts && s.item.parts.length) rows.push([dfT("net.includes"), s.item.parts.join(", ")]);
       const parent = s.item.via && this._specs.get(s.item.via);
-      if (parent) rows.push(["Through", parent.name]);
+      if (parent) rows.push([dfT("net.through_k"), parent.name]);
       const none = !(s.z && (s.z.lqi != null || s.z.rssi != null)) && !s.sigEid && !s.rt;
-      const hint = none ? `<div style="font-size:12px;color:var(--secondary-text-color)">${s.conns.includes("zigbee") ? "No link quality known yet (ZHA data is loaded for admins)." : "No signal value: enable this device's signal sensor in Home Assistant to see it here."}</div>` : "";
+      const hint = none ? `<div style="font-size:12px;color:var(--secondary-text-color)">${s.conns.includes("zigbee") ? dfT("net.no_lqi") : dfT("net.no_signal")}</div>` : "";
       const kids = this._children(s);
       const conn = kids.out.length || kids.extra.length
-        ? `<h4>Connected devices (${kids.out.length + kids.extra.length})</h4><div class="conn-list">${kids.out.map((x) => `<button data-hl="${cesc(x.key)}">${cesc(x.name)}<small>${cesc(this._chain(x).join(" → "))}</small></button>`).join("")}${kids.extra.map((n) => `<button disabled>${cesc(n)}<small>not on this floor</small></button>`).join("")}</div>`
+        ? `<h4>${dfT("net.connected_devices", { n: kids.out.length + kids.extra.length })}</h4><div class="conn-list">${kids.out.map((x) => `<button data-hl="${cesc(x.key)}">${cesc(x.name)}<small>${cesc(this._chain(x).join(" → "))}</small></button>`).join("")}${kids.extra.map((n) => `<button disabled>${cesc(n)}<small>${dfT("net.not_on_floor")}</small></button>`).join("")}</div>`
         : "";
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">Details ›</button>` : ""}</div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">${dfT("details_more")}</button>` : ""}</div></div>`;
     }
     return this._rdHtml(s, p, close);
   },
@@ -8796,15 +8852,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const st = hass.states[e];
       const k = domainOf(e) === "climate" ? "temperature" : kindOf(e, st);
       const icon = { temperature: "mdi:thermometer", humidity: "mdi:water-percent", battery: "mdi:battery", signal: "mdi:signal" }[k] || "mdi:chart-line";
-      const label = { temperature: "Temperature", humidity: "Humidity", battery: "Battery", signal: "Signal" }[k] || this._shortName(s.item, e, s.name);
+      const label = { temperature: dfT("temperature"), humidity: dfT("humidity"), battery: dfT("battery"), signal: dfT("net.signal") }[k] || this._shortName(s.item, e, s.name);
       const big = domainOf(e) === "climate" && st ? this._attrVal(st, "current_temperature") : this._fmtNum(e);
-      return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>24 h ago</span><span class="range"></span><span>now</span></div><button class="more" data-mi="${cesc(e)}">Details ›</button></div>`;
+      return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>${dfT("time.ago", { t: dfT("unit.h", { n: 24 }) })}</span><span class="range"></span><span>${dfT("time.now")}</span></div><button class="more" data-mi="${cesc(e)}">${dfT("details_more")}</button></div>`;
     };
     // One button per charted entity; named by its device where a kind has several lines.
     const det = (g) => [...new Set([p.lead, ...g.ts, ...g.hs].filter(Boolean).map((e) => e.replace(/#h$/, "")))].map((e) => {
-      const kd = domainOf(e) === "climate" ? "" : kindOf(e, hass.states[e]) === "temperature" ? "Temperature" : "Humidity";
-      const many = kd && (kd === "Temperature" ? g.ts : g.hs).length > 1;
-      const lab = !kd ? "Details" : many ? `${this._rdName(e)} · ${kd.toLowerCase()}` : `${kd} details`;
+      const kd = domainOf(e) === "climate" ? "" : kindOf(e, hass.states[e]) === "temperature" ? "temperature" : "humidity";
+      const many = kd && (kd === "temperature" ? g.ts : g.hs).length > 1;
+      const lab = !kd ? dfT("details") : many ? `${this._rdName(e)} · ${dfT(kd + "_l")}` : dfT(kd + "_details");
       return `<button class="more" data-mi="${cesc(e)}">${cesc(lab)} ›</button>`;
     }).join("");
     let body;
@@ -8815,7 +8871,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const hs = groups.map((g) => g.h).filter(Boolean);
       // 0.13.2: the icon the user gave it, else what it measures (no ghost: the ghost only marks phantoms in the Editor).
       const phIcon = s.icon || this._dev(s.item.id).icon || (s.item.icon && s.item.icon !== "dfp:phantom" ? s.item.icon : ts.length ? "mdi:thermometer" : "mdi:water-percent");
-      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(phIcon)}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[mode] || "average")} · ${groups.length} devices</small></div>`;
+      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(phIcon)}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: dfT("ph.lowest"), max: dfT("ph.highest"), one: dfT("ph.one") }[mode] || dfT("ph.average"))} · ${dfT("n_devices", { n: groups.length })}</small></div>`;
       const rows = groups.map((g) => `<button class="rcrow" data-rdsub="${cesc(g.id)}"><span class="nm">${cesc(g.name)}${g.t || g.h ? now(g, "rcv") : `<small>${cesc(g.ents.map((e) => this._fmt(e)).join(" · "))}</small>`}</span>${g.t || g.h ? chart(g.t ? [g.t] : [], g.h ? [g.h] : [], "one", true) : ""}<span class="go">›</span></button>`).join("");
       body = `${sum}${ts.length || hs.length ? chart(ts, hs, mode) : ""}<div class="rclist">${rows}</div>`;
     } else {
@@ -8906,7 +8962,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rows = (this._hist.data[eid] || []).map((r) => ({ t: (r.lu || r.lc || 0) * 1000, v: Number(r.s) })).filter((r) => Number.isFinite(r.v) && r.t);
       const svg = el.querySelector("svg");
       if (rows.length < 2) {
-        svg.innerHTML = domainOf(eid) === "climate" ? "" : `<text x="150" y="32" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">Not enough history yet</text>`;
+        svg.innerHTML = domainOf(eid) === "climate" ? "" : `<text x="150" y="32" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">${dfT("hist.not_enough")}</text>`;
         continue;
       }
       const t0 = Date.now() - 24 * 3600 * 1000;
@@ -8975,7 +9031,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const small = el.tagName.toLowerCase() === "svg";
     const svg = small ? el : el.querySelector("svg");
     if (!ser.length) {
-      svg.innerHTML = small ? "" : `<text x="160" y="80" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">Not enough history yet</text>`;
+      svg.innerHTML = small ? "" : `<text x="160" y="80" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">${dfT("hist.not_enough")}</text>`;
       return;
     }
     const W = small ? 100 : 320;
@@ -9039,7 +9095,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     }).join("");
     const t0 = Date.now() - 24 * 3600 * 1000;
     const hm = (ms) => new Date(ms).toLocaleTimeString(hass.locale && hass.locale.language, { hour: "2-digit", minute: "2-digit" });
-    const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? "now" : f ? "12 h ago" : "24 h ago"}</text>`).join("");
+    const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? dfT("time.now") : dfT("time.ago", { t: dfT("unit.h", { n: f ? 12 : 24 }) })}</text>`).join("");
     svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${first.c};stop-opacity:.28"/><stop offset="1" style="stop-color:${first.c};stop-opacity:0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#${gid})"/>${ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="2.2" stroke-linecap="round"${s0.dash ? ' stroke-dasharray="5 4"' : ""}/>`).join("")}${times}<line class="cx" y1="${y0}" y2="${y1}" stroke="currentColor" stroke-opacity=".35" visibility="hidden"/>${ser.map((s0, k) => `<circle class="cd${k}" r="3.5" fill="${s0.c}" stroke="var(--card-background-color, #fff)" stroke-width="1.5" visibility="hidden"/>`).join("")}`;
     el.querySelector(".rcl").innerHTML = ser.map((s0) => `<span class="${s0.dash ? "dash" : ""}" style="--c:${s0.c}">${s0.nm ? `${cesc(s0.nm)} ` : ""}${cesc(fmt(s0, s0.min))}–${cesc(fmt(s0, s0.max))}</span>`).join("");
     // Touch / hover: the values at that time.
@@ -9477,6 +9533,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   set hass(hass) {
+    dfLangOf(hass); // 0.14 L1: texts in this user's language
     const first = !this._hass;
     this._hass = hass;
     if (first) this._render();
@@ -11649,7 +11706,7 @@ if (!window.customCards.some((c) => c.type === "device-floorplan-card")) {
   window.customCards.push({
     type: "device-floorplan-card",
     name: "Device Floorplan",
-    description: "Your floorplan with live overlays: Live, Lights, Comfort, Security, Network, Health and your own.",
+    description: dfT("card.description"),
     preview: false,
     documentationURL: "https://johnkotrolos.github.io/ha-device-floorplan/reference/card",
   });
@@ -11662,7 +11719,7 @@ class DeviceFloorplanChip extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { overlay: "lights", label: "Lights", icon: "mdi:lightbulb-group-outline" };
+    return { overlay: "lights", label: dfT("ov.lights"), icon: "mdi:lightbulb-group-outline" };
   }
 
   setConfig(c) {
@@ -11672,6 +11729,7 @@ class DeviceFloorplanChip extends HTMLElement {
   }
 
   set hass(h) {
+    dfLangOf(h); // 0.14 L1: texts in this user's language
     this._hass = h;
     this._tplSub();
     this._render();
@@ -11742,7 +11800,7 @@ class DeviceFloorplanChip extends HTMLElement {
     }
     const on = ents.filter((e) => ["on", "open", "playing", "home"].includes(h.states[e].state)).length;
     if (ents.length === 1) return h.formatEntityState ? h.formatEntityState(h.states[ents[0]]) : h.states[ents[0]].state;
-    return on === 0 ? "Off" : on === ents.length ? "On" : `${on} of ${ents.length} on`;
+    return on === 0 ? dfT("chip.off") : on === ents.length ? dfT("chip.on") : dfT("chip.n_of_on", { n: on, t: ents.length });
   }
 
   /** 0.7.4: what the value counts, when it counts something: { n, total, word: "on" | "open" }. */
@@ -11791,8 +11849,8 @@ class DeviceFloorplanChip extends HTMLElement {
     const k = this._count();
     if (k) {
       // 0.7.4: value style: full "3 of 8 on" (default) or short "3 on" / "All off".
-      if (c.value_style === "short") return k.n ? `${k.n} ${k.word}` : k.word === "open" ? "All closed" : "All off";
-      return `${k.n} of ${k.total} ${k.word}`;
+      if (c.value_style === "short") return k.n ? dfT(`chip.n_${k.word}`, { n: k.n }) : k.word === "open" ? dfT("sec.all_closed") : dfT("scene.all_off");
+      return dfT(`chip.n_of_${k.word}`, { n: k.n, t: k.total });
     }
     if (c.entity && h.states[c.entity]) return h.formatEntityState ? h.formatEntityState(h.states[c.entity]) : h.states[c.entity].state;
     const b = this._bond();
@@ -11923,6 +11981,7 @@ class DeviceFloorplanChipEditor extends HTMLElement {
   }
 
   set hass(h) {
+    dfLangOf(h); // 0.14 L1: texts in this user's language
     this._hass = h;
     this._render();
   }

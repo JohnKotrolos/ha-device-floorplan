@@ -43,7 +43,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         this._eErr = null;
       })
       .catch((e) => {
-        this._eErr = (e && (e.message || e.code)) || "Energy data not available";
+        this._eErr = (e && (e.message || e.code)) || dfT("energy.no_data");
         this._eData = { day, t: Date.now(), devs: [], srcs: [], hours: {} };
       })
       .finally(() => {
@@ -261,7 +261,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const v = val[cls] > 0 ? this._eFmt(val[cls]) : "";
       return `<div class="epin ${cls} ${dummy[cls] ? "dummy" : ""} ${v ? "val" : ""}" style="left:${p.x}%;top:${p.y}%" title="${cesc(label)}${v ? ` · ${cesc(v)}` : ""}"><ha-icon icon="${icon}"></ha-icon>${v ? `<span>${cesc(v)}</span>` : ""}</div>`;
     };
-    return `${pin(panel, "mdi:flash", "Electrical panel", "panel")}${source ? pin(source, "mdi:solar-power-variant", "Solar", "source") : ""}${battery ? pin(battery, "mdi:home-battery", "Battery", "battery") : ""}`;
+    return `${pin(panel, "mdi:flash", dfT("energy.panel"), "panel")}${source ? pin(source, "mdi:solar-power-variant", dfT("energy.solar"), "source") : ""}${battery ? pin(battery, "mdi:home-battery", dfT("battery"), "battery") : ""}`;
   },
 
   /** Flow lines in pixels (drawn after the layout, to each chip's final spot), like Home Assistant's energy
@@ -316,19 +316,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** Under the plan: total, top 3, sources, and the day scrubber (00:00 → now; left end Today, right end Now). */
   _eLegendHtml() {
     if (this._overlay !== "energy") return "";
-    if (!this._eData) return `<div class="heatleg eleg">Loading energy…</div>`;
-    if (!this._eData.devs.length) return `<div class="heatleg eleg">${this._eErr ? cesc(this._eErr) : "No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here."}</div>`;
+    if (!this._eData) return `<div class="heatleg eleg">${dfT("energy.loading")}</div>`;
+    if (!this._eData.devs.length) return `<div class="heatleg eleg">${this._eErr ? cesc(this._eErr) : dfT("energy.none_yet")}</div>`;
     const specs = [...(this._specs ? this._specs.values() : [])].filter((sp) => sp.energy > 0).sort((x, y) => y.energy - x.energy);
     const sum = specs.reduce((x, sp) => x + (sp.eSum ?? sp.energy), 0); // an upstream device's meter counts once
     const it = (icon, label, v, c) => `<span class="cl"><ha-icon icon="${icon}" style="color:${c}"></ha-icon>${cesc(label)} <b>${cesc(v)}</b></span>`;
     // 0.11: no device list (the chips and their colours say it); explain the room shading instead.
-    const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>Rooms: darker = more energy</span>` : "";
+    const top = this._layerOn("energy", "fill", true) && Object.keys(this._eRooms()).length ? `<span class="cl"><i class="eshade"></i>${dfT("energy.rooms_darker")}</span>` : "";
     const sol = this._eSum("solar");
     const grid = this._eSum("grid");
     const batt = this._eSum("battery_out");
-    const sumTxt = `${this._eSel() === "day" ? "" : `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>`}${it("mdi:flash", "On the plan", this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", "Not on this plan", this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
-    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", "Battery", this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
-    const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.</span>` : "";
+    const sumTxt = `${this._eSel() === "day" ? "" : `<span class="cl ewhen"><b>${cesc(this._eWhen())}</b></span>`}${it("mdi:flash", dfT("energy.on_plan"), this._eFmt(sum), "var(--energy-grid-consumption-color, #488fc2)")}${this._eOff >= (this._eSel() === "now" ? 1 : 0.005) ? it("mdi:map-marker-off-outline", dfT("energy.not_on_plan"), this._eFmt(this._eOff), "var(--secondary-text-color)") : ""}`;
+    const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", dfT("energy.grid"), this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", dfT("energy.solar"), this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", dfT("battery"), this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
+    const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">${dfT("energy.place_panel")}</span>` : "";
     return `${this._eScrubHtml()}<div class="heatleg eleg">${sumTxt}${srcTxt}${top}${hint}</div>`;
   },
 });

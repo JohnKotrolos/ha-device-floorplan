@@ -5,7 +5,7 @@ class DeviceFloorplanChip extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { overlay: "lights", label: "Lights", icon: "mdi:lightbulb-group-outline" };
+    return { overlay: "lights", label: dfT("ov.lights"), icon: "mdi:lightbulb-group-outline" };
   }
 
   setConfig(c) {
@@ -15,6 +15,7 @@ class DeviceFloorplanChip extends HTMLElement {
   }
 
   set hass(h) {
+    dfLangOf(h); // 0.14 L1: texts in this user's language
     this._hass = h;
     this._tplSub();
     this._render();
@@ -85,7 +86,7 @@ class DeviceFloorplanChip extends HTMLElement {
     }
     const on = ents.filter((e) => ["on", "open", "playing", "home"].includes(h.states[e].state)).length;
     if (ents.length === 1) return h.formatEntityState ? h.formatEntityState(h.states[ents[0]]) : h.states[ents[0]].state;
-    return on === 0 ? "Off" : on === ents.length ? "On" : `${on} of ${ents.length} on`;
+    return on === 0 ? dfT("chip.off") : on === ents.length ? dfT("chip.on") : dfT("chip.n_of_on", { n: on, t: ents.length });
   }
 
   /** 0.7.4: what the value counts, when it counts something: { n, total, word: "on" | "open" }. */
@@ -134,8 +135,8 @@ class DeviceFloorplanChip extends HTMLElement {
     const k = this._count();
     if (k) {
       // 0.7.4: value style: full "3 of 8 on" (default) or short "3 on" / "All off".
-      if (c.value_style === "short") return k.n ? `${k.n} ${k.word}` : k.word === "open" ? "All closed" : "All off";
-      return `${k.n} of ${k.total} ${k.word}`;
+      if (c.value_style === "short") return k.n ? dfT(`chip.n_${k.word}`, { n: k.n }) : k.word === "open" ? dfT("sec.all_closed") : dfT("scene.all_off");
+      return dfT(`chip.n_of_${k.word}`, { n: k.n, t: k.total });
     }
     if (c.entity && h.states[c.entity]) return h.formatEntityState ? h.formatEntityState(h.states[c.entity]) : h.states[c.entity].state;
     const b = this._bond();

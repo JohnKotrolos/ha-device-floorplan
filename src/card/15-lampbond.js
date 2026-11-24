@@ -42,7 +42,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.7.5: the info card: name, state, every reading, buttons; "Open ›" = the marker's action. */
   _infoHtml(p) {
     const hass = this._hass;
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     let name, dot, state, item, lead, reads = [], toggles = [], open = "", anchor, attention = "";
     if (p.appl) {
       const o = (this._appls || []).find((x) => x.ap.item.id === p.appl);
@@ -56,8 +56,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
       state = [chosen ? this._fmt(chosen) : st.word, st.time, st.w].filter(Boolean).join(" · ");
       lead = chosen || ap.status || ap.running || ap.power || ap.plug || item.main_entity;
       reads = Array.isArray(per.extras) ? per.extras : [ap.remaining || ap.progress, ap.power].filter(Boolean);
-      if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">Unloaded</button>`;
-      open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">Open ›</button>` : "";
+      if (st.phase === "done") attention = `<button class="ibig" data-appldone="${cesc(item.id)}">${dfT("appl.unloaded")}</button>`;
+      open = lead ? `<button class="iopen" data-iopen="${cesc(lead)}">${dfT("open_more")}</button>` : "";
       anchor = `[data-appl*="${CSS.escape(item.id)}"]`;
     } else {
       const s = this._specs && this._specs.get(p.key);
@@ -78,11 +78,11 @@ Object.assign(DeviceFloorplanCard.prototype, {
       if (item.bond) reads = [...(item.entities || []), ...(picked || s.also || [])];
       else if (s.phantom && picked) reads = [...(s.ents || []), ...picked];
       toggles = this._infoToggles(item.bond ? { ...s, ents: item.entities || [] } : s);
-      open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? "Graphs ›" : "Open ›"}</button>`;
+      open = item.bond ? "" : `<button class="iopen" data-iopen="${cesc(s.key)}">${s.phantom ? dfT("graphs_more") : dfT("open_more")}</button>`;
       anchor = `[data-k="${CSS.escape(s.key)}"]`;
       if (toggles.length) {
         const anyOn = toggles.some((e) => (hass.states[e] || {}).state === "on");
-        attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? "Turn off" : "Turn on"}</button>`;
+        attention = `<button class="ibig" data-itg="${cesc(s.key)}">${anyOn ? dfT("turn_off") : dfT("turn_on")}</button>`;
       }
     }
     // A chip's own readings are listed even when HA files them under Diagnostic (Health's battery).

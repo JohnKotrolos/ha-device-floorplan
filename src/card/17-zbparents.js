@@ -26,7 +26,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       if (cur.item.via && this._specs.get(cur.item.via)) up = this._specs.get(cur.item.via);
       else if (cur.ieee && parents[ieeeKey(cur.ieee)]) {
         const pk = parents[ieeeKey(cur.ieee)].p;
-        up = specsByIeee[pk] || { name: (this._zha.byIeee[pk] || {}).role === "coordinator" ? "Coordinator" : "Router", item: {}, last: true };
+        up = specsByIeee[pk] || { name: (this._zha.byIeee[pk] || {}).role === "coordinator" ? dfT("role.coordinator") : dfT("net.router"), item: {}, last: true };
       }
       if (!up || names.includes(up.name)) break;
       names.unshift(up.name);
@@ -83,16 +83,16 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const p = this._popup || this._previewPop();
     this._prevShown = !this._popup && !!p;
     if (!p) return "";
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     if (p.type === "confirm") {
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="All off"><h3>Turn all lights off?${close}</h3><div>${p.n ? `${p.n} light${p.n > 1 ? "s are" : " is"} on.` : "No light is on right now."}</div><div class="acts"><button data-close="1">Cancel</button><button class="pri" data-confirm="1">All off</button></div></div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${dfT("scene.all_off")}"><h3>${dfT("alloff.q")}${close}</h3><div>${p.n ? dfT("alloff.n_on", { n: p.n }) : dfT("alloff.none")}</div><div class="acts"><button data-close="1">${dfT("cancel")}</button><button class="pri" data-confirm="1">${dfT("scene.all_off")}</button></div></div></div>`;
     }
     if (p.type === "info") return this._infoHtml(p);
     if (p.type === "elist") {
       const es = this._specs && this._specs.get(p.key);
       if (!es) return "";
       const f = (v) => (es.unit === "W" ? fmtW(v) : fmtKwh(v));
-      return `<div class="pop"><div class="popin"><h3>${cesc(es.name)}${close}</h3><div class="list">${es.elist.map((x) => `<button data-mi="${cesc(x.ent)}">${cesc(x.name)}<small>${cesc(f(x.v))}</small></button>`).join("")}</div><div class="rbhint">Place these devices on the plan in the Floorplan Editor to see each one on its own.</div></div></div>`;
+      return `<div class="pop"><div class="popin"><h3>${cesc(es.name)}${close}</h3><div class="list">${es.elist.map((x) => `<button data-mi="${cesc(x.ent)}">${cesc(x.name)}<small>${cesc(f(x.v))}</small></button>`).join("")}</div><div class="rbhint">${dfT("phantom.place_hint")}</div></div></div>`;
     }
     if (p.type === "robot") return this._robotPop(p);
     if (p.type === "room") return this._roomPop(p);
@@ -102,10 +102,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rows = list.map(({ ap, st }) => {
         const lead = ap.status || ap.running || ap.power || ap.plug || ap.item.main_entity;
         const sub = [st.word, st.time, st.w].filter(Boolean).join(" · ");
-        const done = st.phase === "done" ? `<button class="mini" data-appldone="${cesc(ap.item.id)}">Unloaded</button>` : "";
+        const done = st.phase === "done" ? `<button class="mini" data-appldone="${cesc(ap.item.id)}">${dfT("appl.unloaded")}</button>` : "";
         return `<div class="arow"><button data-mi="${cesc(lead)}"><span class="ad" style="--ac:${st.col || "150,150,150"}"></span><span class="nm">${cesc(ap.item.name)}<small>${cesc(sub)}</small></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>${done}</div>`;
       }).join("");
-      const title = list.length > 1 ? "Appliances" : list[0].ap.item.name;
+      const title = list.length > 1 ? dfT("appl.appliances") : list[0].ap.item.name;
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(title)}"><h3>${cesc(title)}${close}</h3><div class="alist">${rows}</div></div></div>`;
     }
     const s = this._specs && this._specs.get(p.key);
@@ -122,26 +122,26 @@ Object.assign(DeviceFloorplanCard.prototype, {
         if (!st) return "";
         const f = Number(st.attributes.supported_features || 0);
         const pos = st.attributes.current_position;
-        const slider = f & 4 && pos != null ? `<input type="range" min="0" max="100" step="5" value="${Number(pos)}" data-covpos="${cesc(e)}" aria-label="Position">` : "";
-        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null ? ` · ${pos}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="Open"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="Stop"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="Close"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
+        const slider = f & 4 && pos != null ? `<input type="range" min="0" max="100" step="5" value="${Number(pos)}" data-covpos="${cesc(e)}" aria-label="${dfT("cover.position")}">` : "";
+        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null ? ` · ${pos}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="${dfT("cover.open")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="${dfT("cover.stop")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="${dfT("cover.close")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
       };
       const cents = p.ents || s.ents.filter((e) => domainOf(e) === "cover");
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3><div>${cents.map(row).join("")}</div>${cents.length > 1 ? `<div class="covall">All<button data-cov="__all" data-cmd="open" aria-label="Open all"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="__all" data-cmd="stop" aria-label="Stop all"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="__all" data-cmd="close" aria-label="Close all"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>` : ""}</div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3><div>${cents.map(row).join("")}</div>${cents.length > 1 ? `<div class="covall">${dfT("cover.all")}<button data-cov="__all" data-cmd="open" aria-label="${dfT("cover.open_all")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="__all" data-cmd="stop" aria-label="${dfT("cover.stop_all")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="__all" data-cmd="close" aria-label="${dfT("cover.close_all")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>` : ""}</div></div>`;
     }
     if (p.type === "net") {
-      const rows = [["Connection", s.conns.map((cn) => CONNS[cn].label).join(" + ")], ["Role", (ROLES[s.role] || ROLES.device).label]];
+      const rows = [[dfT("net.connection"), s.conns.map((cn) => CONNS[cn].label).join(" + ")], [dfT("net.role"), (ROLES[s.role] || ROLES.device).label]];
       const chain = this._chain(s);
-      if (chain.length > 1) rows.push(["Path", chain.join(" → ")]);
+      if (chain.length > 1) rows.push([dfT("net.path"), chain.join(" → ")]);
       if (s.z && s.z.lqi != null) rows.push(["LQI", String(s.z.lqi)]);
       if (s.z && s.z.rssi != null) rows.push(["RSSI", `${s.z.rssi} dBm`]);
-      if (s.sigEid) rows.push(["Signal", this._fmt(s.sigEid)]);
+      if (s.sigEid) rows.push([dfT("net.signal"), this._fmt(s.sigEid)]);
       if (s.rt) {
         const ap = this._a.aps && this._specs.get(this._a.aps[s.rt.ap]);
-        if (!s.rt.home) rows.push(["Router", "not connected"]);
+        if (!s.rt.home) rows.push([dfT("net.router"), dfT("net.not_connected")]);
         else {
-          rows.push(["Access point", ap ? ap.name : s.rt.ap || "—"]);
-          rows.push(["Link", s.rt.lan ? "Cable (LAN)" : "Wi-Fi"]);
-          if (s.rt.ssid) rows.push(["Wi-Fi network", s.rt.ssid]);
+          rows.push([dfT("net.ap"), ap ? ap.name : s.rt.ap || "—"]);
+          rows.push([dfT("net.link"), s.rt.lan ? dfT("net.cable_lan") : "Wi-Fi"]);
+          if (s.rt.ssid) rows.push([dfT("net.wifi_net"), s.rt.ssid]);
         }
         if (s.rt.ip) rows.push(["IP", s.rt.ip]);
       }
@@ -149,18 +149,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const mine = Object.entries(this._a.aps || {}).filter(([, k]) => k === s.key).map(([n]) => n);
         let w = 0, c = 0;
         for (const x of this._specs.values()) if (x.rt && x.rt.home && mine.includes(x.rt.ap)) x.rt.lan ? c++ : w++;
-        if (w + c) rows.push(["Connected here", [w ? `${w} Wi-Fi` : "", c ? `${c} cable` : ""].filter(Boolean).join(", ") + " (on this floor)"]);
+        if (w + c) rows.push([dfT("net.connected_here"), [w ? `${w} Wi-Fi` : "", c ? `${c} ${dfT("net.cable")}` : ""].filter(Boolean).join(", ") + ` (${dfT("net.on_floor")})`]);
       }
-      if (s.item.parts && s.item.parts.length) rows.push(["Includes", s.item.parts.join(", ")]);
+      if (s.item.parts && s.item.parts.length) rows.push([dfT("net.includes"), s.item.parts.join(", ")]);
       const parent = s.item.via && this._specs.get(s.item.via);
-      if (parent) rows.push(["Through", parent.name]);
+      if (parent) rows.push([dfT("net.through_k"), parent.name]);
       const none = !(s.z && (s.z.lqi != null || s.z.rssi != null)) && !s.sigEid && !s.rt;
-      const hint = none ? `<div style="font-size:12px;color:var(--secondary-text-color)">${s.conns.includes("zigbee") ? "No link quality known yet (ZHA data is loaded for admins)." : "No signal value: enable this device's signal sensor in Home Assistant to see it here."}</div>` : "";
+      const hint = none ? `<div style="font-size:12px;color:var(--secondary-text-color)">${s.conns.includes("zigbee") ? dfT("net.no_lqi") : dfT("net.no_signal")}</div>` : "";
       const kids = this._children(s);
       const conn = kids.out.length || kids.extra.length
-        ? `<h4>Connected devices (${kids.out.length + kids.extra.length})</h4><div class="conn-list">${kids.out.map((x) => `<button data-hl="${cesc(x.key)}">${cesc(x.name)}<small>${cesc(this._chain(x).join(" → "))}</small></button>`).join("")}${kids.extra.map((n) => `<button disabled>${cesc(n)}<small>not on this floor</small></button>`).join("")}</div>`
+        ? `<h4>${dfT("net.connected_devices", { n: kids.out.length + kids.extra.length })}</h4><div class="conn-list">${kids.out.map((x) => `<button data-hl="${cesc(x.key)}">${cesc(x.name)}<small>${cesc(this._chain(x).join(" → "))}</small></button>`).join("")}${kids.extra.map((n) => `<button disabled>${cesc(n)}<small>${dfT("net.not_on_floor")}</small></button>`).join("")}</div>`
         : "";
-      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">Details ›</button>` : ""}</div></div>`;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">${dfT("details_more")}</button>` : ""}</div></div>`;
     }
     return this._rdHtml(s, p, close);
   },
@@ -185,15 +185,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const st = hass.states[e];
       const k = domainOf(e) === "climate" ? "temperature" : kindOf(e, st);
       const icon = { temperature: "mdi:thermometer", humidity: "mdi:water-percent", battery: "mdi:battery", signal: "mdi:signal" }[k] || "mdi:chart-line";
-      const label = { temperature: "Temperature", humidity: "Humidity", battery: "Battery", signal: "Signal" }[k] || this._shortName(s.item, e, s.name);
+      const label = { temperature: dfT("temperature"), humidity: dfT("humidity"), battery: dfT("battery"), signal: dfT("net.signal") }[k] || this._shortName(s.item, e, s.name);
       const big = domainOf(e) === "climate" && st ? this._attrVal(st, "current_temperature") : this._fmtNum(e);
-      return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>24 h ago</span><span class="range"></span><span>now</span></div><button class="more" data-mi="${cesc(e)}">Details ›</button></div>`;
+      return `<div class="rd" data-hist="${cesc(e)}"><div class="top"><ha-icon icon="${icon}"></ha-icon>${cesc(label)}<span class="big">${cesc(big)}</span></div><svg viewBox="0 0 300 56" preserveAspectRatio="none"></svg><div class="mm"><span>${dfT("time.ago", { t: dfT("unit.h", { n: 24 }) })}</span><span class="range"></span><span>${dfT("time.now")}</span></div><button class="more" data-mi="${cesc(e)}">${dfT("details_more")}</button></div>`;
     };
     // One button per charted entity; named by its device where a kind has several lines.
     const det = (g) => [...new Set([p.lead, ...g.ts, ...g.hs].filter(Boolean).map((e) => e.replace(/#h$/, "")))].map((e) => {
-      const kd = domainOf(e) === "climate" ? "" : kindOf(e, hass.states[e]) === "temperature" ? "Temperature" : "Humidity";
-      const many = kd && (kd === "Temperature" ? g.ts : g.hs).length > 1;
-      const lab = !kd ? "Details" : many ? `${this._rdName(e)} · ${kd.toLowerCase()}` : `${kd} details`;
+      const kd = domainOf(e) === "climate" ? "" : kindOf(e, hass.states[e]) === "temperature" ? "temperature" : "humidity";
+      const many = kd && (kd === "temperature" ? g.ts : g.hs).length > 1;
+      const lab = !kd ? dfT("details") : many ? `${this._rdName(e)} · ${dfT(kd + "_l")}` : dfT(kd + "_details");
       return `<button class="more" data-mi="${cesc(e)}">${cesc(lab)} ›</button>`;
     }).join("");
     let body;
@@ -204,7 +204,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const hs = groups.map((g) => g.h).filter(Boolean);
       // 0.13.2: the icon the user gave it, else what it measures (no ghost: the ghost only marks phantoms in the Editor).
       const phIcon = s.icon || this._dev(s.item.id).icon || (s.item.icon && s.item.icon !== "dfp:phantom" ? s.item.icon : ts.length ? "mdi:thermometer" : "mdi:water-percent");
-      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(phIcon)}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[mode] || "average")} · ${groups.length} devices</small></div>`;
+      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(phIcon)}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: dfT("ph.lowest"), max: dfT("ph.highest"), one: dfT("ph.one") }[mode] || dfT("ph.average"))} · ${dfT("n_devices", { n: groups.length })}</small></div>`;
       const rows = groups.map((g) => `<button class="rcrow" data-rdsub="${cesc(g.id)}"><span class="nm">${cesc(g.name)}${g.t || g.h ? now(g, "rcv") : `<small>${cesc(g.ents.map((e) => this._fmt(e)).join(" · "))}</small>`}</span>${g.t || g.h ? chart(g.t ? [g.t] : [], g.h ? [g.h] : [], "one", true) : ""}<span class="go">›</span></button>`).join("");
       body = `${sum}${ts.length || hs.length ? chart(ts, hs, mode) : ""}<div class="rclist">${rows}</div>`;
     } else {
@@ -295,7 +295,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rows = (this._hist.data[eid] || []).map((r) => ({ t: (r.lu || r.lc || 0) * 1000, v: Number(r.s) })).filter((r) => Number.isFinite(r.v) && r.t);
       const svg = el.querySelector("svg");
       if (rows.length < 2) {
-        svg.innerHTML = domainOf(eid) === "climate" ? "" : `<text x="150" y="32" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">Not enough history yet</text>`;
+        svg.innerHTML = domainOf(eid) === "climate" ? "" : `<text x="150" y="32" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">${dfT("hist.not_enough")}</text>`;
         continue;
       }
       const t0 = Date.now() - 24 * 3600 * 1000;
@@ -364,7 +364,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const small = el.tagName.toLowerCase() === "svg";
     const svg = small ? el : el.querySelector("svg");
     if (!ser.length) {
-      svg.innerHTML = small ? "" : `<text x="160" y="80" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">Not enough history yet</text>`;
+      svg.innerHTML = small ? "" : `<text x="160" y="80" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">${dfT("hist.not_enough")}</text>`;
       return;
     }
     const W = small ? 100 : 320;
@@ -428,7 +428,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     }).join("");
     const t0 = Date.now() - 24 * 3600 * 1000;
     const hm = (ms) => new Date(ms).toLocaleTimeString(hass.locale && hass.locale.language, { hour: "2-digit", minute: "2-digit" });
-    const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? "now" : f ? "12 h ago" : "24 h ago"}</text>`).join("");
+    const times = [0, 0.5, 1].map((f) => `<text x="${(x0 + f * (x1 - x0)).toFixed(1)}" y="140" text-anchor="${f === 0 ? "start" : f === 1 ? "end" : "middle"}" font-size="10" fill="currentColor" opacity=".6">${f === 1 ? dfT("time.now") : dfT("time.ago", { t: dfT("unit.h", { n: f ? 12 : 24 }) })}</text>`).join("");
     svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${first.c};stop-opacity:.28"/><stop offset="1" style="stop-color:${first.c};stop-opacity:0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#${gid})"/>${ser.map((s0) => `<path d="${path(s0)}" fill="none" stroke="${s0.c}" stroke-width="2.2" stroke-linecap="round"${s0.dash ? ' stroke-dasharray="5 4"' : ""}/>`).join("")}${times}<line class="cx" y1="${y0}" y2="${y1}" stroke="currentColor" stroke-opacity=".35" visibility="hidden"/>${ser.map((s0, k) => `<circle class="cd${k}" r="3.5" fill="${s0.c}" stroke="var(--card-background-color, #fff)" stroke-width="1.5" visibility="hidden"/>`).join("")}`;
     el.querySelector(".rcl").innerHTML = ser.map((s0) => `<span class="${s0.dash ? "dash" : ""}" style="--c:${s0.c}">${s0.nm ? `${cesc(s0.nm)} ` : ""}${cesc(fmt(s0, s0.min))}–${cesc(fmt(s0, s0.max))}</span>`).join("");
     // Touch / hover: the values at that time.

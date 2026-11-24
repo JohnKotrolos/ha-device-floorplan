@@ -156,6 +156,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (phase === "idle" && this._applDone[key] && (doneFor === "unloaded" || doneLeft > 0)) phase = "done";
     // Time: a finish timestamp becomes a countdown, minutes stay minutes; else time since it started.
     let time = "";
+    let tshort = "";
     const rem = S(ap.remaining);
     if (active && rem && live(rem)) {
       const v = rem.state;
@@ -165,20 +166,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const [h, m] = v.split(":").map(Number);
         min = h * 60 + m;
       } else if (num(v)) min = Math.round(Number(v) * ((rem.attributes || {}).unit_of_measurement === "h" ? 60 : (rem.attributes || {}).unit_of_measurement === "s" ? 1 / 60 : 1));
-      if (min != null && min >= 0) time = `${min} min remaining`;
+      if (min != null && min >= 0) {
+        time = dfT("appl.min_left", { n: min });
+        tshort = dfT("unit.min", { n: min });
+      }
     }
     const pr = S(ap.progress);
-    if (active && !time && pr && live(pr) && num(pr.state)) time = `${Math.round(Number(pr.state))}% done`;
+    if (active && !time && pr && live(pr) && num(pr.state)) time = tshort = dfT("appl.pct_done", { n: Math.round(Number(pr.state)) });
     if (active && !time) {
       const since = [S(ap.running), S(ap.status)].find((x) => x && live(x));
-      if (since) time = `${Math.max(0, Math.round((this._now() - new Date(since.last_changed).getTime()) / 60000))} min elapsed`;
+      if (since) {
+        const n = Math.max(0, Math.round((this._now() - new Date(since.last_changed).getTime()) / 60000));
+        time = dfT("appl.min_elapsed", { n });
+        tshort = dfT("unit.min", { n });
+      }
     }
     const pretty = (t) => String(t).replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
-    const word = phase === "unavailable" ? "Status unavailable" : phase === "done" ? "Finished" : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? "Door open" : "Paused") : phase === "error" ? "Error" : phase === "idle" ? "Idle"
-      : ap.status && !deadStatus && applPhase(S(ap.status).state) !== "run" ? pretty(S(ap.status).state) : ap.status && !deadStatus ? pretty(S(ap.status).state) : ap.type === "dryer" ? "Drying" : "Running";
+    const said = (s) => (this._hass.formatEntityState ? this._hass.formatEntityState(s) : pretty(s.state)); // 0.14 L1: HA's own translated state
+    const word = phase === "unavailable" ? dfT("appl.unavailable") : phase === "done" ? dfT("appl.finished") : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? dfT("appl.door_open") : dfT("appl.paused")) : phase === "error" ? dfT("appl.error") : phase === "idle" ? dfT("appl.idle")
+      : ap.status && !deadStatus ? said(S(ap.status)) : ap.type === "dryer" ? dfT("appl.drying") : dfT("appl.running");
     const w = ap.power && live(S(ap.power)) ? `${Math.round(Number(S(ap.power).state))} W` : "";
     const col = APPL_COL[phase] || (phase === "run" ? (ap.type === "dryer" ? APPL_COL.heat : APPL_COL.water) : null);
-    return { phase, col, word, time, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
+    return { phase, col, word, time, tshort, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
   },
 
   /** Live: appliances glow on their drum (front view) or along their line (seen from above) while they work;
@@ -242,7 +251,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const x = grp.reduce((t, o) => t + o.x, 0) / grp.length;
       const y = Math.min(...grp.map((o) => o.y));
       const att = grp.some((o) => ["done", "attention", "error"].includes(o.st.phase));
-      const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? "Done · tap to unload" : `${cesc(this._applWord(o))}${o.st.time ? ` · ${cesc(o.st.time.replace(" remaining", "").replace(" elapsed", ""))}` : ""}`}</span>`).join("");
+      const rows = grp.map((o) => `<span class="ar"><i style="background:rgb(${o.st.col || "150,150,150"})"></i>${o.st.phase === "done" ? dfT("appl.done_unload") : `${cesc(this._applWord(o))}${o.st.tshort ? ` · ${cesc(o.st.tshort)}` : ""}`}</span>`).join("");
       const anc = grp.map((o) => `${o.x},${o.y},${o.st.col || "150,150,150"}`).join(";");
       html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-anc="${anc}" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => this._applTip(o)).join(", "))}">${rows}</button>`;
     }
@@ -251,8 +260,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.8.1: "name · state · time" for the hover label, like the info card's headline. */
   _applTip(o) {
-    const t = o.st.time ? o.st.time.replace(" remaining", "").replace(" elapsed", "") : "";
-    return [this._dev(o.ap.item.id).name || o.ap.item.name, o.st.phase === "done" ? "Finished" : this._applWord(o), t].filter(Boolean).join(" · ");
+    const t = o.st.tshort || "";
+    return [this._dev(o.ap.item.id).name || o.ap.item.name, o.st.phase === "done" ? dfT("appl.finished") : this._applWord(o), t].filter(Boolean).join(" · ");
   },
 
   /** The appliance's word on its label: the leading entity chosen in Edit markers, else its status. */

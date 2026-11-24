@@ -9,7 +9,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config || !(config.plan || (Array.isArray(config.plans) && config.plans.length))) throw new Error("Choose a plan (plan: <plan id>)");
+    if (!config || !(config.plan || (Array.isArray(config.plans) && config.plans.length))) throw new Error(dfT("card.choose_plan"));
     this._raw = config; // as stored in the dashboard (to find and save this card, #97)
     const c = { ...config };
     // 0.11: the Electricity overlay of the test builds is called Energy.
@@ -57,6 +57,7 @@ class DeviceFloorplanCard extends HTMLElement {
   }
 
   set hass(hass) {
+    dfLangOf(hass); // 0.14 L1: texts in this user's language
     const first = !this._hass;
     this._live = hass;
     // 0.11.1 Home Replay: while replaying, the card sees Home Assistant as it was at the replay time.
@@ -150,7 +151,7 @@ class DeviceFloorplanCard extends HTMLElement {
         await this._saveToDashboard({ type: "custom:device-floorplan-card", ...ed._config });
       } catch (e) {
         const why = e && e.message;
-        const msg = why === "yaml" ? "This dashboard is kept in YAML: use Edit card → Edit markers there and copy the YAML." : why === "notfound" ? "This card changed outside the Marker Editor. Close it (Done) and open Edit markers again." : "Couldn't save to the dashboard. Use Edit card → Edit markers instead.";
+        const msg = why === "yaml" ? dfT("save.yaml") : why === "notfound" ? dfT("save.notfound") : dfT("save.failed");
         if (ed._big) {
           const side = ed._big.wrap.querySelector(".bg-side");
           if (side && !side.querySelector(".bg-err")) side.insertAdjacentHTML("afterbegin", `<p class="bg-err">${cesc(msg)}</p>`);
@@ -518,7 +519,7 @@ class DeviceFloorplanCard extends HTMLElement {
   _ovDef(o) {
     if (OVERLAYS[o]) return OVERLAYS[o];
     const c = this._custom().find((x) => x.id === o);
-    return c ? { label: c.name || "Custom", icon: c.icon || "mdi:layers-outline", custom: c } : null;
+    return c ? { label: c.name || dfT("ov.custom"), icon: c.icon || "mdi:layers-outline", custom: c } : null;
   }
 
   _overlays() {
@@ -589,7 +590,7 @@ class DeviceFloorplanCard extends HTMLElement {
   /** The round Replay button. In Replay it turns into the overlay that is replayed (with the list of the others). */
   _rpRoundBtn() {
     const on = !!(this._rp && this._rp.mode);
-    return (on && this._rpOvBtn()) || `<button class="layers rpr ${on ? "on" : ""}" data-rpgo="1" title="${on ? "Close Home Replay" : "Home Replay"}" aria-label="Home Replay" aria-pressed="${on}"><ha-icon icon="mdi:history"></ha-icon></button>`;
+    return (on && this._rpOvBtn()) || `<button class="layers rpr ${on ? "on" : ""}" data-rpgo="1" title="${on ? dfT("rp.close") : dfT("rp.name")}" aria-label="${dfT("rp.name")}" aria-pressed="${on}"><ha-icon icon="mdi:history"></ha-icon></button>`;
   }
 
   _defaultOverlay() {

@@ -50,7 +50,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         out.push(picMarkup({ p, url, look, hl, x: it.x, y: it.y, part }));
         continue;
       }
-      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, part, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? " · unavailable" : ""}`)}"` }));
+      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, part, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? ` · ${dfT("unavailable_l")}` : ""}`)}"` }));
     }
     return out.join("");
   },

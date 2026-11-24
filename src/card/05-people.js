@@ -71,8 +71,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (!this._peopleShown()) return { plan: "", row: "" };
     const { placed, home, rings } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
-    const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
-    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
+    const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? ` (${dfT("people.not_sure")})` : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
+    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>${dfT("people.home")}</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${dfT("people.home_unknown")}`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   },
 
@@ -184,7 +184,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** Tap / hold of a shortcut or an overlay's hold: Home Assistant actions, plus reload and back. */
   _barRun(act, ent) {
     if (!act || act.action === "none") return;
-    if (this._pick) return this._toast("Shortcuts aren't run while editing");
+    if (this._pick) return this._toast(dfT("toast.no_shortcuts_editing"));
     if (act.action === "reload") return location.reload();
     if (act.action === "back") return history.back();
     this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: ent, tap_action: act }, action: "tap" }, bubbles: true, composed: true }));
@@ -282,7 +282,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         byMember[m] = d.entities || [d.main_entity];
         mgroup[m] = d.group || ""; // 0.12.9: which temperatures count as a room's (Comfort)
       }
-      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms", ...(ph.pic ? { pic: ph.pic } : {}), ...(ph.touch ? { touch: ph.touch } : {}) });
+      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || dfT("phantom"), icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms", ...(ph.pic ? { pic: ph.pic } : {}), ...(ph.touch ? { touch: ph.touch } : {}) });
     }
     return out;
   },

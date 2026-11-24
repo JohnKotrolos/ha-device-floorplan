@@ -37,12 +37,12 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Marker editing: ✕ on the selected marker hides it in this overlay (#108). */
   _xb(s) {
-    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="Hide it here (in this overlay only)">✕</span>` : "";
+    return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="${dfT("edit.hide_here")}">✕</span>` : "";
   },
 
   _penHtml() {
     const m = this._penMode();
-    if (m === "pen") return `<button class="pen" data-pen="1" title="Click markers to hide them, choose what they show, icon, name, tap"><ha-icon icon="mdi:pencil"></ha-icon>Edit markers</button>`;
+    if (m === "pen") return `<button class="pen" data-pen="1" title="${dfT("edit.pen_title")}"><ha-icon icon="mdi:pencil"></ha-icon>${dfT("edit.markers")}</button>`;
     return "";
   },
 
@@ -60,7 +60,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         return this._update(true);
       }
       const b = t.closest("[data-appldone],[data-iopen],[data-itg],[data-press],[data-mi]");
-      if (b) this._toast(`Preview: “${b.textContent.trim().slice(0, 40)}” isn't run while editing`);
+      if (b) this._toast(dfT("toast.preview_not_run", { b: b.textContent.trim().slice(0, 40) }));
       return;
     }
     if (t.closest("[data-pen]")) {
@@ -78,7 +78,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (cr) {
       this._hass.callService("vacuum", "clean_area", { entity_id: cr.dataset.rb, cleaning_area_id: [cr.dataset.cleanroom] });
       this._popup = null;
-      this._toast("Cleaning started");
+      this._toast(dfT("toast.cleaning_started"));
       return this._update(true);
     }
     const rm = !this._pick && !this._popup && t.closest("[data-croom]");
@@ -386,7 +386,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // 0.12.1: an unavailable device says so instead of trying to switch.
     if (act === "toggle") {
       const sts = (s.ents || []).map((e) => this._hass.states[e]).filter(Boolean);
-      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(`${this._dev(s.item.id).name || s.item.name || "This device"} is unavailable`);
+      if (sts.length && sts.every((x) => x.state === "unavailable")) return this._toast(dfT("toast.unavailable", { d: this._dev(s.item.id).name || s.item.name || dfT("this_device") }));
     }
     if (act === "robot") {
       const eid = s.type === "robot" ? s.eid : [s.eid, ...(s.ents || []), s.item.main_entity].find((e) => e && domainOf(e) === "vacuum");
@@ -400,7 +400,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const o0 = { ...this._dev(s.item.id), ...this._per(s.item, this._overlay) };
       const o = { nav: o0[`${pre}nav`], popup_title: o0[`${pre}popup_title`], popup_card: o0[`${pre}popup_card`] };
       // 0.12.6: in the card editor's preview a dashboard is only named (leaving would close the editor).
-      if (act === "navigate" && o.nav && this._isPreview()) return this._toast(`Would open: ${o.nav}`);
+      if (act === "navigate" && o.nav && this._isPreview()) return this._toast(dfT("toast.would_open", { u: o.nav }));
       const cfg = act === "navigate" ? (o.nav ? { action: "navigate", navigation_path: o.nav } : null) : o.popup_card ? { action: "fire-dom-event", browser_mod: { service: "browser_mod.popup", data: { ...(o.popup_title ? { title: o.popup_title } : {}), content: o.popup_card } } } : null;
       if (cfg) this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: s.ents[0], tap_action: cfg }, action: "tap" }, bubbles: true, composed: true }));
       else this._moreInfo(s.ents[0]);
@@ -671,6 +671,6 @@ Object.assign(DeviceFloorplanCard.prototype, {
     let t = "";
     if (s.type === "chip") return ""; // 0.11: a chip already shows its values: the tip only names it
     else if (s.eid || (s.ents || [])[0]) t = this._fmt(s.eid || s.ents[0]);
-    return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
+    return t && t !== "—" ? t : t === "—" ? dfT("unavailable_l") : "";
   },
 });

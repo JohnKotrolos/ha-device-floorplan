@@ -380,8 +380,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const n = list.filter((e, i) => this._isOn(e, hass.states[e], kinds[i])).length;
     const kind = kinds.every((k) => k === kinds[0]) ? kinds[0] : kinds.includes("opening") ? "opening" : kinds[0];
     let value = "";
-    if (kind === "opening") value = n ? `${n} open` : "All closed";
-    else if (kind === "motion") value = n ? "Detected" : "Clear";
+    if (kind === "opening") value = n ? dfT("sec.n_open", { n }) : dfT("sec.all_closed");
+    else if (kind === "motion") value = n ? dfT("motion.detected") : dfT("motion.clear");
     else if (["light", "switch", "fan"].includes(kind)) {
       // 0.7.4: a bond counts once (on while any of its members is on).
       const units = (item.units || list.map((e) => [e])).map((u) => u.filter((e) => list.includes(e))).filter((u) => u.length);
@@ -400,7 +400,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const on = live(st) && st.state !== "off";
     const act = on && a.hvac_action && CLIMATE_ACTION[a.hvac_action] ? CLIMATE_ACTION[a.hvac_action] : null;
     const mode = live(st) ? st.state : "off";
-    const word = !live(st) ? "Offline" : act ? act.word : CLIMATE_MODE_WORD[mode] || (this._hass.formatEntityState ? this._hass.formatEntityState(st) : mode);
+    const word = !live(st) ? dfT("offline") : act ? act.word : CLIMATE_MODE_WORD[mode] || (this._hass.formatEntityState ? this._hass.formatEntityState(st) : mode);
     const color = !on ? "#9e9e9e" : act ? act.color : (CLIMATE_MODES[mode] || CLIMATE_MODES.auto).color;
     let set = "";
     if (on) {

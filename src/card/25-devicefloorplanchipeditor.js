@@ -5,6 +5,7 @@ class DeviceFloorplanChipEditor extends HTMLElement {
   }
 
   set hass(h) {
+    dfLangOf(h); // 0.14 L1: texts in this user's language
     this._hass = h;
     this._render();
   }

@@ -129,7 +129,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     }
     // Nothing is switched in the past: a tap says how to get back.
     const callService = () => {
-      this._toast("Replay: tap ← Now to switch devices");
+      this._toast(dfT("rp.no_switch"));
       return Promise.resolve();
     };
     rp.snap = { ...real, states, callService };
@@ -186,7 +186,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** The time at the thumb, in words: the clock (+ the line's value). */
   _rpLabel() {
     const rp = this._rp;
-    if (rp.t == null) return "Now";
+    if (rp.t == null) return dfT("rp.now");
     const T = rp.t;
     const m = this._rpModel();
     let lab = rpClock(T);
@@ -205,7 +205,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   _rpPill() {
-    return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="Tap to go to a day and time" aria-label="Replay time: ${cesc(this._rpPillTxt())}. Tap to go to a day and time"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
+    return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="${dfT("rp.tap_goto")}" aria-label="${dfT("rp.time")}: ${cesc(this._rpPillTxt())}. ${dfT("rp.tap_goto")}"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
   },
 
   /** test9: on a side rail the time bubble is drawn on the card itself, level with the thumb and right beside it
@@ -265,10 +265,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const curDay = new Date(T).setHours(0, 0, 0, 0);
     const el = document.createElement("div");
     el.setAttribute("role", "dialog");
-    el.setAttribute("aria-label", "Go to a day and time");
+    el.setAttribute("aria-label", dfT("rp.goto"));
     el.style.cssText = "position:fixed;z-index:10001;display:flex;align-items:center;gap:6px;padding:8px;border-radius:12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#111);box-shadow:0 8px 24px rgba(0,0,0,.35);font:14px var(--paper-font-body1_-_font-family, Roboto, sans-serif)";
     const fld = "font:inherit;color:inherit;background:transparent;border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:6px 8px;min-height:36px;box-sizing:border-box";
-    el.innerHTML = `<select aria-label="Day" style="${fld}">${days.map((x) => `<option value="${x}" ${x === curDay ? "selected" : ""}>${cesc(this._rpWhen(x + 43200000).day)}</option>`).join("")}</select><input type="time" step="1" aria-label="Time (seconds optional)" value="${p2(cur.getHours())}:${p2(cur.getMinutes())}:00" style="${fld}"><button data-go="1" style="font:inherit;font-weight:600;border:0;border-radius:8px;padding:0 14px;min-height:36px;cursor:pointer;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)">Go</button><button data-x="1" aria-label="Close" style="font:inherit;border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;cursor:pointer">✕</button>`;
+    el.innerHTML = `<select aria-label="${dfT("rp.day")}" style="${fld}">${days.map((x) => `<option value="${x}" ${x === curDay ? "selected" : ""}>${cesc(this._rpWhen(x + 43200000).day)}</option>`).join("")}</select><input type="time" step="1" aria-label="${dfT("rp.time_input")}" value="${p2(cur.getHours())}:${p2(cur.getMinutes())}:00" style="${fld}"><button data-go="1" style="font:inherit;font-weight:600;border:0;border-radius:8px;padding:0 14px;min-height:36px;cursor:pointer;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)">${dfT("rp.go")}</button><button data-x="1" aria-label="${dfT("close")}" style="font:inherit;border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;cursor:pointer">✕</button>`;
     // Inside an open dialog (the Card Editor) the entry must live in that dialog to be reachable.
     let host = this;
     while (host && !(host instanceof HTMLDialogElement && host.open)) host = host.parentNode || host.host;
@@ -303,13 +303,13 @@ Object.assign(DeviceFloorplanCard.prototype, {
       let at = t.getTime();
       close();
       if (at >= Date.now() - 20000) {
-        this._toast("That time is still to come: showing Now");
+        this._toast(dfT("rp.future"));
         return this._rpLive();
       }
       const start = Date.now() - this._rpSpan();
       if (at < start) {
         at = start + 1000;
-        this._toast(`Before the loaded ${rp.range} h: showing their start`);
+        this._toast(dfT("rp.before", { n: rp.range }));
       }
       this._rpLoad().then(() => this._rpSeek(at));
     };
@@ -413,7 +413,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const d = new Date(T);
     const now = new Date();
     const y = new Date(now.getTime() - 86400000);
-    const day = d.toDateString() === now.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString([], { weekday: "short" });
+    const day = d.toDateString() === now.toDateString() ? dfT("rp.today") : d.toDateString() === y.toDateString() ? dfT("rp.yesterday") : d.toLocaleDateString(dfLocale(), { weekday: "short" });
     return { day, clock: rpClock(T) };
   },
 
@@ -609,7 +609,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const hm = this._heat && this._heat.hi > this._heat.lo ? this._heat : { lo, hi: lo + rng };
       const stops = [0, 0.25, 0.5, 0.75, 1].map((k) => `<stop offset="${k}" stop-color="rgb(${heatRgb(Math.max(0, Math.min(1, (lo + k * rng - hm.lo) / (hm.hi - hm.lo)))).map(Math.round).join(",")})"/>`).join("");
       const gr = vert ? 'x1="10" y1="0" x2="90" y2="0"' : 'x1="0" y1="90" x2="0" y2="10"';
-      line = `<svg class="rpln" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="rpg" gradientUnits="userSpaceOnUse" ${gr}>${stops}</linearGradient></defs><polyline points="${xy}" style="stroke:url(#rpg)"/></svg><span class="rpmm" title="Average room temperature (${cesc(m.unit || "°")}), lowest–highest">${cesc(f(lo))}–${cesc(f(hi))}°</span>`;
+      line = `<svg class="rpln" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="rpg" gradientUnits="userSpaceOnUse" ${gr}>${stops}</linearGradient></defs><polyline points="${xy}" style="stroke:url(#rpg)"/></svg><span class="rpmm" title="${dfT("rp.avg_temp", { u: cesc(m.unit || "°") })}">${cesc(f(lo))}–${cesc(f(hi))}°</span>`;
     }
     // Hour marks on the line (every hour up to 24 h, every 2 h beyond): where a fast drag glues to.
     let ticks = "";
@@ -621,7 +621,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       ticks += `<u class="${hh === 0 ? "d" : ""}" style="${side}:${(((t - t0) / span) * 100).toFixed(2)}%"></u>`;
     }
     const lab = (rp.lab = this._rpLabel());
-    return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="Replay time" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
+    return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="${dfT("rp.time")}" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
   },
 
   /** 0.11.1: the replay rail: the overlay rail itself turned into Replay, same size, shape and colours
@@ -629,15 +629,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
    *  replay is picked beside Layers; the time is the pill on the plan (and on the thumb while it moves). */
   _rpRail(vert) {
     const rp = this._rpState();
-    const now = `<button class="rpnow" data-rp="exit" title="Back to now"><ha-icon icon="mdi:arrow-left"></ha-icon><span>Now</span></button>`;
-    const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? "Pause" : "Play"}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
-    const pn = `<span class="rppn"><button data-rp="prev" aria-label="Previous event"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="Next event"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
-    const speed = `<select class="rpspeed" aria-label="Speed">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
-    const range = `<select class="rprange" aria-label="Range">${RP_RANGES.map((v) => `<option value="${v}" ${v === rp.range ? "selected" : ""}>${v}h</option>`).join("")}</select>`;
+    const now = `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
+    const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? dfT("rp.pause") : dfT("rp.play")}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
+    const pn = `<span class="rppn"><button data-rp="prev" aria-label="${dfT("rp.prev")}"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="${dfT("rp.next")}"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
+    const speed = `<select class="rpspeed" aria-label="${dfT("rp.speed")}">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
+    const range = `<select class="rprange" aria-label="${dfT("rp.range")}">${RP_RANGES.map((v) => `<option value="${v}" ${v === rp.range ? "selected" : ""}>${v}h</option>`).join("")}</select>`;
     const cls = `rprail ${vert ? "v" : "h"} ${rp.play || rp.drag ? "act" : ""} ${rp.loading ? "ld" : ""}`;
     return vert
-      ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">Now</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
-      : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>Now</span></span></span>${speed}${range}</div>`;
+      ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">${dfT("rp.now")}</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
+      : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>${dfT("rp.now")}</span></span></span>${speed}${range}</div>`;
   },
 
   /** 0.11.1: in Replay, beside Layers: the overlay that is replayed (its icon), with the list of the others. */
@@ -648,7 +648,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const labels = this._config.overlay_names || {};
     const cur = this._ovDef(this._overlay) || {};
     const menu = this._rp.menu ? `<div class="rpmenu">${ovs.map((o) => `<button data-rpov="${cesc(o)}" class="${o === this._overlay ? "on" : ""}"><ha-icon icon="${cesc(this._ovDef(o).icon)}"></ha-icon>${cesc(labels[o] || this._ovDef(o).label)}</button>`).join("")}</div>` : "";
-    return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="Overlay to replay" aria-label="Overlay to replay"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
+    return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="${dfT("rp.overlay")}" aria-label="${dfT("rp.overlay")}"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
   },
 
   /** Without a rail: the same controls as a bar under the plan (Layers → Home Replay). */
@@ -690,18 +690,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
         acc += h.parts[k];
         return `${E_COL[k]} ${from.toFixed(0)}% ${((acc / h.tot) * 100).toFixed(0)}%`;
       }).join(", ");
-      const lab = hh === 0 ? d.toLocaleDateString([], { weekday: "short" }) : hh % 3 === 0 ? p2(hh) : "";
+      const lab = hh === 0 ? d.toLocaleDateString(dfLocale(), { weekday: "short" }) : hh % 3 === 0 ? p2(hh) : "";
       return `<i class="hr ${sel === h.ts ? "on" : ""} ${hh === 0 ? "day" : ""}" data-at="${h.ts}" title="${cesc(`${this._rpWhen(h.ts).day} ${p2(hh)}:00–${p2((hh + 1) % 24)}:00 · ${fmtKwh(h.tot)}`)}"><b style="height:${h.tot ? Math.round(3 + 27 * (h.tot / max)) : 2}px;background:${stops ? `linear-gradient(to top, ${stops})` : "var(--divider-color, rgba(0,0,0,.15))"}"></b>${lab ? `<small>${cesc(lab)}</small>` : ""}</i>`;
     }).join("");
     const idx = sel === "day" ? 0 : sel === "now" ? 25 : 1 + hrs.findIndex((h) => h.ts === sel);
-    return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">Last 24 h</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">Now</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="Energy: the last 24 hours, hour by hour" aria-valuetext="${cesc(this._eWhen())}"></div>`;
+    return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">${dfT("energy.last24")}</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">${dfT("rp.now")}</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="${dfT("energy.scrub")}" aria-valuetext="${cesc(this._eWhen())}"></div>`;
   },
 
   /** What the scrubber points at, in words. */
   _eWhen() {
     const sel = this._eSel();
     const p = (h) => String(h).padStart(2, "0");
-    if (sel === "day" || sel === "now") return sel === "day" ? "Last 24 h" : "Now (live)";
+    if (sel === "day" || sel === "now") return sel === "day" ? dfT("energy.last24") : dfT("energy.now_live");
     const h = new Date(sel).getHours();
     return `${this._rpWhen(sel).day} ${p(h)}:00–${p((h + 1) % 24)}:00`;
   },

@@ -222,7 +222,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   _cleanLegendHtml() {
     if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true) || !Object.keys((this._a || {}).robots || {}).length) return "";
     const sw = (c, t) => `<span class="cl"><i style="background:${c}"></i>${t}</span>`;
-    return `<div class="heatleg cleanleg"><span class="ht">Last cleaned</span>${sw("rgba(33,150,243,.55)", "Now")}${sw("rgba(76,175,80,.85)", "Fresh")}${sw("rgba(255,152,0,.7)", "Due")}<span class="hb"></span><label class="hop" title="Colour strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="Colour strength"></label></div>`;
+    return `<div class="heatleg cleanleg"><span class="ht">${dfT("clean.last_cleaned")}</span>${sw("rgba(33,150,243,.55)", dfT("clean.leg_now"))}${sw("rgba(76,175,80,.85)", dfT("clean.leg_fresh"))}${sw("rgba(255,152,0,.7)", dfT("clean.due"))}<span class="hb"></span><label class="hop" title="${dfT("leg.colour_strength")}"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="${dfT("leg.colour_strength")}"></label></div>`;
   },
 
   _heatOp() {
@@ -235,7 +235,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const h = this._heat;
     const f = (v) => `${this._num1 ? this._num1(v) : v.toFixed(1)}°`;
     const grad = HEAT_STOPS.map(([t, c]) => `rgb(${c.join(",")}) ${Math.round(t * 100)}%`).join(", ");
-    return `<div class="heatleg"><span class="ht">Room temperature</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">Estimated between sensors</span><label class="hop" title="Heatmap strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="Heatmap strength"></label></div>`;
+    return `<div class="heatleg"><span class="ht">${dfT("heat.room_temp")}</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">${dfT("heat.estimated")}</span><label class="hop" title="${dfT("heat.strength")}"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="${dfT("heat.strength")}"></label></div>`;
   },
 
   /** Rooms (#53): names at their spots, in the overlays chosen in the editor. */
@@ -263,7 +263,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
       // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
-      const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `cleaning · ${nw.pct}%` : "cleaning")}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
+      const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `${dfT("clean.cleaning_l")} · ${nw.pct}%` : dfT("clean.cleaning_l"))}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
       return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}</div>`;
     }).join("");
@@ -313,7 +313,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const xs = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const bond = ""; // #86: a bond is one device on the card, no badge
     const label = `${s.name}${s.st ? ` · ${this._fmt(s.eid)}` : ""}`;
-    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
+    return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>${dfT("net.through", { d: cesc(s.item.ofName) })}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
   },
 
   _chipHtml(s) {
@@ -321,7 +321,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const xl0 = s.extras && s.extras.length ? `<span class="xs">${s.extras.map((x) => `<span class="xl">${x.icon ? `<ha-icon icon="${cesc(x.icon)}"></ha-icon>` : `<ha-state-icon data-ent="${cesc(x.eid)}"></ha-state-icon>`}${cesc(x.text)}</span>`).join("")}</span>` : "";
     const xl = xl0 + bdg;
     if (s.cl2 && s.compact) {
-      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== "Off") ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
+      return `<button class="chip cl2 cmp ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${[s.word, s.temp].filter(Boolean).join(", ")}`)}">${s.noicon ? "" : `<ha-icon icon="${cesc(s.icon)}"></ha-icon>`}${s.word && (s.temp || s.word !== dfT("climate.off")) ? `<span class="mw">${cesc(s.word)}</span>` : ""}${s.temp ? `<span class="t">${cesc(s.temp)}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
     }
     if (s.cl2) {
       const left = s.word || s.set ? `<span class="mc"><span class="mw">${cesc(s.word)}</span>${s.set ? `<span class="st">${cesc(s.set)}</span>` : ""}</span>` : "";
@@ -347,7 +347,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   _layersBtn(rail = false) {
-    return `<button class="layers ${this._menu ? "on" : ""}" data-menu="1" title="Layers" aria-label="Layers" aria-expanded="${this._menu}"><ha-icon icon="mdi:layers-outline"></ha-icon>${rail ? "" : "<span>Layers</span>"}</button>`;
+    return `<button class="layers ${this._menu ? "on" : ""}" data-menu="1" title="${dfT("layers")}" aria-label="${dfT("layers")}" aria-expanded="${this._menu}"><ha-icon icon="mdi:layers-outline"></ha-icon>${rail ? "" : `<span>${dfT("layers")}</span>`}</button>`;
   },
 
   _layersMenu(a) {
@@ -367,28 +367,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const on = this._layerOn(ov, name, this._layerDefault(ov, name));
       return `<button class="${on ? "on" : ""}" data-lay="${name}">${tick(on)}<ha-icon icon="${icon}"></ha-icon>${label}</button>`;
     };
-    const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", "Heatmap")}${lay("labels", "mdi:thermometer", "Temperature labels")}${lay("clim", "mdi:air-conditioner", "Climate devices")}${lay("air", "mdi:weather-windy", "AC air flow")}` : "";
-    const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>Back to the card's defaults</button>` : "";
+    const comfort = ov === "comfort" ? `${lay("heat", "mdi:thermometer-lines", dfT("lay.heat"))}${lay("labels", "mdi:thermometer", dfT("lay.labels"))}${lay("clim", "mdi:air-conditioner", dfT("lay.clim"))}${lay("air", "mdi:weather-windy", dfT("lay.air"))}` : "";
+    const reset = this._lay[ov] || (ov === "network" && Object.keys(lsGet(`dfc_net_${this._lsKey()}`) || {}).length) ? `<hr><button data-layreset="1"><ha-icon icon="mdi:restore"></ha-icon>${dfT("lay.reset")}</button>` : "";
     const running = (this._rb || []).some((r) => r.active);
-    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? "Path of the last run" : "Cleaning path") : "";
-    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", "Last cleaned") : "";
-    const secAll = ov === "security" ? lay("all", "mdi:shield-search", "All sensors") : "";
+    const rpath = (ov === "live" && (this._rb || []).length) || ov === "cleaning" ? lay("rpath", "mdi:vector-polyline", ov === "cleaning" && !running ? dfT("lay.path_last") : dfT("lay.path")) : "";
+    const fresh = ov === "cleaning" ? lay("fresh", "mdi:clock-check-outline", dfT("clean.last_cleaned")) : "";
+    const secAll = ov === "security" ? lay("all", "mdi:shield-search", dfT("lay.all_sensors")) : "";
     // 0.11: Cameras, and with 2+ cameras one tick per camera (this screen only; triggers still pop up).
     const camItems = (ov === "live" || ov === "security") && this._a ? this._items(this._a).filter((it) => this._camOf(it)) : [];
     const camsOn = camItems.length && this._layerOn(ov, "cams", false);
-    const snaps = camItems.length && this._rpOn() ? `<button class="dis" disabled title="No camera video in Replay"><ha-icon class="eye" icon="mdi:eye-off-outline"></ha-icon><ha-icon icon="mdi:cctv-off"></ha-icon>Cameras (not in Replay)</button>` : camItems.length ? lay("cams", "mdi:cctv", "Cameras") + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
-    const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", "Room shading")}${lay("flow", "mdi:transit-connection-variant", "Flow lines")}` : "";
-    const general = `<h4>Layers</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>Room names</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
+    const snaps = camItems.length && this._rpOn() ? `<button class="dis" disabled title="${dfT("lay.no_cam_replay")}"><ha-icon class="eye" icon="mdi:eye-off-outline"></ha-icon><ha-icon icon="mdi:cctv-off"></ha-icon>${dfT("lay.cams_not_replay")}</button>` : camItems.length ? lay("cams", "mdi:cctv", dfT("lay.cams")) + (camsOn && camItems.length > 1 ? camItems.map((it) => lay(`cam:${it.id}`, "mdi:circle-small", cesc(this._dev(it.id).name || it.name)).replace("<button ", '<button style="padding-left:28px" ')).join("") : "") : "";
+    const elec = ov === "energy" ? `${lay("fill", "mdi:texture-box", dfT("lay.fill"))}${lay("flow", "mdi:transit-connection-variant", dfT("lay.flow"))}` : "";
+    const general = `<h4>${dfT("layers")}</h4><button class="${rooms ? "on" : ""}" data-lay="rooms">${tick(rooms)}<ha-icon icon="mdi:label-outline"></ha-icon>${dfT("lay.rooms")}</button>${comfort}${rpath}${fresh}${secAll}${snaps}${elec}`;
     if (ov !== "network") return `<div class="lmenu" role="menu" style="visibility:hidden">${general}${reset}</div>`;
-    return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>Connections</h4>
-      <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>Default</button>
+    return `<div class="lmenu" role="menu" style="visibility:hidden">${general}<hr><h4>${dfT("net.connections")}</h4>
+      <button class="chk ${!custom ? "on" : ""}" data-conn="__default">${chk(!custom)}<ha-icon icon="mdi:star-outline"></ha-icon>${dfT("net.default")}</button>
       ${present.map((cn) => `<button class="chk ${custom && shown.includes(cn) ? "on" : ""}" data-conn="${cn}">${chk(custom && shown.includes(cn))}<ha-icon icon="${CONNS[cn].icon}"></ha-icon>${cesc(CONNS[cn].label)}</button>`).join("")}
       <hr>
-      ${hasZ ? `<button class="${n.links ? "on" : ""}" data-tg="links">${tick(n.links)}Zigbee links</button>` : ""}
-      ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}Wi-Fi / LAN links</button>` : ""}
-      ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>` : ""}
-      <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}Legend</button>
-      ${shown.includes("bluetooth") && this._people().some((p) => p.distance) ? `<hr><h4>People</h4>${lay("pdist", "mdi:account-badge-outline", "People distance")}${this._layerOn(ov, "pdist", true) ? lay("pall", "mdi:radar", "Rings around all proxies") : ""}` : ""}
+      ${hasZ ? `<button class="${n.links ? "on" : ""}" data-tg="links">${tick(n.links)}${dfT("net.zigbee_links")}</button>` : ""}
+      ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}${dfT("net.wifi_links")}</button>` : ""}
+      ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}${dfT("net.hub_links")}</button>` : ""}
+      <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}${dfT("net.legend")}</button>
+      ${shown.includes("bluetooth") && this._people().some((p) => p.distance) ? `<hr><h4>${dfT("ov.people")}</h4>${lay("pdist", "mdi:account-badge-outline", dfT("lay.pdist"))}${this._layerOn(ov, "pdist", true) ? lay("pall", "mdi:radar", dfT("lay.pall")) : ""}` : ""}
 ${reset}
     </div>`;
   },
@@ -415,19 +415,19 @@ ${reset}
     if (this._net.legend) {
       const hidden = this._net.roles || [];
       const roles = this._rolesPresent();
-      if (roles.length) groups.push(roles.map((r) => `<button class="lg ${hidden.includes(r) ? "off" : ""}" data-role="${r}" aria-pressed="${!hidden.includes(r)}" title="Show / hide"><i class="${ROLES[r].shape}" style="background:${ROLES[r].color}"></i>${ROLES[r].label}</button>`).join(""));
+      if (roles.length) groups.push(roles.map((r) => `<button class="lg ${hidden.includes(r) ? "off" : ""}" data-role="${r}" aria-pressed="${!hidden.includes(r)}" title="${dfT("net.show_hide")}"><i class="${ROLES[r].shape}" style="background:${ROLES[r].color}"></i>${ROLES[r].label}</button>`).join(""));
       // The LQI ranges switch their Zigbee links on and off, like the roles do.
-      if (specs.some((s) => s.z && s.z.lqi != null)) groups.push(`<span class="lt">LQI</span>${LQI_BANDS.slice().reverse().map((b) => `<button class="lg ${(this._net.lqiOff || []).includes(b.min) ? "off" : ""}" data-lqi="${b.min}" aria-pressed="${!(this._net.lqiOff || []).includes(b.min)}" title="Show / hide links in this range"><i class="ring" style="border-color:${b.color}"></i>${b.label}</button>`).join("")}`);
-      if (specs.some((s) => s.sigEid && !(s.z && s.z.lqi != null))) groups.push(`<span class="lt">Signal</span><span><i class="ring" style="border-color:#43a047"></i>good</span><span><i class="ring" style="border-color:#fb8c00"></i>fair</span><span><i class="ring" style="border-color:#e53935"></i>weak</span>`);
+      if (specs.some((s) => s.z && s.z.lqi != null)) groups.push(`<span class="lt">LQI</span>${LQI_BANDS.slice().reverse().map((b) => `<button class="lg ${(this._net.lqiOff || []).includes(b.min) ? "off" : ""}" data-lqi="${b.min}" aria-pressed="${!(this._net.lqiOff || []).includes(b.min)}" title="${dfT("net.show_hide_range")}"><i class="ring" style="border-color:${b.color}"></i>${b.label}</button>`).join("")}`);
+      if (specs.some((s) => s.sigEid && !(s.z && s.z.lqi != null))) groups.push(`<span class="lt">${dfT("net.signal")}</span><span><i class="ring" style="border-color:#43a047"></i>${dfT("net.good")}</span><span><i class="ring" style="border-color:#fb8c00"></i>${dfT("net.fair")}</span><span><i class="ring" style="border-color:#e53935"></i>${dfT("net.weak")}</span>`);
       // Lines: only the kinds actually drawn (same rules as the lines themselves).
       const lines = [];
       const hubDrawn = this._net.hubs && (specs.some((s) => {
         const pa = s.item && s.item.via && this._specs.get(s.item.via);
         return s.type === "net" && pa && pa.type === "net" && !(s.conns.includes("zigbee") && pa.conns.includes("zigbee"));
       }) || (this._ghosts || []).some((g) => g.links.some((l) => l.cls === "hub")));
-      if (hubDrawn) lines.push(`<span><i class="dash"></i>through hub / bridge</span>`);
+      if (hubDrawn) lines.push(`<span><i class="dash"></i>${dfT("net.via_hub")}</span>`);
       const rts = showWifi ? specs.filter((s) => s.rt && s.rt.home) : [];
-      if (rts.length && this._net.wlinks) lines.push(`<span><i class="cab"></i>cable</span><span><i class="dash wf"></i>Wi-Fi</span>`);
+      if (rts.length && this._net.wlinks) lines.push(`<span><i class="cab"></i>${dfT("net.cable")}</span><span><i class="dash wf"></i>Wi-Fi</span>`);
       if (lines.length) groups.push(lines.join(""));
       if (rts.length) {
         const aps = this._apList();
@@ -440,15 +440,15 @@ ${reset}
         groups.push(Object.entries(by).map(([k, b]) => {
           const i = aps.indexOf(k);
           const ap = this._a.aps && this._a.aps[k] && this._specs.get(this._a.aps[k]);
-          const nm = ap ? ap.name : k === "?" ? "Unknown" : k;
-          return `<span class="aps"><i class="sw" style="background:${AP_COLORS[(i < 0 ? 0 : i) % AP_COLORS.length]}"></i>${cesc(nm)}: ${[b.w ? `${b.w} Wi-Fi` : "", b.c ? `${b.c} cable` : ""].filter(Boolean).join(", ")}</span>`;
+          const nm = ap ? ap.name : k === "?" ? dfT("role.unknown") : k;
+          return `<span class="aps"><i class="sw" style="background:${AP_COLORS[(i < 0 ? 0 : i) % AP_COLORS.length]}"></i>${cesc(nm)}: ${[b.w ? `${b.w} Wi-Fi` : "", b.c ? `${b.c} ${dfT("net.cable")}` : ""].filter(Boolean).join(", ")}</span>`;
         }).join(""));
       }
     }
     const isAdmin = this._hass.user && this._hass.user.is_admin;
     if (isAdmin && this._netShow().includes("zigbee") && (this._zha || (this._a && Object.values(this._a.devices || {}).some((d) => (d.conns || []).includes("zigbee"))))) {
-      const t = this._zhaAt ? new Date(this._zhaAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–";
-      groups.push(`<span class="upd" title="Zigbee data updated at ${t}"><button class="rf ${this._scanning ? "busy" : ""}" data-refresh="1" title="Scan the Zigbee network again"><ha-icon icon="mdi:refresh"></ha-icon>${this._scanning ? "Scanning…" : "Refresh"}</button>${t}</span>`);
+      const t = this._zhaAt ? new Date(this._zhaAt).toLocaleTimeString(dfLocale(), { hour: "2-digit", minute: "2-digit" }) : "–";
+      groups.push(`<span class="upd" title="${dfT("net.zha_at", { t })}"><button class="rf ${this._scanning ? "busy" : ""}" data-refresh="1" title="${dfT("net.rescan")}"><ha-icon icon="mdi:refresh"></ha-icon>${this._scanning ? dfT("net.scanning") : dfT("net.refresh")}</button>${t}</span>`);
     }
     if (withLayers) groups.push(this._layersBtn());
     return groups.length ? `<div class="legend">${groups.map((g) => `<span class="lgrp">${g}</span>`).join("")}</div>` : "";
@@ -464,12 +464,12 @@ ${reset}
     const ents = this._lightEnts(specs);
     const anyOn = ents.some((e) => (this._hass.states[e] || {}).state === "on");
     const b = [];
-    if (L.all_off) b.push(`<button data-scene="all_off" class="${ents.length && !anyOn ? "on" : ""}"><ha-icon icon="mdi:lightbulb-off-outline"></ha-icon>All off</button>`);
-    if (L.all_on) b.push(`<button data-scene="all_on"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>All on</button>`);
+    if (L.all_off) b.push(`<button data-scene="all_off" class="${ents.length && !anyOn ? "on" : ""}"><ha-icon icon="mdi:lightbulb-off-outline"></ha-icon>${dfT("scene.all_off")}</button>`);
+    if (L.all_on) b.push(`<button data-scene="all_on"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>${dfT("scene.all_on")}</button>`);
     scenes.forEach(([s, i]) => {
-      b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}</button>`);
+      b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || dfT("scene.n", { n: i + 1 }))}</button>`);
     });
-    return `<div class="bar" role="toolbar" aria-label="Light scenes">${b.join("")}</div>`;
+    return `<div class="bar" role="toolbar" aria-label="${dfT("scene.bar")}">${b.join("")}</div>`;
   },
 
   /** 0.10: Overlay actions: your own buttons under the plan, per overlay and per floor (any HA action, a popup…);
@@ -491,7 +491,7 @@ ${reset}
       return "";
     }
     if (window.__dfcTipSeen === null || window.__dfcTipSeen === RELEASE_TIP.v) return "";
-    return `<div class="newov tipv"><ha-icon icon="mdi:information-outline"></ha-icon><span>New in ${cesc(RELEASE_TIP.v)}: <b>${cesc(RELEASE_TIP.text)}</b></span><button data-tipgo="1" data-add="1">${cesc(RELEASE_TIP.go)} ›</button><button data-tipx="1" aria-label="Close this tip">✕</button></div>`;
+    return `<div class="newov tipv"><ha-icon icon="mdi:information-outline"></ha-icon><span>${dfT("tip.new_in", { v: cesc(RELEASE_TIP.v) })}: <b>${cesc(RELEASE_TIP.text)}</b></span><button data-tipgo="1" data-add="1">${cesc(RELEASE_TIP.go)} ›</button><button data-tipx="1" aria-label="${dfT("tip.close")}">✕</button></div>`;
   },
 
   _tipClose() {
@@ -507,7 +507,7 @@ ${reset}
     const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
     if (!o) return "";
-    return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ New: <b>${cesc(OVERLAYS[o].label)}</b> overlay${o === "energy" ? ". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines." : ""}</span><button data-newov="${o}" data-add="1">Add to this card</button><button data-newov="${o}">Not now</button></div>`;
+    return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ ${dfT("newov.text", { o: `<b>${cesc(OVERLAYS[o].label)}</b>` })}${o === "energy" ? dfT("newov.energy") : ""}</span><button data-newov="${o}" data-add="1">${dfT("newov.add")}</button><button data-newov="${o}">${dfT("newov.not_now")}</button></div>`;
   },
 
   async _newOvAnswer(o, add) {
@@ -520,7 +520,7 @@ ${reset}
     try {
       await this._saveToDashboard(raw);
     } catch (_e) {
-      this._toast(add ? `Couldn't save to the dashboard: add ${OVERLAYS[o].label} in the card's settings (Overlays)` : "Couldn't save to the dashboard: it shows again after a reload");
+      this._toast(add ? dfT("newov.save_add", { o: OVERLAYS[o].label }) : dfT("newov.save_later"));
     }
     this.setConfig(raw);
     if (add) this._overlay = o;
@@ -537,8 +537,8 @@ ${reset}
         const pre = robots.length > 1 ? `${this._rbLabel(a, eid)}: ` : "";
         const own = rbOwn(a, eid);
         const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"${own ? ` style="color:rgb(${own})"` : ""}></ha-icon>${cesc(pre + label)}</button>`;
-        b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") : cmd("start", "mdi:play", st.state === "paused" ? "Continue" : "Start"));
-        if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+        b.push(st.state === "cleaning" ? cmd("pause", "mdi:pause", dfT("robot.pause")) : cmd("start", "mdi:play", st.state === "paused" ? dfT("robot.continue") : dfT("robot.start")));
+        if (st.state !== "docked") b.push(cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")));
       }
     }
     this._ovActs().forEach((x, i) => {
@@ -548,9 +548,9 @@ ${reset}
       const s0 = st || {};
       const col = s0.color && s0.badge == null ? ` style="color:${cesc(s0.color)}"` : "";
       const mark = s0.badge != null ? `<i class="obadge"${s0.color ? ` style="background:${cesc(s0.color)}"` : ""}>${cesc(s0.badge)}</i>` : s0.dot ? `<i class="odot" style="background:${cesc(s0.dot)}"></i>` : "";
-      b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || "Action")}${mark}</button>`);
+      b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || dfT("action"))}${mark}</button>`);
     });
-    return b.length ? `<div class="bar oacts" role="toolbar" aria-label="Actions">${b.join("")}</div>` : "";
+    return b.length ? `<div class="bar oacts" role="toolbar" aria-label="${dfT("actions")}">${b.join("")}</div>` : "";
   },
 
   _ovActEnt(x) {

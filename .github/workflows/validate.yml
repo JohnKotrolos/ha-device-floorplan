@@ -40,3 +40,4 @@ jobs:
       - run: npm install --no-save eslint@9 globals
       - run: npx eslint custom_components
       - run: node tools/build.mjs --check
+      - run: node tools/i18n.mjs

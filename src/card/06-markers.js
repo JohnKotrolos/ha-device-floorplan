@@ -100,7 +100,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // How it cleans: suction, water, mode (attributes and select entities of the robot).
     const settings = [];
     if (vs && vs.attributes.fan_speed != null && vs.attributes.fan_speed !== "") settings.push(String(vs.attributes.fan_speed));
-    let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "Error" : "";
+    let err = d.state === "error" ? String((vs && (vs.attributes.error || vs.attributes.status)) || "") || "\u0000" : "";
     const OK = /^(ok|normal|none|no_error|no error|idle|off|installed|not_full|0|false|unknown|unavailable|completed|clean|good)$/i;
     for (const e of ents) {
       const st = h.states[e];
@@ -132,10 +132,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Hover line: state, room and battery, or the robot's own error text. */
   _rbTip(st, d, info, a, cfg) {
-    const word = { cleaning: "Cleaning", returning: "Returning", paused: "Paused", error: "Error", docked: info.charging ? "Charging" : "Docked", idle: "Idle" }[d.state] || this._fmt(st.entity_id);
-    if (info.err) return info.err === "Error" ? word : `${word}: ${info.err}`;
+    const word = { cleaning: dfT("robot.cleaning"), returning: dfT("robot.returning"), paused: dfT("robot.paused"), error: dfT("robot.error"), docked: info.charging ? dfT("robot.charging") : dfT("robot.docked"), idle: dfT("robot.idle") }[d.state] || this._fmt(st.entity_id);
+    if (info.err) return info.err === "\u0000" ? word : `${word}: ${info.err}`;
     const room = this._rbRoom(a, cfg, d);
-    return [word, room, info.battery != null ? `Battery ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
+    return [word, room, info.battery != null ? `${dfT("battery")} ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
   },
 
   /** The room the robot is in: where it is on the plan's room shapes. */
@@ -152,16 +152,16 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** "just now", "5 min ago", "2 d ago". */
   _agoTxt(t) {
     const x = this._ageTxt(t);
-    return x === "just now" || !x ? x : `${x} ago`;
+    return x === dfT("time.just_now") || !x ? x : dfT("time.ago", { t: x });
   },
 
   _ageTxt(t) {
     const ms = this._now() - new Date(t).getTime();
     if (!t || !(ms >= 0)) return "";
     const m = Math.round(ms / 60000);
-    if (m < 60) return m < 2 ? "just now" : `${m} min`;
+    if (m < 60) return m < 2 ? dfT("time.just_now") : dfT("unit.min", { n: m });
     const hrs = Math.round(m / 60);
-    return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
+    return hrs < 24 ? dfT("unit.h", { n: hrs }) : dfT("unit.d", { n: Math.round(hrs / 24) });
   },
 
   /** A robot's name on the card: from Edit markers (placed or not), else its HA name. */
@@ -236,23 +236,23 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const info = this._rbInfo(eid, d);
     const name = st.attributes.friendly_name || eid;
     const col = RB_COL[d.state] || RB_COL.idle;
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     const mine = Object.values(a.cleaned || {}).filter((c) => c.by === eid).map((c) => c.t).sort().pop();
     const lastT = info.last.t || mine;
     const rows = [];
-    if (lastT) rows.push(["Last cleaning", this._agoTxt(lastT)]);
-    if (info.last.dur) rows.push(["Took", info.last.dur]);
-    if (info.last.area) rows.push([RB_ACTIVE.includes(d.state) ? "This run" : "Area", info.last.area]);
-    if (info.settings.length) rows.push(["Settings", info.settings.join(" · ")]);
-    if (info.battery != null) rows.push(["Battery", `${Math.round(info.battery)}%${info.charging ? " · charging" : ""}`]);
-    const cons = info.cons.length ? `<h4>Consumables</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
-    const dock = info.station.length ? `<h4>Dock</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
+    if (lastT) rows.push([dfT("robot.last_cleaning"), this._agoTxt(lastT)]);
+    if (info.last.dur) rows.push([dfT("robot.took"), info.last.dur]);
+    if (info.last.area) rows.push([RB_ACTIVE.includes(d.state) ? dfT("robot.this_run") : dfT("robot.area"), info.last.area]);
+    if (info.settings.length) rows.push([dfT("robot.settings"), info.settings.join(" · ")]);
+    if (info.battery != null) rows.push([dfT("battery"), `${Math.round(info.battery)}%${info.charging ? ` · ${dfT("robot.charging_l")}` : ""}`]);
+    const cons = info.cons.length ? `<h4>${dfT("robot.consumables")}</h4>${info.cons.map((c) => `<button class="rbc ${c.low ? "low" : ""}" data-mi="${cesc(c.e)}"><span>${cesc(c.name)}</span>${c.pct != null ? `<i style="--p:${Math.max(0, Math.min(100, c.pct))}%"></i>` : "<i class='n'></i>"}<b>${cesc(c.txt)}</b></button>`).join("")}` : "";
+    const dock = info.station.length ? `<h4>${dfT("robot.dock")}</h4>${info.station.map((x) => `<button class="rbc low" data-mi="${cesc(x.e)}"><span>${cesc(x.name)}</span><i class="n"></i><b>${cesc(x.txt)}</b></button>`).join("")}` : "";
     const cmd = (c, icon, label) => `<button data-rbcmd="${c}" data-rb="${cesc(eid)}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
-    const btns = d.state === "cleaning" ? cmd("pause", "mdi:pause", "Pause") + cmd("return_to_base", "mdi:home-import-outline", "Dock") : cmd("start", "mdi:play", d.state === "paused" ? "Continue" : "Start") + (d.state === "docked" ? "" : cmd("return_to_base", "mdi:home-import-outline", "Dock"));
+    const btns = d.state === "cleaning" ? cmd("pause", "mdi:pause", dfT("robot.pause")) + cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")) : cmd("start", "mdi:play", d.state === "paused" ? dfT("robot.continue") : dfT("robot.start")) + (d.state === "docked" ? "" : cmd("return_to_base", "mdi:home-import-outline", dfT("robot.dock")));
     return `<div class="pop"><div class="popin rbpop" role="dialog" aria-label="${cesc(name)}"><h3><ha-icon icon="${cesc(st.attributes.icon || "mdi:robot-vacuum")}" style="color:rgb(${col})"></ha-icon>${cesc(name)}${close}</h3>
       <div class="rbst" style="--c:rgb(${col})">${cesc(this._rbTip(st, d, info, a, cfg))}</div>
       ${rows.length ? `<div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : ""}${cons}${dock}
-      <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">Details ›</button></div></div>`;
+      <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">${dfT("details_more")}</button></div></div>`;
   },
 
   /** 0.10: tap a room in Cleaning: when it was cleaned, and "Clean this room" (vacuum.clean_area, HA 2026.3). */
@@ -263,12 +263,12 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const name = (this._rooms().names || {})[p.area] || room.name;
     const c = (a.cleaned || {})[p.area];
     const by = c && this._hass.states[c.by] ? this._hass.states[c.by].attributes.friendly_name : "";
-    const when = c && c.t ? `Cleaned ${this._agoTxt(c.t)}${by ? ` by ${by}` : ""}.` : "No cleaning recorded here yet.";
+    const when = c && c.t ? (by ? dfT("clean.cleaned_by", { t: this._agoTxt(c.t), by }) : dfT("clean.cleaned", { t: this._agoTxt(c.t) })) : dfT("clean.none_yet");
     const ref = (a.room_area || {})[p.area];
     const cov = c && c.m2 != null ? `${c.m2} m²${c.pct != null ? ` (${c.pct}%)` : ""}` : "";
     const pace = this._pace(a, p.area);
     const daysAgo = c && c.t ? (Date.now() - new Date(c.t).getTime()) / 86400000 : null;
-    const due = !pace ? "never" : daysAgo == null ? `every ${pace} d` : daysAgo >= pace ? "now" : `in ${Math.max(1, Math.round(pace - daysAgo))} d`;
+    const due = !pace ? dfT("clean.never") : daysAgo == null ? dfT("clean.every_d", { n: pace }) : daysAgo >= pace ? dfT("clean.now") : dfT("clean.in_d", { n: Math.max(1, Math.round(pace - daysAgo)) });
     // Visits of the last runs (the integration logs when a robot enters and leaves a room); one run = one clean.
     const runs = [];
     for (const v of ((a.clean_log || {})[p.area] || []).slice().sort((x, y) => (x.s < y.s ? -1 : 1))) {
@@ -285,18 +285,18 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const usual = ds.length ? Math.max(1, Math.round(ds[Math.floor(ds.length / 2)] / 60000)) : 0;
     const kv = [];
     const nw = (a.now || {})[p.area];
-    if (nw) kv.push(["Cleaning now", nw.m2 != null ? `${nw.m2} m²${nw.pct != null ? ` (${nw.pct}%)` : ""}` : "yes"]);
-    if (cov) kv.push(["Cleaned last time", cov]);
-    if (runs.length) kv.push(["Last 7 days", week ? `${week}×` : "not cleaned"]);
-    if (usual) kv.push(["Usually takes", `${usual} min`]);
-    if (ref && ref.a && ref.n >= 2) kv.push(["Robot usually cleans", `${Math.round(ref.a)} m²`]);
-    if (c && c.t) kv.push(["Due", due]);
+    if (nw) kv.push([dfT("clean.cleaning_now"), nw.m2 != null ? `${nw.m2} m²${nw.pct != null ? ` (${nw.pct}%)` : ""}` : dfT("yes")]);
+    if (cov) kv.push([dfT("clean.last_time"), cov]);
+    if (runs.length) kv.push([dfT("clean.last7"), week ? `${week}×` : dfT("clean.not_cleaned")]);
+    if (usual) kv.push([dfT("clean.usually_takes"), dfT("unit.min", { n: usual })]);
+    if (ref && ref.a && ref.n >= 2) kv.push([dfT("clean.robot_usually"), `${Math.round(ref.a)} m²`]);
+    if (c && c.t) kv.push([dfT("clean.due"), due]);
     const stats = kv.length ? `<div class="kv">${kv.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : "";
     const robots = Object.entries(a.robots || {}).filter(([e]) => this._hass.states[e]);
     const can = robots.filter(([e]) => Number(this._hass.states[e].attributes.supported_features || 0) & CLEAN_AREA);
-    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>Clean now${can.length > 1 ? ` with ${cesc(this._hass.states[e].attributes.friendly_name || e)}` : ""}</button>`).join("");
-    const hint = btns ? "" : can.length ? `Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.` : robots.length ? "Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+)." : "";
-    const close = `<button data-close="1" aria-label="Close">×</button>`;
+    const btns = can.filter(([, r]) => Object.values(r.seg || {}).includes(p.area)).map(([e]) => `<button class="pri" data-cleanroom="${cesc(p.area)}" data-rb="${cesc(e)}"><ha-icon icon="mdi:robot-vacuum"></ha-icon>${can.length > 1 ? dfT("clean.now_with", { r: cesc(this._hass.states[e].attributes.friendly_name || e) }) : dfT("clean.clean_now")}</button>`).join("");
+    const hint = btns ? "" : can.length ? dfT("clean.map_hint") : robots.length ? dfT("clean.cant_room") : "";
+    const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
     return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${stats}${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
   },
 
@@ -384,7 +384,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const rds = ord.length ? `<span class="crd">${ord.map(pill).join("")}</span>` : "";
       const last = (this._camLast = this._camLast || {})[sp.key];
       this._camLast[sp.key] = src;
-      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${vid ? `<div class="cvid" data-vid="${cesc(sp.eid)}"><slot name="${cesc(vidSlot(sp.eid))}"></slot></div>` : src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="Close">×</button>` : ""}</span></div>`;
+      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${vid ? `<div class="cvid" data-vid="${cesc(sp.eid)}"><slot name="${cesc(vidSlot(sp.eid))}"></slot></div>` : src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="${dfT("close")}">×</button>` : ""}</span></div>`;
     }).join("")}</div>`;
   },
 
@@ -596,7 +596,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     try {
       await this._saveToDashboard(raw);
     } catch (err) {
-      this._toast(err && err.message === "yaml" ? "This dashboard is kept in YAML: the camera spot lasts until the page reloads." : "Couldn't save the camera spot to the dashboard.");
+      this._toast(err && err.message === "yaml" ? dfT("save.cam_yaml") : dfT("save.cam_failed"));
     }
   },
 

@@ -15,6 +15,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   }
 
   set hass(hass) {
+    dfLangOf(hass); // 0.14 L1: texts in this user's language
     const first = !this._hass;
     this._hass = hass;
     if (first) this._render();

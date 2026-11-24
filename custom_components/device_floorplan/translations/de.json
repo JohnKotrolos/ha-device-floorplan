@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Device Floorplan",
+        "description": "Device Floorplan fügt deiner Seitenleiste einen **Floorplan Editor** hinzu. Dort erstellst du deinen ersten Plan aus einer Zeichnung, einem Foto oder einem Beispiel und platzierst deine Geräte darauf."
+      },
+      "existing": {
+        "title": "Device Floorplan",
+        "description": "{count} Plan/Pläne aus einer früheren Installation gefunden: **{plans}**.\n\nBehalte sie: sie erscheinen im **Floorplan Editor** in deiner Seitenleiste, mit allen Positionen. Oder fang neu an:",
+        "data": {
+          "start_fresh": "Neu anfangen: diese Pläne und ihre Bilder löschen"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Device Floorplan ist bereits eingerichtet.",
+      "already_configured": "Device Floorplan ist bereits eingerichtet."
+    },
+    "create_entry": {
+      "fresh": "✓ Fertig. Der **Floorplan Editor** ist jetzt in deiner Seitenleiste. Öffne ihn, um deinen ersten Plan zu erstellen.",
+      "kept": "✓ Fertig. Deine {count} Plan/Pläne sind wieder im **Floorplan Editor** in deiner Seitenleiste."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Neue Geräte",
+        "description": "Was passiert, wenn du nach dem Einrichten deiner Pläne ein Gerät zu Home Assistant hinzufügst.",
+        "data": {
+          "notify_new_devices": "Benachrichtigung bei neuen Geräten anzeigen",
+          "auto_place_new_devices": "Neue Geräte neben ihrem Raum auf den Plan setzen (ungefähr)"
+        }
+      }
+    }
+  },
+  "services": {
+    "get_positions": {
+      "name": "Positionen abrufen",
+      "description": "Gibt die Geräte, Raum-Pins und den Maßstab eines Plans zurück.",
+      "fields": {
+        "plan": {
+          "name": "Plan",
+          "description": "Plan-ID oder Name, z. B. ground_floor."
+        }
+      }
+    },
+    "show_overlay": {
+      "name": "Ansicht zeigen",
+      "description": "Schaltet jede Device-Floorplan-Karte mit dieser Karten-ID auf eine Ansicht und/oder Etage, auf jedem Bildschirm.",
+      "fields": {
+        "card_id": {
+          "name": "Karten-ID",
+          "description": "Die im Karteneditor festgelegte Karten-ID."
+        },
+        "overlay": {
+          "name": "Ansicht",
+          "description": "plan, live, lights, comfort, security, network, health, die ID einer eigenen Ansicht oder reset (zurück zum Standard der Karte)."
+        },
+        "floor": {
+          "name": "Etage",
+          "description": "Optional: die Plan-ID (oder HA-Etagen-ID) der Etage, die gezeigt werden soll, für Karten mit mehreren Etagen."
+        }
+      }
+    },
+    "get_layout": {
+      "name": "Grundriss abrufen",
+      "description": "Der Grundriss als Fakten: Etagen, Räume, welche Räume verbunden sind (offener Raum, Durchgang, Tür) oder nur eine Wand teilen, Außenwände, Himmelsrichtung, wenn der Plan einen Norden hat. Mit einem Raum: auch, was darin ist.",
+      "fields": {
+        "floor": {
+          "name": "Etage",
+          "description": "Optional: ein Plan- oder HA-Etagenname."
+        },
+        "room": {
+          "name": "Raum",
+          "description": "Optional: ein Raum- (Bereichs-)name; listet auch seine Geräte."
+        }
+      }
+    },
+    "locate": {
+      "name": "Finden",
+      "description": "Wo ein Gerät, eine Entität oder ein Raum ist: Etage, Raum und Platz im Raum.",
+      "fields": {
+        "target": {
+          "name": "Ziel",
+          "description": "Ein Gerätename, eine Entitäts-ID, Geräte-ID oder ein Raum."
+        }
+      }
+    },
+    "nearest": {
+      "name": "Am nächsten",
+      "description": "Die Geräte, die einem Gerät oder Raum auf derselben Etage am nächsten sind, in Metern, wenn die Etage vermessen ist.",
+      "fields": {
+        "target": {
+          "name": "Ziel",
+          "description": "Ein Gerätename, eine Entitäts-ID oder ein Raum."
+        },
+        "category": {
+          "name": "Kategorie",
+          "description": "Optional, z. B. lights, climate, sensors."
+        },
+        "limit": {
+          "name": "Anzahl",
+          "description": "Wie viele (1–20)."
+        }
+      }
+    },
+    "between": {
+      "name": "Zwischen",
+      "description": "Zwischen zwei Geräten oder Räumen: der Weg durch die Räume, die Entfernung und die Wände oder Öffnungen, die eine gerade Linie kreuzt.",
+      "fields": {
+        "from": {
+          "name": "Von",
+          "description": "Ein Gerätename, eine Entitäts-ID oder ein Raum."
+        },
+        "to": {
+          "name": "Nach",
+          "description": "Ein Gerätename, eine Entitäts-ID oder ein Raum."
+        }
+      }
+    }
+  }
+}

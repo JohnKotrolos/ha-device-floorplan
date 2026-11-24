@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.9.11).
+ * Device Floorplan – dashboard card (v0.13.9.12).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,24 +18,24 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.11";
+const CARD_VERSION = "0.13.9.12";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
-const RELEASE_TIP = { v: "0.13.9", text: "Christmas lights and trees", go: "Try them" };
+const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
 const TIP_KEY = "device_floorplan_release_tip";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
-  plan: { label: "Plan", icon: "mdi:floor-plan" },
-  live: { label: "Live", icon: "mdi:home-lightbulb-outline" },
-  lights: { label: "Lights", icon: "mdi:lightbulb-group-outline" },
-  comfort: { label: "Comfort", icon: "mdi:thermometer" },
-  security: { label: "Security", icon: "mdi:shield-home-outline" },
-  network: { label: "Network", icon: "mdi:access-point-network" },
-  health: { label: "Health", icon: "mdi:battery-heart-variant" },
-  energy: { label: "Energy", icon: "mdi:lightning-bolt" },
-  cleaning: { label: "Cleaning", icon: "mdi:robot-vacuum" },
-  people: { label: "People", icon: "mdi:account-group-outline" },
+  plan: { get label() { return dfT("ov.plan"); }, icon: "mdi:floor-plan" },
+  live: { get label() { return dfT("ov.live"); }, icon: "mdi:home-lightbulb-outline" },
+  lights: { get label() { return dfT("ov.lights"); }, icon: "mdi:lightbulb-group-outline" },
+  comfort: { get label() { return dfT("ov.comfort"); }, icon: "mdi:thermometer" },
+  security: { get label() { return dfT("ov.security"); }, icon: "mdi:shield-home-outline" },
+  network: { get label() { return dfT("ov.network"); }, icon: "mdi:access-point-network" },
+  health: { get label() { return dfT("ov.health"); }, icon: "mdi:battery-heart-variant" },
+  energy: { get label() { return dfT("ov.energy"); }, icon: "mdi:lightning-bolt" },
+  cleaning: { get label() { return dfT("ov.cleaning"); }, icon: "mdi:robot-vacuum" },
+  people: { get label() { return dfT("ov.people"); }, icon: "mdi:account-group-outline" },
 };
 /** 0.11: overlays added by recent updates (offered once to cards that list their own overlays). */
 const NEW_OVERLAYS = ["energy"];
@@ -161,20 +161,20 @@ const CONNS = {
   matter: { label: "Matter", icon: "mdi:home-automation" },
   network: { label: "Wi-Fi / LAN", icon: "mdi:wifi" },
   bluetooth: { label: "Bluetooth", icon: "mdi:bluetooth" },
-  radio: { label: "Wireless", icon: "mdi:signal" },
+  radio: { get label() { return dfT("conn.radio"); }, icon: "mdi:signal" },
 };
 const CONN_ORDER = ["zigbee", "zwave", "matter", "network", "bluetooth", "radio"];
 const ROLES = {
-  coordinator: { label: "Coordinator", color: "#f5a623", shape: "diamond" },
-  ap: { label: "Router / access point", color: "#f5a623", shape: "diamond" },
-  btproxy: { label: "Bluetooth proxy", color: "#f5a623", shape: "diamond" }, // test12: Bluetooth's access point
-  router: { label: "Router / repeater", color: "#3b82f6", shape: "square" },
-  hub: { label: "Hub / bridge", color: "#3b82f6", shape: "square" },
-  end: { label: "End device", color: "#43a047", shape: "round" },
-  gp: { label: "Battery-free (Green Power)", color: "#9ccc65", shape: "round" }, // 0.8.1: HA 2026.11, no parent line
-  device: { label: "Device", color: "#78909c", shape: "round" },
-  unavailable: { label: "Unavailable", color: "#e53935", shape: "round" },
-  unknown: { label: "Unknown", color: "#9e9e9e", shape: "round" },
+  coordinator: { get label() { return dfT("role.coordinator"); }, color: "#f5a623", shape: "diamond" },
+  ap: { get label() { return dfT("role.ap"); }, color: "#f5a623", shape: "diamond" },
+  btproxy: { get label() { return dfT("role.btproxy"); }, color: "#f5a623", shape: "diamond" }, // test12: Bluetooth's access point
+  router: { get label() { return dfT("role.router"); }, color: "#3b82f6", shape: "square" },
+  hub: { get label() { return dfT("role.hub"); }, color: "#3b82f6", shape: "square" },
+  end: { get label() { return dfT("role.end"); }, color: "#43a047", shape: "round" },
+  gp: { get label() { return dfT("role.gp"); }, color: "#9ccc65", shape: "round" }, // 0.8.1: HA 2026.11, no parent line
+  device: { get label() { return dfT("role.device"); }, color: "#78909c", shape: "round" },
+  unavailable: { get label() { return dfT("role.unavailable"); }, color: "#e53935", shape: "round" },
+  unknown: { get label() { return dfT("role.unknown"); }, color: "#9e9e9e", shape: "round" },
 };
 const LQI_BANDS = [
   { min: 200, color: "#43a047", label: "200–255" },
@@ -199,16 +199,24 @@ const CLIMATE_MODES = {
 
 // Climate chip v2: what the unit is doing (hvac_action) or its mode.
 const CLIMATE_ACTION = {
-  cooling: { word: "Cooling", color: "#29b6f6" },
-  heating: { word: "Heating", color: "#ff7043" },
-  drying: { word: "Drying", color: "#26a69a" },
-  fan: { word: "Fan", color: "#26a69a" },
-  idle: { word: "Idle", color: "#90a4ae" },
-  preheating: { word: "Preheating", color: "#ff7043" },
-  defrosting: { word: "Defrosting", color: "#29b6f6" },
-  off: { word: "Off", color: "#9e9e9e" },
+  cooling: { get word() { return dfT("climate.cooling"); }, color: "#29b6f6" },
+  heating: { get word() { return dfT("climate.heating"); }, color: "#ff7043" },
+  drying: { get word() { return dfT("climate.drying"); }, color: "#26a69a" },
+  fan: { get word() { return dfT("climate.fan"); }, color: "#26a69a" },
+  idle: { get word() { return dfT("climate.idle"); }, color: "#90a4ae" },
+  preheating: { get word() { return dfT("climate.preheating"); }, color: "#ff7043" },
+  defrosting: { get word() { return dfT("climate.defrosting"); }, color: "#29b6f6" },
+  off: { get word() { return dfT("climate.off"); }, color: "#9e9e9e" },
 };
-const CLIMATE_MODE_WORD = { cool: "Cooling", heat: "Heating", dry: "Dry", fan_only: "Fan", heat_cool: "Auto", auto: "Auto", off: "Off" };
+const CLIMATE_MODE_WORD = {
+  get cool() { return dfT("climate.cooling"); },
+  get heat() { return dfT("climate.heating"); },
+  get dry() { return dfT("climate.dry"); },
+  get fan_only() { return dfT("climate.fan"); },
+  get heat_cool() { return dfT("climate.auto"); },
+  get auto() { return dfT("climate.auto"); },
+  get off() { return dfT("climate.off"); },
+};
 function climateIcon(eid, st) {
   if (domainOf(eid) === "water_heater") return "mdi:water-boiler";
   if (domainOf(eid) === "humidifier") return "mdi:air-humidifier";
@@ -232,7 +240,7 @@ function bondName(b) {
     if (!names.every((n) => n.length === p.length || /[\s\-_·.,]/.test(n[p.length]))) p = (p.match(/^(.*[\s\-_·.,])/) || ["", ""])[1];
   } else p = "";
   p = p.replace(/[\s\-_·.,]+$/, "").trim();
-  return p.length >= 3 ? `${p} ×${names.length}` : names[0] || "Bond";
+  return p.length >= 3 ? `${p} ×${names.length}` : names[0] || dfT("bond");
 }
 /** 0.8.1: an entity's display name. HA 2026.11 plans to drop friendly_name: then device name + entity name from the
  *  registries (hass.devices / hass.entities), else the entity id. One place for every name on the card and in the Editor. */
@@ -255,7 +263,7 @@ const RP_RANGES = [6, 12, 24, 48]; // hours
 // test10: Energy is out again: it is hourly amounts, with its own hours under the plan (the last 24 hours).
 const RP_SKIP = new Set(["plan", "energy"]); // test11: Network replays too (online / offline, signal where recorded)
 const CAM_SIZES = { s: [120, 0.22], m: [160, 0.3], l: [240, 0.42] }; // max px, max share of the plan width
-const rpClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const rpClock = (t) => new Date(t).toLocaleTimeString(dfLocale(), { hour: "2-digit", minute: "2-digit" });
 /** 0.11.1 test8: the replay timeline. One rule: it shows only what the overlay itself shows, in three forms
  *  with one meaning each: bars = how much happened in a slot, spans = how long something ran, a line = a measured
  *  value. Kinds (and colours): lt lights, dv devices, op doors / windows / shutters / locks / doorbell, mv motion,
