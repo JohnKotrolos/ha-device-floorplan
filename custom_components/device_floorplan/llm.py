@@ -25,7 +25,9 @@ except ImportError:  # pragma: no cover - older Home Assistant: no tools
 PROMPT = (
     "This home has a floorplan (Device Floorplan). For where a device or room is, what is near something, "
     "which rooms connect (open space, passage, door) or share only a wall, and the way between rooms, "
-    "use the floorplan tools instead of guessing. \"here\" is the device that heard the request. Floors: {floors}."
+    "use the floorplan tools instead of guessing. \"here\" is the device that heard the request. "
+    "For left or right, only repeat the tools' \"on your left\" / \"on your right\" facts; never work them out yourself. "
+    "Floors: {floors}."
 )
 
 

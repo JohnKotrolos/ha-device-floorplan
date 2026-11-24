@@ -21,7 +21,8 @@ _POSITION = {
     vol.Required("y"): _PCT,
     vol.Optional("approx"): cv.boolean,
     vol.Optional("z"): vol.Coerce(int),
-    vol.Optional("box"): vol.Any(None, {vol.Required("x"): _PCT, vol.Required("y"): _PCT}),
+    vol.Optional("box"): vol.Any(None, {vol.Required("x"): _PCT, vol.Required("y"): _PCT, vol.Optional("h"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10)))}),
+    vol.Optional("h"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),  # 0.13.9.8: mounting height in metres
     vol.Optional("light"): vol.Any(None, dict),
     vol.Optional("air"): vol.Any(None, dict),
     vol.Optional("touch"): vol.Any(None, dict),

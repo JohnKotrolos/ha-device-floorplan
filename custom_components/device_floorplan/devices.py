@@ -927,6 +927,7 @@ def build_plan_payload(
                 "name": entity_name(hass, eid),
                 "x": x, "y": y, "px": px, "py": py,
                 "approx": approx,
+                **({"h": pos["h"]} if pos.get("h") is not None else {}),
                 "main_entity": eid,
                 "entities": [eid],
                 "roles": entity_roles(hass, [eid]),
@@ -984,6 +985,7 @@ def build_plan_payload(
             "area_id": device.area_id,
             "x": x, "y": y, "px": px, "py": py,
             "approx": approx,
+            **({"h": pos["h"]} if pos.get("h") is not None else {}),
             "main_entity": main,
             "entities": ids,
             "roles": entity_roles(hass, ids),
@@ -1011,7 +1013,7 @@ def build_plan_payload(
         box = pos.get("box")
         if box:
             bpx, bpy = to_px(box["x"], box["y"])
-            item["box"] = {"x": box["x"], "y": box["y"], "px": bpx, "py": bpy}
+            item["box"] = {"x": box["x"], "y": box["y"], "px": bpx, "py": bpy, **({"h": box["h"]} if box.get("h") is not None else {})}
         if pos.get("z"):
             item["z"] = pos["z"]
         if pos.get("light"):
@@ -1094,6 +1096,7 @@ def build_plan_payload(
             "entities": mains,
             "domain": domain,
             "x": first["x"], "y": first["y"], "px": first["px"], "py": first["py"],
+            **({"h": first["h"]} if first.get("h") is not None else {}),  # 0.13.9.8: the bond's height
         }
 
     # Phantom devices (#60): members stay where they are; the phantom has its own free spot.

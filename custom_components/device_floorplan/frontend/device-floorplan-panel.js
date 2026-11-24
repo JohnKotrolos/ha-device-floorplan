@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.7";
+const VERSION = "0.13.9.8";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -2269,6 +2269,8 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       if (c) c.m.push(m);
       else clusters.push({ x: m.pos.x, y: m.pos.y, m: [m] });
     }
+    // 0.13.9.8: when every device of a spot has a mounting height, the highest leads (shown in front, first in the list).
+    for (const c of clusters) if (c.m.length > 1 && c.m.every((m) => typeof m.pos.h === "number")) c.m.sort((a, b) => b.pos.h - a.pos.h);
     return clusters;
   },
 
@@ -3345,7 +3347,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     const pos = this.work.positions[d.id];
     if (!onPlan || !pos) return "";
     const bond = this._bondOf(d.id);
-    return `${bond ? "" : this._picSectionHtml(d, pos)}${bond || pos.pic ? "" : this._touchSectionHtml(d, pos)}${this._airSectionHtml(d)}${this._openSectionHtml(d)}`;
+    return `${this._heightHtml(d, pos)}${bond ? "" : this._picSectionHtml(d, pos)}${bond || pos.pic ? "" : this._touchSectionHtml(d, pos)}${this._airSectionHtml(d)}${this._openSectionHtml(d)}`;
   },
 
   _picSectionHtml(d, pos, bond = false) {
@@ -3459,6 +3461,20 @@ Object.assign(DeviceFloorplanPanel.prototype, {
 
   /** 0.12.1: a touch area: the device is already drawn in the plan picture (a TV, an AC); on the card's Live it
    *  can be tapped there, also when it is off. */
+  /** 0.13.9.8: mounting height (m), optional. A bond has one height (kept on every member); a split device's box has its
+   *  own. Used by AI assistants and to stack devices on one spot (highest on top) when they all have one. */
+  _heightHtml(d, pos) {
+    if (!pos || String(d.id).startsWith("ph:")) return "";
+    const presets = [["0", "Floor"], ["0.8", "Desk"], ["1.5", "Wall"], ["2.2", "High on the wall"], ["2.6", "Ceiling"]];
+    const row = (which, v, label) => {
+      const known = v != null && presets.some(([pv]) => Number(pv) === v);
+      return `<label class="fl">${label}<span style="display:flex;gap:6px;align-items:center"><select data-hfor="${which}" style="flex:1"><option value="" ${v == null ? "selected" : ""}>Not set</option>${presets.map(([pv, pl]) => `<option value="${pv}" ${known && Number(pv) === v ? "selected" : ""}>${pl} (${pv} m)</option>`).join("")}${v != null && !known ? `<option value="${v}" selected>Other (${v} m)</option>` : ""}</select><input type="number" data-hfor="${which}" min="0" max="10" step="0.1" value="${v == null ? "" : v}" style="width:70px" aria-label="${esc(label)} in metres"> m</span></label>`;
+    };
+    const bond = this._bondOf(d.id);
+    const hint = `<span style="font-size:12px;color:var(--df-sec)">How high it is mounted. AI assistants use it; devices on one spot that all have a height stack highest on top.</span>`;
+    return `<div class="fl" style="display:flex;flex-direction:column;gap:4px">${row("pos", pos.h, bond ? "Height of the bond" : "Height")}${pos.box ? row("box", pos.box.h, "Height of its box") : ""}${hint}</div>`;
+  },
+
   _touchSectionHtml(d, pos) {
     if (!pos) return "";
     const on = !!pos.touch;
@@ -4592,7 +4608,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         const bid = this._bodyId(ids[0]);
         const bd = this.byId.get(bid) || { id: bid };
         const bp = this.work.positions[bid];
-        return `${this._picSectionHtml(bd, bp, true)}${bp && bp.pic ? "" : this._touchSectionHtml(bd, bp)}`;
+        return `${this._heightHtml(bd, bp)}${this._picSectionHtml(bd, bp, true)}${bp && bp.pic ? "" : this._touchSectionHtml(bd, bp)}`;
       })()}
       <div class="acts"><button class="btn" data-act="unbondall">Unbond all</button>${this._wallSpot(this.s.sel) ? `<button class="btn" data-act="snapwall" title="Move it onto the nearest edge of its Room">${SVG.magnet}Snap to wall</button>` : ""}<button class="btn danger" data-act="remove">Remove from plan</button></div></div>`;
   },
@@ -5060,6 +5076,23 @@ Object.assign(DeviceFloorplanPanel.prototype, {
   _onChange(e) {
     const t = e.target;
     const act = t.dataset.act;
+    if (t.dataset && t.dataset.hfor) {
+      // 0.13.9.8: a spot's mounting height (select preset or type metres); a bond's height goes on every member.
+      const id = this.s.sel;
+      const pos = id && this.work.positions[id];
+      if (!pos) return;
+      const v = t.value === "" ? null : Math.min(10, Math.max(0, Math.round(Number(t.value) * 100) / 100));
+      if (v != null && !Number.isFinite(v)) return;
+      const bond = this._bondOf(id);
+      this._change(() => {
+        const recs = t.dataset.hfor === "box" ? [pos.box].filter(Boolean) : (bond ? bond[1] : [id]).map((m) => this.work.positions[m]).filter(Boolean);
+        for (const r of recs) {
+          if (v == null) delete r.h;
+          else r.h = v;
+        }
+      });
+      return;
+    }
     if (t.id === "fnorth") {
       this.s.form = { ...(this.s.form || {}), north: t.value === "" ? null : Number(t.value) }; // kept across redraws
       return;

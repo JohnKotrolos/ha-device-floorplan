@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.9.7).
+ * Device Floorplan – dashboard card (v0.13.9.8).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.7";
+const CARD_VERSION = "0.13.9.8";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", text: "Christmas lights and trees", go: "Try them" };
@@ -3521,9 +3521,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const conns = [...new Set(mem.flatMap((d) => d.conns || []))];
       const zb = mem.find((d) => d.ieee);
       const rtr = (mem.find((d) => d.router) || {}).router;
-      out.push({ id: `bond:${bid}`, bond: true, router: rtr, light: (mem.find((d) => d.light) || {}).light, lights: b.lights || "", mlights: mem.map((d) => ({ light: d.light, ent: d.main_entity })), name: bondName(b), icon: b.icon, tap: b.tap, show: b.show, x: b.x, y: b.y, px: b.px, py: b.py, main_entity: (b.entities || [])[0], entities: b.entities || [], allEntities: all, members: b.members || [], pic: (mem.find((d) => d.pic) || {}).pic, touch: (mem.find((d) => d.touch) || {}).touch, names: b.names || [], conns, ieee: zb ? zb.ieee : null, area: (mem[0] || {}).area, domain: b.domain, group: groups.includes("lights") || b.domain === "light" ? "lights" : groups[0] || "lights" });
+      out.push({ id: `bond:${bid}`, bond: true, h: b.h, router: rtr, light: (mem.find((d) => d.light) || {}).light, lights: b.lights || "", mlights: mem.map((d) => ({ light: d.light, ent: d.main_entity })), name: bondName(b), icon: b.icon, tap: b.tap, show: b.show, x: b.x, y: b.y, px: b.px, py: b.py, main_entity: (b.entities || [])[0], entities: b.entities || [], allEntities: all, members: b.members || [], pic: (mem.find((d) => d.pic) || {}).pic, touch: (mem.find((d) => d.touch) || {}).touch, names: b.names || [], conns, ieee: zb ? zb.ieee : null, area: (mem[0] || {}).area, domain: b.domain, group: groups.includes("lights") || b.domain === "light" ? "lights" : groups[0] || "lights" });
     }
     // Phantoms (#60): an extra item with a combined value; its devices keep their own markers.
+    // 0.13.9.8: mounting heights by marker id, so markers on one spot stack highest on top (see the layout).
+    this._hIndex = this._hIndex || new Map();
+    for (const it of out) {
+      if (typeof it.h === "number") this._hIndex.set(it.id, it.h);
+      else this._hIndex.delete(it.id);
+    }
     for (const [pid, ph] of Object.entries(a.phantoms || {})) {
       if (!(ph.members || []).length) continue;
       const mem = ph.members.map((m) => [m, memberOf(m)]).filter((x) => x[1]);
@@ -7407,11 +7413,17 @@ Object.assign(DeviceFloorplanCard.prototype, {
         } else next.push(g);
       }
       groups = next;
+      // 0.13.9.8: devices on one spot that all have a mounting height stack in one column, highest on top.
+      const hOf = (r) => {
+        const v = this._hIndex && this._hIndex.get(String(r.el.dataset.k || "").split("|")[0]);
+        return typeof v === "number" ? v : null;
+      };
       for (const g of groups) {
         if (g.length < 2) continue;
         const cw = Math.max(...g.map((r) => r.w));
         const ch = Math.max(...g.map((r) => r.h));
-        const cols = Math.ceil(Math.sqrt(g.length));
+        const tower = g.every((r) => hOf(r) != null && Math.abs(r.ax - g[0].ax) < 2 && Math.abs(r.ay - g[0].ay) < 2);
+        const cols = tower ? 1 : Math.ceil(Math.sqrt(g.length));
         const rows = Math.ceil(g.length / cols);
         const gw = cols * (cw + 6) - 6;
         const gh = rows * (ch + 6) - 6;
@@ -7420,7 +7432,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const left = Math.max(2, Math.min(W - gw - 2, cx - gw / 2));
         const top = Math.max(2, Math.min(H - gh - 2, cy - gh / 2));
         // Rows top to bottom; inside a row, left to right as on the plan (so neighbours never swap sides).
-        const byY = [...g].sort((p, q) => p.ay - q.ay || p.ax - q.ax);
+        const byY = tower ? [...g].sort((p, q) => hOf(q) - hOf(p)) : [...g].sort((p, q) => p.ay - q.ay || p.ax - q.ax);
         const ordered = [];
         for (let k = 0; k < byY.length; k += cols) ordered.push(...byY.slice(k, k + cols).sort((p, q) => p.ax - q.ax));
         ordered.forEach((r, i) => {

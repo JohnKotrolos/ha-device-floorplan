@@ -776,9 +776,12 @@ class FloorplanData:
                 main = main_of(key)
                 new = {k: v for k, v in pos.items() if k not in ("box", "light")}
                 new["x"], new["y"] = box["x"], box["y"]
+                new.pop("h", None)
+                if box.get("h") is not None:
+                    new["h"] = box["h"]  # the box's own height goes with it
                 pos_all[key] = new
                 if main and f"entity:{main}" not in pos_all:
-                    spot = {"x": pos["x"], "y": pos["y"], "of": key}
+                    spot = {"x": pos["x"], "y": pos["y"], "of": key, **({"h": pos["h"]} if pos.get("h") is not None else {})}
                     if pos.get("light"):
                         spot["light"] = pos["light"]
                     pos_all[f"entity:{main}"] = spot
@@ -971,6 +974,8 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     }
     if pos.get("approx"):
         entry["approx"] = True
+    if isinstance(pos.get("h"), (int, float)) and not isinstance(pos.get("h"), bool):
+        entry["h"] = round(min(10.0, max(0.0, float(pos["h"]))), 2)  # 0.13.9.8: mounting height (m)
     if pos.get("z"):
         entry["z"] = int(pos["z"])
     if isinstance(pos.get("label"), str) and pos["label"].strip():
@@ -1089,4 +1094,6 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
             "x": round(min(100.0, max(0.0, float(box["x"]))), 3),
             "y": round(min(100.0, max(0.0, float(box["y"]))), 3),
         }
+        if isinstance(box.get("h"), (int, float)) and not isinstance(box.get("h"), bool):
+            entry["box"]["h"] = round(min(10.0, max(0.0, float(box["h"]))), 2)
     return entry

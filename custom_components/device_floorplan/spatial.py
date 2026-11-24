@@ -104,6 +104,17 @@ def _compass(dx: float, dy: float, north: float) -> str:
 _SAME_WORD = {"bedroom": "room", "bathroom": "bath", "livingroom": "living"}
 
 
+def _height_words(h: Any) -> str | None:
+    """A mounting height (m) in words: on the floor / at 1.5 m / on the ceiling."""
+    if not isinstance(h, (int, float)):
+        return None
+    if h <= 0.2:
+        return "on the floor"
+    if h >= 2.4:
+        return f"on the ceiling ({h:.1f} m)"
+    return f"at {h:.1f} m height"
+
+
 def _norm(text: Any) -> str:
     """A name as people say it: no case, apostrophes or dashes; "bedroom" = "room"; no plural / possessive s."""
     t = str(text or "").casefold()
@@ -243,6 +254,8 @@ class Home:
             "at": at,
             "box": to(item["box"]["x"], item["box"]["y"]) if item.get("box") else None,
             "approx": bool(item.get("approx")),
+            "h": item.get("h"),
+            "box_h": (item.get("box") or {}).get("h"),
             "area_id": area_id,
             "category": item.get("category") or item.get("group"),
             "main": item.get("main_entity"),
@@ -402,6 +415,13 @@ class Home:
         return _compass(b["centre"][0] - a["centre"][0], b["centre"][1] - a["centre"][1], P["north"])
 
     def spot_words(self, spot: dict[str, Any], pt: Pt | None = None) -> str:
+        """Where a thing stands in its room, and at what height when it has one."""
+        box = pt is not None and pt is not spot["at"]
+        words = self._spot_place(spot, pt)
+        h = _height_words(spot["box_h"] if box else spot["h"])
+        return f"{words}, {h}" if h else words
+
+    def _spot_place(self, spot: dict[str, Any], pt: Pt | None = None) -> str:
         """Where a thing stands in its room: by an outside wall / a window / the door to X, or in the middle."""
         P = spot["plan"]
         pt = pt or spot["at"]
@@ -446,6 +466,46 @@ class Home:
         st = self.hass.states.get(eid) if eid else None
         return st.state if st else None
 
+    def _beside(self, A: dict[str, Any], B: dict[str, Any], link: dict[str, Any]) -> dict[str, Any]:
+        """Standing in A, facing the opening to B: which way you face, and the rooms on your left and right."""
+        P, tol = A["plan"], A["plan"]["tol"]
+        pts = link.get("pts") or []
+        if not pts:
+            return {}
+        mx = sum(p[0] for p in pts) / len(pts)
+        my = sum(p[1] for p in pts) / len(pts)
+        # The opening's line (its longest spread) and the way through it, from A into B.
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        if max(xs) - min(xs) >= max(ys) - min(ys):
+            fx, fy = 0.0, 1.0
+        else:
+            fx, fy = 1.0, 0.0
+        step = tol["edge"]
+        if not _pip((mx + fx * step, my + fy * step), B["poly"]) and _pip((mx - fx * step, my - fy * step), B["poly"]):
+            fx, fy = -fx, -fy
+        elif not _pip((mx + fx * step, my + fy * step), B["poly"]):
+            # Glued rooms meet on a line: decide by which side lies nearer B's middle.
+            bx, by = B["centre"]
+            if (bx - mx) * fx + (by - my) * fy < 0:
+                fx, fy = -fx, -fy
+        out: dict[str, Any] = {}
+        if P["north"] is not None:
+            out["facing"] = _compass(fx, fy, P["north"])
+        reach = tol["edge"] * 2.5  # about 1.5 m along the wall
+        for side, (sx, sy) in (("on_your_left", (fy, -fx)), ("on_your_right", (-fy, fx))):
+            found = None
+            for d in (1.0, 1.5, 2.0, 3.0):
+                for t in (-0.8, 0.8, 0.0):  # just behind you (A's side), just past the opening (B's side)
+                    q = (mx + sx * reach * d / 1.5 + fx * tol["edge"] * t, my + sy * reach * d / 1.5 + fy * tol["edge"] * t)
+                    r = self._room_at(P, q)
+                    if r and r not in (A["area_id"], B["area_id"]):
+                        found = r
+                        break
+                if found:
+                    break
+            out[side] = self.room_name(found) if found else "a wall"
+        return out
+
     def room_facts(self, room: dict[str, Any], with_devices: bool = False) -> dict[str, Any]:
         P = room["plan"]
         out: dict[str, Any] = {"room": room["name"], "area_id": room["area_id"], "floor": P["floor"]}
@@ -465,6 +525,7 @@ class Home:
                     entry["direction"] = d
                 if link["type"] in WALKABLE:
                     entry["connection"] = CONN_WORDS[link["type"]]
+                    entry["at_the_opening"] = self._beside(room, B, link)  # facing it from this room
                     if link["door"]:
                         entry["door_sensor"] = link["door"]
                         entry["door_state"] = self._state(link["door"])
@@ -691,8 +752,17 @@ class Home:
                 out["route"] = [self.room_name(x) for x in path]
                 steps = []
                 for x, y in pairwise(path):
-                    link = next((r["links"][y] for r in self.rooms.get(x, []) if y in r["links"]), None)
-                    steps.append(f"{self.room_name(x)} → {self.room_name(y)}: " + (CONN_WORDS[link["type"]] if link else "the same room on another floor"))
+                    rx = next((r for r in self.rooms.get(x, []) if y in r["links"]), None)
+                    link = rx["links"][y] if rx else None
+                    text = f"{self.room_name(x)} → {self.room_name(y)}: " + (CONN_WORDS[link["type"]] if link else "the same room on another floor")
+                    if link:
+                        at = self._beside(rx, rx["plan"]["rooms"][y], link)
+                        if at:
+                            text += " (" + ", ".join(
+                                ([f"facing {at['facing']}"] if at.get("facing") else [])
+                                + [f"on your left {at['on_your_left']}", f"on your right {at['on_your_right']}"]
+                            ) + ")"
+                    steps.append(text)
                 out["steps"] = steps
         P = a["plan"]
         if b["plan"] is not P:
