@@ -212,8 +212,34 @@ class Home:
         # Placed things.
         for key, item in list(payload["devices"].items()) + [(f"entity:{k}", v) for k, v in payload["entities"].items()]:
             self._spot(P, key, item, to)
+        self._bonds(P, payload.get("bonds") or {})
         self._analyse(P)
         return P
+
+    def _bonds(self, P: dict[str, Any], bonds: dict[str, Any]) -> None:
+        """0.13.9.11: a bond is one thing, as on the card: one spot named after the bond (or its first member),
+        found by every member's names, shared when any member is."""
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for sp in self.spots:
+            if sp["plan"] is P and sp.get("bond") in bonds:
+                groups.setdefault(sp["bond"], []).append(sp)
+        for bid, members in groups.items():
+            if len(members) < 2:
+                continue
+            order = bonds[bid].get("members") or []
+            members.sort(key=lambda m: order.index(m["key"]) if m["key"] in order else len(order))
+            lead = members[0]
+            if bonds[bid].get("name"):
+                lead["name"] = bonds[bid]["name"]
+                lead["names"].add(_norm(lead["name"]))
+            if bonds[bid].get("h") is not None:
+                lead["h"] = bonds[bid]["h"]
+            for m in members[1:]:
+                lead["names"] |= m["names"]
+                lead["ids"] |= m["ids"]
+                lead["tags"] |= m["tags"]
+                lead["entities"] = lead["entities"] + [e for e in m["entities"] if e not in lead["entities"]]
+                self.spots.remove(m)
 
     def _dc(self, eid: str) -> str | None:
         ent = self.ent_reg.async_get(eid)
@@ -279,6 +305,15 @@ class Home:
                 names.add(st.name)
         spot["ids"] = {i for i in ids if i}
         spot["names"] = {_norm(x) for x in names if x}
+        # 0.13.9.11: what kind of thing it is, for "nearest sensor / light / temperature": its category and the
+        # domains and device classes of all its entities (a thermometer device is also a sensor and a temperature).
+        spot["tags"] = {_norm(spot["category"])} if spot["category"] else set()
+        for e in spot["ids"]:
+            if "." in e and not e.startswith("entity:"):
+                spot["tags"].add(e.split(".")[0])
+                if dc := self._dc(e):
+                    spot["tags"].add(_norm(dc))
+        spot["bond"] = item.get("bond")
         self.spots.append(spot)
         if door:
             P["doors"].append({"at": mark, "entity": door})
@@ -756,26 +791,41 @@ class Home:
             return miss
         P, at = hit["plan"], hit["at"]
         want = _norm(category).rstrip("s") if category else None
+        # 0.13.9.11: near a room = in it first, then outside it by distance from its walls (not from its middle).
+        room = self.rooms[hit["room"]][0] if hit["kind"] == "room" else None
+        poly = room["poly"] if room and room["plan"] is P else None
         found = []
         for s in self.spots:
             if s["plan"] is not P or (hit["kind"] == "spot" and s is hit["spot"]) or not self.visible(s):
                 continue
-            if want:
-                tags = {_norm(s["category"] or (s["main"] or "").split(".")[0]).rstrip("s")}  # the type of thing, else the entity type
-                if not any(want in t or t and t in want for t in tags):
-                    continue
-            d = hypot(s["at"][0] - at[0], s["at"][1] - at[1])
-            found.append((d, s))
+            if want and not any(want in t or (t and t in want) for t in s["tags"]):
+                continue
+            if room is not None:
+                inside = s["room"] == hit["room"]
+                d = 0.0 if inside else (_dpoly(s["at"], poly) if poly else hypot(s["at"][0] - at[0], s["at"][1] - at[1]))
+                found.append(((0 if inside else 1, d), d, s))
+            else:
+                d = hypot(s["at"][0] - at[0], s["at"][1] - at[1])
+                found.append(((0, d), d, s))
         found.sort(key=lambda x: x[0])
-        return {
+        out: dict[str, Any] = {
             "from": hit["name"],
             "floor": P["floor"],
             "nearest": [
-                {"name": s["name"], "room": self.room_name(s["room"]), "same_room": s["room"] == hit["room"], **({"distance_m": round(d, 1)} if P["measured"] else {})}
-                for d, s in found[: max(1, min(20, int(limit or 5)))]
+                {
+                    "name": s["name"],
+                    "room": self.room_name(s["room"]),
+                    "same_room": s["room"] == hit["room"],
+                    **({"distance_m": round(d, 1)} if P["measured"] and not (room is not None and s["room"] == hit["room"]) else {}),
+                }
+                for _k, d, s in found[: max(1, min(20, int(limit or 5)))]
             ],
-            **({} if P["measured"] else {"note": "This floor is not measured, so the order is by plan distance and no metres are given."}),
         }
+        if room is not None:
+            out["note"] = "Things in the room come first; for the others the distance is from the room's walls."
+        if not P["measured"]:
+            out["note"] = (out.get("note", "") + " This floor is not measured, so the order is by plan distance and no metres are given.").strip()
+        return out
 
     def route(self, a: str, b: str) -> list[str] | None:
         """Rooms to walk through, over open spaces, passages and doors (also between floors through a room on both)."""
@@ -863,7 +913,8 @@ class Home:
                 gap = gap or p
                 continue
             if cur != last and last is not None:
-                if gap and _dpoly(gap, P["rooms"][cur]["poly"]) > tol["wall"] * 1.5:
+                # 0.13.9.11: two rooms that connect or share a wall have an inside wall between them, never outside walls.
+                if gap and cur not in P["rooms"][last]["links"] and _dpoly(gap, P["rooms"][cur]["poly"]) > tol["wall"] * 1.5:
                     crossed += [f"outside wall of {self.room_name(last)}", f"outside wall of {self.room_name(cur)}"]
                 else:
                     link = P["rooms"][last]["links"].get(cur)
@@ -874,7 +925,12 @@ class Home:
                 crossed.append(f"outside wall of {self.room_name(cur)}")
             last, gap = cur, None
         if gap and last is not None:
-            crossed.append(f"outside wall of {self.room_name(last)}")
+            # The line ends in a wall's thickness: the target sits on a wall (a door contact, a switch).
+            end = b["room"]
+            if end and end != last and end in P["rooms"][last]["links"]:
+                crossed.append(f"wall between {self.room_name(last)} and {self.room_name(end)}")
+            elif end != last:
+                crossed.append(f"outside wall of {self.room_name(last)}")
         out["straight_line_crosses"] = crossed
         out["walls_in_between"] = sum(1 for c in crossed if not c.startswith("opening"))
         return out

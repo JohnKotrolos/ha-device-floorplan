@@ -27,6 +27,8 @@ PROMPT = (
     "which rooms connect (open space, passage, door) or share only a wall, and the way between rooms, "
     "use the floorplan tools instead of guessing. \"here\" is the device that heard the request. "
     "For left or right, only repeat the tools' \"on your left\" / \"on your right\" facts; never work them out yourself. "
+    "For a follow-up such as \"what else is close by?\" or \"near it\", pass the device from your previous answer as target, not its room. "
+    "Never reuse a distance from an earlier answer: call the tools again for each pair. "
     "Floors: {floors}."
 )
 
@@ -90,7 +92,8 @@ class NearestTool(_FloorplanTool):
     name = f"{DOMAIN}__nearest"
     description = (
         "Devices nearest to a device, a room, or \"here\" (the device that heard the request, the default). "
-        "Optional category, such as lights, climate, sensors, media."
+        "Optional category (lights, sensors, temperature, doors, media…): only when the user asks for a kind of device. "
+        "For a follow-up about a device just mentioned, pass that device as target."
     )
     parameters = vol.Schema({vol.Optional("target"): str, vol.Optional("category"): str, vol.Optional("limit"): int})
 
