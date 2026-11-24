@@ -1115,6 +1115,8 @@ def build_plan_payload(
             "entities": ents,
             "value": ph.get("value") or "average",
             **({"one": ph["one"]} if ph.get("one") else {}),
+            **({"pic": ph["pic"]} if ph.get("pic") else {}),  # 0.13.2: phantoms get pictures / touch areas too
+            **({"touch": ph["touch"]} if ph.get("touch") else {}),
         }
 
     # 0.7.3: access points (the router, repeaters) as named by the router, matched to devices on the plan.

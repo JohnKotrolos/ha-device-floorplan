@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.0).
+ * Device Floorplan – dashboard card (v0.13.9.4).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,11 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.0";
+const CARD_VERSION = "0.13.9.4";
+// 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
+// A version without a tip: set it to null. "go" opens the Floorplan Editor.
+const RELEASE_TIP = { v: "0.13.9", text: "Christmas lights and trees", go: "Try them" };
+const TIP_KEY = "device_floorplan_release_tip";
 const PANEL_PATH = "/device-floorplan";
 
 const OVERLAYS = {
@@ -348,6 +352,8 @@ const devOffline = (hass, item, mainOnly = false) => {
   const sts = (item.entities || []).map((e) => hass.states[e]).filter(Boolean);
   return sts.length ? sts.every(off) : off(main);
 };
+/** 0.13.1: the slot name of a camera's live video player. */
+const vidSlot = (eid) => `dfcv-${String(eid).replace(/[^a-z0-9_]/gi, "_")}`;
 /** Re-render a shadow root but keep what other cards put in it (card-mod's <card-mod> style). */
 function setShadow(el, html) {
   const keep = [...el.shadowRoot.children].filter((n) => n.localName === "card-mod");
@@ -357,7 +363,22 @@ function setShadow(el, html) {
   // 0.7.5: the same plan image stays (no reload / blink on every redraw).
   const ni = el.shadowRoot.querySelector("img.plan");
   if (oldImg && ni && oldImg.getAttribute("src") === ni.getAttribute("src")) ni.replaceWith(oldImg);
+  alignAnims(el.shadowRoot);
 }
+/** 0.13.9.1: a redraw makes new elements, and their animations would start again from 0 (a spinning fan jumps).
+ *  Every endless animation is set to the page's clock instead: a redrawn element carries on exactly where the old
+ *  one was (per-element delays, like the twinkle's, still apply). One-off animations are left alone. */
+function alignAnims(root) {
+  if (!root || typeof root.getAnimations !== "function") return;
+  for (const an of root.getAnimations()) {
+    try {
+      if (an.startTime !== 0 && an.effect && an.effect.getTiming().iterations === Infinity) an.startTime = 0;
+    } catch (_e) {
+      /* not adjustable: leave it */
+    }
+  }
+}
+if (!window.__dfcAlignAnims) window.__dfcAlignAnims = alignAnims;
 const num = (v) => v !== "" && v != null && Number.isFinite(Number(v));
 const domainOf = (eid) => (eid ? eid.split(".")[0] : "");
 const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(/:/g, "");
@@ -840,18 +861,37 @@ const PIC_LOOK = { on: "full", off: "faint", un: "dotted" };
 /** 0.12.6: ONE picture renderer for the card and the Floorplan Editor (window.__dfcPic), so the Editor always
  *  previews what the card draws: tint, inset outline, looks (full / faint / outline / dotted), busy, Highlight.
  *  Glow = a soft halo; Breathing = it fades in and out; Flow = a light runs around the outline; Tint = a 2nd colour. */
-function picMarkup({ p, url, look, hl, busy = false, x, y, attrs = "", cls = "" }) {
+/** part: "all" (the Editor's preview), "body" (the picture itself, under the room's light and night) or "hl" (only
+ *  its highlight halo / sparkle, drawn above the night: it gives light). 0.13.3. */
+function picMarkup({ p, url, look, hl, busy = false, x, y, attrs = "", cls = "", part = "all" }) {
   const pic = look === "full" || look === "faint";
   const tint = pic && p.tint ? `<span class="ptint" style="background:${cesc(p.tint)};-webkit-mask-image:url('${cesc(url)}');mask-image:url('${cesc(url)}')"></span>` : "";
   const k = Math.max(0.4, (100 - 2 * (p.inset ?? 4)) / 100);
   const pts = (p.outline || [[2, 2], [98, 2], [98, 98], [2, 98]]).map(([px, py]) => `${(50 + (px - 50) * k).toFixed(1)},${(50 + (py - 50) * k).toFixed(1)}`).join(" ");
   const hcol = hl ? cesc(hl.color || "#2196f3") : "";
   const hk = hl ? (hl.look === "pulse" ? "breathing" : hl.look) : "";
-  const halo = hl && hk !== "tint" ? `<g class="hl ${hk}" style="--hc:${hcol}"><polygon points="${pts}" class="hw"/><polygon points="${pts}" class="hm"/>${hk === "flow" ? `<polygon points="${pts}" class="hf" pathLength="100"/>` : `<polygon points="${pts}" class="hn"/>`}</g>` : "";
+  // 0.13.2 Sparkle: twinkling dots inside the picture's outline (a decorated tree, anything festive).
+  let spark = "";
+  if (hl && hk === "sparkle") {
+    const P = pts.split(" ").map((q) => q.split(",").map(Number));
+    const ar = Number(p.ar) || 1;
+    for (let i = 0, n = 0; i < 90 && n < 16; i++) {
+      const sx = 8 + ((i * 37) % 84);
+      const sy = 8 + ((i * 61 + 13) % 84);
+      if (!inPoly(sx, sy, P)) continue;
+      n++;
+      spark += `<ellipse class="sp" cx="${sx}" cy="${sy}" rx="1.8" ry="${(1.8 * ar).toFixed(2)}" style="animation-delay:-${((i * 0.37) % 2.2).toFixed(2)}s"/>`;
+    }
+    spark = `<g class="spk" style="--hc:${hcol}">${spark}</g>`;
+  }
+  const halo = hl && hk === "spin" ? "" : hl && hk === "sparkle" ? spark : hl && hk !== "tint" ? `<g class="hl ${hk}" style="--hc:${hcol}"><polygon points="${pts}" class="hw"/><polygon points="${pts}" class="hm"/>${hk === "flow" ? `<polygon points="${pts}" class="hf" pathLength="100"/>` : `<polygon points="${pts}" class="hn"/>`}</g>` : "";
+  const geo = `left:${x}%;top:${y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)`;
+  if (part === "hl") return halo ? `<div class="pic hlonly" style="${geo}"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${halo}</svg></div>` : "";
+  const glow = part === "body" ? "" : halo;
   const edge = look === "outline" || look === "dotted" || busy;
-  const line = edge || halo ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${halo}${edge ? `<polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/>` : ""}</svg>` : "";
+  const line = edge || glow ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${glow}${edge ? `<polygon points="${pts}" class="${look === "dotted" ? "dot" : ""}"/>` : ""}</svg>` : "";
   const tint2 = hl && hk === "tint" && pic ? `<span class="ptint" style="background:${hcol};-webkit-mask-image:url('${cesc(url)}');mask-image:url('${cesc(url)}')"></span>` : "";
-  return `<div class="pic ${look} ${busy ? "busy" : ""} ${cls}" ${attrs} style="left:${x}%;top:${y}%;width:${p.w}%;aspect-ratio:${p.ar};transform:translate(-50%,-50%) rotate(${p.r || 0}deg)">${pic ? `<img src="${cesc(url)}" alt="" draggable="false">${tint}${tint2}` : ""}${line}</div>`;
+  return `<div class="pic ${look} ${busy ? "busy" : ""} ${hk === "spin" ? "spin" : ""} ${cls}" ${attrs} style="${geo}">${pic ? `<img src="${cesc(url)}" alt="" draggable="false"${hk === "spin" && hl && (hl.ox != null || hl.oy != null) ? ` style="transform-origin:${Number(hl.ox ?? 50)}% ${Number(hl.oy ?? 50)}%"` : ""}>${tint}${tint2}` : ""}${line}</div>`;
 }
 
 /** The Flow light's dash follows the outline's length on screen (after drawing). */
@@ -875,7 +915,10 @@ function picSizeFlow(root) {
 }
 
 const PIC_CSS = `
-.pic { position:absolute; z-index:1; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+.pic { position:absolute; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+.pic.hlonly { pointer-events:none; cursor:default; }
+.pic.spin img { animation: dfspin 3.2s linear infinite; }
+@keyframes dfspin { to { transform: rotate(360deg); } }
 .pic img { width:100%; height:100%; object-fit:fill; display:block; pointer-events:none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
 .pic.faint img { opacity:.38; filter:saturate(.4); }
 .pic .ptint { position:absolute; inset:0; mix-blend-mode:multiply; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
@@ -890,10 +933,196 @@ const PIC_CSS = `
 .pic svg .hl .hn { stroke-width:2; opacity:.95; }
 .pic svg .hl .hf { stroke-width:3; stroke-dasharray: 0 1000; stroke-linecap:round; animation: dfflow 2.4s linear infinite; filter: drop-shadow(0 0 3px var(--hc)); }
 .pic svg .hl.breathing { animation: dfbreath 2.6s ease-in-out infinite; }
+.pic svg .spk .sp { fill: var(--hc); filter: drop-shadow(0 0 2px var(--hc)); animation: dfspark 2.2s ease-in-out infinite; }
+@keyframes dfspark { 0%, 100% { opacity:0; } 50% { opacity:1; } }
 @keyframes dfflow { to { stroke-dashoffset: calc(var(--L, 100px) * -1); } }
 @keyframes dfbreath { 0%, 100% { opacity:.35; } 50% { opacity:1; } }
-@media (prefers-reduced-motion: reduce) { .pic svg .hl.breathing, .pic svg .hl .hf { animation:none; } }
+@media (prefers-reduced-motion: reduce) { .pic svg .hl.breathing, .pic svg .hl .hf, .pic svg .spk .sp, .pic.spin img { animation:none; } .pic svg .spk .sp { opacity:.8; } }
 `;
+/** 0.13.2 Christmas lights: small round bulbs along a drawn line (corners allowed), in rings, or (0.13.3) in a
+ *  spiral round a tree. One renderer for the card and the Floorplan Editor. Coordinates in % of the plan (x of its
+ *  width, y of its height).
+ *  0.13.3: bulb size in real centimetres (cm, 0.5..8; a plan that isn't measured counts as 12 m wide), spacing
+ *  like a real string (5 bulb widths, at least 8 cm), never smaller than about 2 px on screen; the bulbs are crisp points (their
+ *  light is one shared halo, drawn with the lamps' light pools); bulbs outside the walls of their room aren't drawn. */
+const XMAS_OLD = { s: 2, m: 3, l: 4 }; // 0.13.2's S / M / L become 2 / 3 / 4 cm (smaller, closer to real bulbs)
+const XMAS_MULTI = ["255,59,48", "52,199,89", "255,214,10", "10,132,255"];
+function xmasCm(sh) {
+  return Math.max(0.5, Math.min(8, Number(sh.cm) || XMAS_OLD[sh.size] || 3));
+}
+/** 0.13.6: the glow of each bulb in its own colour, as a diameter in cm: from the bulb's size up to 50 cm
+ *  (default 3.2 × the bulb). */
+function xmasGlowCm(sh) {
+  const cm = xmasCm(sh);
+  return Math.max(cm, Math.min(50, Number(sh.gl) || cm * 3.2));
+}
+/** Bulb radius and spacing in % of the plan width. realW: the plan's width in metres; pxw: screen px per 1 %. */
+function xmasDims(sh, realW, pxw) {
+  const W = realW > 0 ? realW : 12;
+  const cm = xmasCm(sh);
+  const rb = Math.max(cm / (2 * W), pxw ? 1 / pxw : 0); // ≥ 1 px radius on screen
+  // Spacing as on a real string, from the real size (5 bulb widths, at least 8 cm), and ≥ 4 px on screen.
+  const gap = Math.max(Math.max(cm * 5, 8) / W, pxw ? 4 / pxw : 0);
+  return { rb, gap };
+}
+function xmasBulbs(sh, ratio, realW, pxw) {
+  const { rb, gap } = xmasDims(sh, realW, pxw);
+  const out = [];
+  const Y = (v) => v / ratio; // to square units
+  if (sh.lay === "scatter") {
+    // 0.13.7: lights wound through a tree, seen from above: scattered at random but evenly (no clumps), the same
+    // every time for this light (seeded by its place and size); bulbs deeper in the tree (towards the edge) are
+    // smaller and fainter (k), and a few are half hidden by branches.
+    const r = Math.max(gap, Number(sh.r) || 5);
+    let seed = (Math.round(sh.x * 97) * 73856093) ^ (Math.round(sh.y * 89) * 19349663) ^ (Math.round(r * 101) * 83492791);
+    const rnd = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    // Seen from above, a string wound through several layers of branches looks denser than its wire spacing.
+    const want = Math.max(6, Math.round((Math.PI * r * r) / (gap * gap * 0.5)));
+    const min = gap * 0.55;
+    for (let tries = 0; tries < want * 40 && out.length < want; tries++) {
+      const d = Math.sqrt(rnd()) * r;
+      const t = rnd() * 2 * Math.PI;
+      const x = Math.cos(t) * d;
+      const y = Math.sin(t) * d;
+      if (out.some((q) => Math.hypot(q.dx - x, q.dy - y) < min)) continue;
+      const depth = d / r;
+      out.push({ dx: x, dy: y, x: sh.x + x, y: sh.y + y * ratio, k: (1 - 0.45 * depth) * (rnd() < 0.15 ? 0.6 : 1) });
+    }
+    return { rb, gap, bulbs: out };
+  }
+  if (sh.lay === "rings" || sh.lay === "spiral") {
+    const r = Math.max(gap, Number(sh.r) || 5);
+    if (sh.lay === "spiral") {
+      // One string winding outwards from the top of the tree, turns about 1.6 bulb gaps apart.
+      const a = (gap * 1.6) / (2 * Math.PI);
+      let t = (gap * 0.6) / a;
+      for (let i = 0; i < 2000; i++) {
+        const rr = a * t;
+        if (rr > r) break;
+        out.push({ x: sh.x + Math.cos(t) * rr, y: sh.y + Math.sin(t) * rr * ratio });
+        t += gap / Math.hypot(rr, a);
+      }
+      return { rb, gap, bulbs: out };
+    }
+    const n = Math.max(2, Math.round(r / (gap * 1.6)));
+    for (let i = 1; i <= n; i++) {
+      const ri = (r * i) / n;
+      const k = Math.max(5, Math.round((2 * Math.PI * ri) / gap));
+      for (let j = 0; j < k; j++) {
+        const t = (2 * Math.PI * j) / k + i * 0.35;
+        out.push({ x: sh.x + Math.cos(t) * ri, y: sh.y + Math.sin(t) * ri * ratio });
+      }
+    }
+    return { rb, gap, bulbs: out };
+  }
+  const pts = Array.isArray(sh.pts) && sh.pts.length >= 2 ? sh.pts : [[sh.x - 6, sh.y], [sh.x + 6, sh.y]];
+  let carry = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[i + 1];
+    const L = Math.hypot(bx - ax, Y(by) - Y(ay));
+    for (let d = carry; d <= L; d += gap) out.push({ x: ax + ((bx - ax) * d) / (L || 1), y: ay + ((by - ay) * d) / (L || 1) });
+    carry = gap - ((L - carry) % gap || gap);
+    if (carry >= gap) carry = 0;
+  }
+  return { rb, gap, bulbs: out };
+}
+/** "r,g,b" of bulb i: Multicolour, a white (k:<kelvin>) or the light's own colour. */
+function xmasRgb(sh, i, own) {
+  if (sh.bulb === "own") return own || "255,190,110";
+  if (sh.bulb === "white") return colourRgb(`k:${Number(sh.k) || 2700}`);
+  return XMAS_MULTI[i % XMAS_MULTI.length];
+}
+/** The colour of the shared halo: warm for multicolour strings (their colours mix to a warm light). */
+function xmasHaloRgb(sh, own) {
+  return sh.bulb === "own" ? own || "255,190,110" : sh.bulb === "white" ? colourRgb(`k:${Number(sh.k) || 2700}`) : "255,196,140";
+}
+/** The room shapes the lights stay in: the room under them (smallest) and the rooms open to it (#111 rule). */
+function xmasRooms(shapes, sh) {
+  const ids = Object.keys(shapes || {}).filter((k) => Array.isArray(shapes[k]) && shapes[k].length >= 3);
+  if (!ids.length) return null;
+  // The room under the lights' own place (their centre, else the marker), as for the lamps' light pools.
+  const cx = sh.x;
+  const cy = sh.y; // (Scattered, Spiral, Rings: their centre)
+  const area = (P) => Math.abs(P.reduce((t, p, i) => t + p[0] * P[(i + 1) % P.length][1] - P[(i + 1) % P.length][0] * p[1], 0)) / 2;
+  const under = ids.filter((k) => inPoly(cx, cy, shapes[k])).sort((x, y) => area(shapes[x]) - area(shapes[y]))[0];
+  if (!under) return null; // outside every room (a balcony railing): not limited
+  return shapeGroup(Object.fromEntries(ids.map((k) => [k, { shape: shapes[k] }])), under);
+}
+/** Effect timing per speed (seconds): one twinkle cycle, one chase lap, one flash. */
+const XMAS_DUR = { twinkle: { slow: 4.5, normal: 2.6, fast: 1.3 }, chase: { slow: 2.4, normal: 1.4, fast: 0.7 }, flash: { slow: 2.2, normal: 1.2, fast: 0.6 } };
+/** SVG markup (viewBox 0 0 100 100, not keeping the aspect). 0.13.6: one soft halo per string drawn under the bulbs
+ *  and animated with them (Flash: the area lights and goes dark with the bulbs; Twinkle / Chase: a gentle shimmer),
+ *  blended so it lifts the night; bulbs are a bright core with a small bloom in their own colour; Twinkle is a quick
+ *  blink-off at random moments, so the speed shows. Off: dark bulbs, no halo. */
+function xmasSvg(sh, ratio, { on = true, own = null, still = false, rooms = null, realW = 0, pxw = 0, id = "x" } = {}) {
+  const { rb, bulbs } = xmasBulbs(sh, ratio, realW, pxw);
+  const rg = Math.max(rb, xmasGlowCm(sh) / (2 * (realW > 0 ? realW : 12))); // the bulb's own glow, radius in %
+  const gk = Math.max(0.45, 1 - (xmasGlowCm(sh) / 50) * 0.5); // a wide glow is softer, so neighbours blend, not white out
+  const fx = still || !on ? "steady" : sh.fx || "twinkle";
+  const dur = fx === "steady" ? 0 : (XMAS_DUR[fx] || XMAS_DUR.twinkle)[sh.sp || "normal"] || 1.4;
+  const inside = (b) => !rooms || rooms.some((P) => inPoly(b.x, b.y, P));
+  const n = (v) => v.toFixed(3);
+  let hdefs = "";
+  let halo = "";
+  let clip = "";
+  if (on) {
+    const W = realW > 0 ? realW : 12;
+    const reach = 28 / W; // about 28 cm of glow around the string
+    const c = xmasHaloRgb(sh, own);
+    const multi = !sh.bulb || sh.bulb === "multi";
+    const hfx = fx === "flash" ? `animation:dfx-flash ${dur}s infinite steps(1,end)` : fx === "steady" ? "" : `animation:${multi ? "dfx-drift-c" : "dfx-drift"} ${(dur * 2.4).toFixed(2)}s infinite ease-in-out`;
+    if (rooms && rooms.length) clip = `<clipPath id="xc${id}">${rooms.map((P) => `<polygon points="${P.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>`).join("")}</clipPath>`;
+    const cp = clip ? ` clip-path="url(#xc${id})"` : "";
+    if (sh.lay === "rings" || sh.lay === "spiral" || sh.lay === "scatter") {
+      const r = (Number(sh.r) || 5) + reach;
+      hdefs = `<radialGradient id="xg${id}"><stop offset="0" stop-color="rgb(${c})" stop-opacity=".55"/><stop offset=".6" stop-color="rgb(${c})" stop-opacity=".22"/><stop offset="1" stop-color="rgb(${c})" stop-opacity="0"/></radialGradient>`;
+      halo = `<ellipse class="xhalo" cx="${n(sh.x)}" cy="${n(sh.y)}" rx="${n(r)}" ry="${n(r * ratio)}" fill="url(#xg${id})"${cp} style="${hfx}"/>`;
+    } else {
+      const pts = Array.isArray(sh.pts) && sh.pts.length >= 2 ? sh.pts : [[sh.x - 6, sh.y], [sh.x + 6, sh.y]];
+      hdefs = `<filter id="xb${id}" filterUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><feGaussianBlur stdDeviation="${n(reach * 0.55)}"/></filter>`;
+      // The drift animates the CSS filter (hue), so it goes on a wrapper: the blur stays on the line itself.
+      halo = `<g${cp}><g class="xhalo" style="${hfx}"><polyline points="${pts.map((q) => `${n(q[0])},${n(q[1])}`).join(" ")}" fill="none" stroke="rgb(${c})" stroke-opacity=".38" stroke-width="${n(reach * 1.6)}" stroke-linecap="round" stroke-linejoin="round" filter="url(#xb${id})"/></g></g>`;
+    }
+  }
+  const body = bulbs.map((b, i) => {
+    if (!inside(b)) return ""; // walls: not outside its rooms
+    const c = on ? xmasRgb(sh, i, own) : "60,60,60";
+    let anim = "";
+    if (fx === "twinkle") {
+      const r1 = ((i * 7919) % 97) / 97;
+      const r2 = ((i * 104729) % 89) / 89;
+      anim = ` style="animation:dfx-twinkle ${(dur * (0.7 + r2 * 0.6)).toFixed(2)}s ${(-r1 * dur * 3).toFixed(2)}s infinite"`;
+    } else if (fx === "chase") anim = ` style="animation:dfx-chase ${dur}s ${(-(i % 6) * (dur / 6)).toFixed(2)}s infinite"`;
+    else if (fx === "flash") anim = ` style="animation:dfx-flash ${dur}s infinite steps(1,end)"`;
+    const k = b.k || 1; // 0.13.7 Scattered: deeper in the tree = smaller and fainter
+    const R = rb * (0.55 + 0.45 * k);
+    const G = rg * (0.55 + 0.45 * k);
+    const bloom = on && G > R ? `<ellipse cx="${n(b.x)}" cy="${n(b.y)}" rx="${n(G)}" ry="${n(G * ratio)}" fill="url(#xo${id}-${c.replace(/,/g, "-")})"/>` : "";
+    const core = on ? `<ellipse cx="${n(b.x)}" cy="${n(b.y)}" rx="${n(R * 0.45)}" ry="${n(R * 0.45 * ratio)}" fill="rgba(255,255,255,.75)"/>` : "";
+    const op = on ? (k < 1 ? ` opacity="${(0.35 + 0.65 * k).toFixed(2)}"` : "") : ' opacity=".8"';
+    return `<g class="xbulb"${anim}><g${op}>${bloom}<ellipse cx="${n(b.x)}" cy="${n(b.y)}" rx="${n(R)}" ry="${n(R * ratio)}" fill="rgb(${c})"/>${core}</g></g>`;
+  }).join("");
+  // One soft bloom gradient per bulb colour used.
+  const cols = on ? [...new Set(bulbs.map((_b, i) => xmasRgb(sh, i, own)))] : [];
+  const odefs = cols.map((c) => `<radialGradient id="xo${id}-${c.replace(/,/g, "-")}"><stop offset="0" stop-color="rgb(${c})" stop-opacity="${(0.85 * gk).toFixed(2)}"/><stop offset=".35" stop-color="rgb(${c})" stop-opacity="${(0.45 * gk).toFixed(2)}"/><stop offset="1" stop-color="rgb(${c})" stop-opacity="0"/></radialGradient>`).join("");
+  return `${clip || hdefs || odefs ? `<defs>${clip}${hdefs}${odefs}</defs>` : ""}${halo}${body}`;
+}
+const XMAS_CSS = `@keyframes dfx-twinkle { 0%, 72% { opacity:1 } 80% { opacity:.06 } 88%, 100% { opacity:1 } }
+@keyframes dfx-chase { 0% { opacity:1 } 30%, 100% { opacity:.12 } }
+@keyframes dfx-flash { 0% { opacity:1 } 50% { opacity:.06 } }
+@keyframes dfx-drift { 0% { opacity:.5 } 30% { opacity:1 } 55% { opacity:.62 } 80% { opacity:.95 } 100% { opacity:.5 } }
+@keyframes dfx-drift-c { 0% { opacity:.5; filter:hue-rotate(-30deg) } 30% { opacity:1; filter:hue-rotate(0deg) } 55% { opacity:.62; filter:hue-rotate(35deg) } 80% { opacity:.95; filter:hue-rotate(10deg) } 100% { opacity:.5; filter:hue-rotate(-30deg) } }
+.xmas { stroke:none; }
+.xmas .xhalo { mix-blend-mode: screen; }
+@media (prefers-reduced-motion: reduce) { .xmas .xbulb, .xmas .xhalo { animation:none !important; } }`;
+if (!window.__dfcXmas) window.__dfcXmas = { svg: xmasSvg, bulbs: xmasBulbs, rooms: xmasRooms, cm: xmasCm, glow: xmasGlowCm, css: XMAS_CSS };
+
 if (!window.__dfcPic) window.__dfcPic = { html: picMarkup, sizeFlow: picSizeFlow, css: PIC_CSS, looks: PIC_LOOK };
 const PIC_OFF = new Set(["off", "unknown", "idle", "standby", "closed", "docked", "paused", "not_home", "unavailable"]);
 const STATIC_BASE = "/device_floorplan_static";
@@ -1055,14 +1284,15 @@ ha-card.dock-right { flex-direction: row; }
 @keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
 .box svg.pulse { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
-.box svg.pulse .ptap { pointer-events: all; cursor:pointer; }
+.box svg.taps { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+.box svg.taps .ptap, .box svg.taps .atap { pointer-events: all; cursor:pointer; }
 .pg.breathe { animation: dfcBreathe 3.6s ease-in-out infinite; }
 .pg.steady { opacity:.5; }
 .pg.fade { animation: dfcPulseOut 2s linear forwards; }
 @keyframes dfcBreathe { 0%, 100% { opacity:.45; } 50% { opacity:1; } }
 @keyframes dfcPulseOut { from { opacity:.8; } to { opacity:0; } }
 @media (prefers-reduced-motion: reduce) { .pg.breathe { animation:none; opacity:.8; } }
-.box svg.air .atap { pointer-events: all; cursor:pointer; }
+/* 0.13.4: the air flow's tap area is in svg.taps (under the pictures), the drawing itself takes no taps */
 .box svg.air, .box svg.shade { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .nglow { mix-blend-mode: soft-light; }
 .nglow.day { mix-blend-mode: multiply; opacity:.85; filter: saturate(1.6); }
@@ -1080,6 +1310,10 @@ ${PIC_CSS}
 .m.person .ic { background: var(--dfc-accent); color:#fff; font-weight:600; font-size: calc(var(--dfc-size) * .38); overflow:hidden; border: 2px solid var(--card-background-color, #fff); width: calc(var(--dfc-size) * 1.1); height: calc(var(--dfc-size) * 1.1); }
 .m.person .ic img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .m.person.low .ic { opacity:.55; border-style: dashed; }
+.m.person.pd .ic { opacity:.85; }
+svg.pdr { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+svg.pdr ellipse { fill:none; stroke:var(--dfc-accent, #2196f3); stroke-opacity:.3; stroke-width:1.5; stroke-dasharray:4 4; vector-effect:non-scaling-stroke; }
+svg.pdr ellipse.near { stroke-opacity:.75; stroke-dasharray:none; }
 .m.person { z-index:3; }
 .prow { display:flex; align-items:center; gap:8px; padding:6px 4px 0; flex-wrap:wrap; font-size:12px; color: var(--secondary-text-color); }
 .prow button { border:0; background:transparent; padding:0; cursor:pointer; display:flex; align-items:center; gap:5px; font: inherit; color: var(--primary-text-color); }
@@ -1100,6 +1334,8 @@ svg.lines path.eln { fill:none; stroke-width:1.5; stroke-linecap:round; }
 .wins { position:absolute; inset:0; pointer-events:none; z-index:4; }
 .cwin { position:absolute; pointer-events:auto; border:2px solid #fff; border-radius:10px; overflow:hidden; background:#222; box-shadow: 0 4px 14px rgba(0,0,0,.4); cursor:pointer; }
 .cwin img { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+.cwin .cvid { width:100%; height:100%; display:block; pointer-events:none; overflow:hidden; } /* 0.13.1: live video */
+.cwin .cvid ::slotted(ha-camera-stream) { width:100%; height:100%; display:block; }
 .cwin.dr { cursor:grab; touch-action:none; }
 .cwin.drag { cursor:grabbing; z-index:3; box-shadow: 0 10px 28px rgba(0,0,0,.5); transform: scale(1.03); }
 .lines .wguide { stroke: var(--dfc-accent); stroke-width:1; stroke-dasharray: 4 4; opacity:.8; }
@@ -1130,6 +1366,8 @@ svg.lines path.elbow { fill:none; stroke:#26a69a; stroke-width:2; }
 .epin.val { width:auto; min-width:32px; padding:0 9px 0 6px; border-radius:16px; gap:4px; font-size:12px; font-weight:600; white-space:nowrap; }
 .room .rage.epw { color: var(--energy-grid-consumption-color, #488fc2); font-weight:600; }
 .newov { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 12px 2px; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--primary-color, #03a9f4) 10%, transparent); font-size: 13px; }
+.notes { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; flex-direction:column; gap:6px; width:max-content; max-width: calc(100% - 24px); pointer-events:none; }
+.notes .newov { margin:0; pointer-events:auto; background: color-mix(in srgb, var(--card-background-color, #fff) 88%, var(--primary-color, #03a9f4)); box-shadow: 0 2px 10px rgba(0,0,0,.25); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .newov ha-icon { --mdc-icon-size: 18px; color: var(--primary-color, #03a9f4); }
 .newov button { border: 0; border-radius: 14px; padding: 4px 12px; font: inherit; cursor: pointer; background: var(--secondary-background-color, rgba(0,0,0,.06)); color: var(--primary-text-color); }
 .newov button[data-add] { background: var(--primary-color, #03a9f4); color: #fff; }
@@ -1253,7 +1491,7 @@ svg.lines path.elbow { fill:none; stroke:#26a69a; stroke-width:2; }
 .heatleg.eleg ha-icon { --mdc-icon-size:16px; margin-right:3px; }
 .room.solo { padding: 1px 7px; }
 .room.solo small.rage { opacity: 1; font-size: .9em; font-weight: 600; }
-.room small.rage.now { color: rgb(33,150,243); opacity: 1; font-weight: 600; }
+.room small.rage.now { color: #fff; background: rgb(21,101,192); opacity: 1; font-weight: 600; display: table; margin: 2px auto 0; padding: 1px 8px; border-radius: 999px; text-shadow: none; box-shadow: 0 1px 3px rgba(0,0,0,.35); } /* 0.13.3: readable on the blue "cleaning now" room */
 .room small.rage { display:block; font-size:.78em; opacity:.75; font-weight:400; text-align:center; }
 .rdock.chg { color:#43a047; }
 .rdock .rdw { position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:#ffa000; border:1.5px solid var(--card-background-color, #fff); }
@@ -2022,6 +2260,8 @@ class DeviceFloorplanCard extends HTMLElement {
     this._onExternal = this._onExternal || ((e) => this._external(e.detail || {}));
     this._onLocation = this._onLocation || (() => this._fromUrl());
     window.addEventListener("device-floorplan-action", this._onExternal);
+    this._onTip = this._onTip || (() => this._update(true));
+    window.addEventListener("dfc-tip", this._onTip);
     window.addEventListener("location-changed", this._onLocation);
     window.addEventListener("popstate", this._onLocation);
     this._onVisible = this._onVisible || (() => {
@@ -2029,6 +2269,9 @@ class DeviceFloorplanCard extends HTMLElement {
     });
     document.addEventListener("visibilitychange", this._onVisible);
     if (!this._ro && typeof ResizeObserver !== "undefined") this._ro = new ResizeObserver(() => this._layoutSoon());
+    // 0.13.2 (#22): the screen's free height changes on resize / turning the phone.
+    this._onWinResize = this._onWinResize || (() => this._layoutSoon());
+    window.addEventListener("resize", this._onWinResize);
     this._connected = true;
     // The night look follows the sun / the clock: check every two minutes (renders only on change).
     clearInterval(this._nightT);
@@ -2040,12 +2283,14 @@ class DeviceFloorplanCard extends HTMLElement {
 
   disconnectedCallback() {
     this._connected = false;
+    if (this._onWinResize) window.removeEventListener("resize", this._onWinResize);
     clearInterval(this._nightT);
     this._netTimer(false); // 0.11: no Network polling after the card is gone
     clearTimeout(this._trigT);
     if (this._rp) this._rpStop();
     if (this._rpPop) this._rpPop();
     window.removeEventListener("device-floorplan-action", this._onExternal);
+    if (this._onTip) window.removeEventListener("dfc-tip", this._onTip);
     window.removeEventListener("location-changed", this._onLocation);
     window.removeEventListener("popstate", this._onLocation);
     document.removeEventListener("visibilitychange", this._onVisible);
@@ -2227,6 +2472,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "energy") return { fill: true, flow: this._ov("energy").flow !== false }[name] ?? true;
     if ((ov === "live" || ov === "security") && name === "cams") return false;
     if (name === "replay") return false; // 0.11.1 Home Replay (cards without a rail): off until a viewer turns it on
+    if (ov === "network" && name === "pall") return false; // 0.13.9.4: only the nearest proxy's ring by default
     return true;
   }
 
@@ -2305,12 +2551,14 @@ class DeviceFloorplanCard extends HTMLElement {
     } else if (mode === "times") f = timesFactor(n.start, n.end, new Date(this._now()));
     return { f: Math.round(f * 20) / 20, tint, mode };
   }
+}
+Object.assign(DeviceFloorplanCard.prototype, {
 
-  /** Lights that are on, as glowing pools from their shape in the Editor (default: a bulb). */
-  _pools(a) {
+  /** The lights on the plan with their shape source: one per item, or one per lamp of a bond set to "per lamp".
+   *  { item, src, chosen, lights, on }. Shared by the light pools and the Christmas lights (0.13.2). */
+  _lightSrcs(a) {
     const hass = this._hass;
-    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
-    const out = [];
+    const res = [];
     for (const item of this._items(a)) {
       if (item.phantom) continue;
       // #84: lamps get a bulb by default; anything else with a light only when a shape was chosen.
@@ -2322,12 +2570,49 @@ class DeviceFloorplanCard extends HTMLElement {
         ? (item.mlights || []).filter((m) => m.ent && domainOf(m.ent) === "light").map((m) => ({ light: m.light, lights: [m.ent] }))
         : [{ light: item.light, lights: null }];
       for (const src of srcs) {
-      const chosen = src.light && src.light.type;
-      if (!lamp && (!chosen || src.light.type === "none")) continue;
-      const pool = item.bond ? item.entities : (item.allEntities || item.entities || []).concat(item.main_entity ? [item.main_entity] : []);
-      const lights = src.lights || [...new Set(pool)].filter((e) => e && (domainOf(e) === "light" || (item.as === "light" && e === item.main_entity)));
-      if (!lights.length) continue;
-      const on = lights.map((e) => hass.states[e]).filter((s) => s && s.state === "on");
+        const chosen = src.light && src.light.type;
+        if (!lamp && (!chosen || src.light.type === "none")) continue;
+        const pool = item.bond ? item.entities : (item.allEntities || item.entities || []).concat(item.main_entity ? [item.main_entity] : []);
+        let lights = src.lights || [...new Set(pool)].filter((e) => e && (domainOf(e) === "light" || (item.as === "light" && e === item.main_entity)));
+        // 0.13.2: a light shape on a smart plug (Category: Lights) follows the plug (its main entity).
+        if (!lights.length && chosen && chosen !== "none" && item.main_entity && ["switch", "input_boolean"].includes(domainOf(item.main_entity))) lights = [item.main_entity];
+        if (!lights.length) continue;
+        const on = lights.map((e) => hass.states[e]).filter((s) => s && s.state === "on");
+        res.push({ item, src, chosen, lights, on });
+      }
+    }
+    return res;
+  },
+
+  /** 0.13.2: Christmas lights (Live, Lights): bulbs lit with their effect while the light or plug is on; when off,
+   *  dark bulbs, or nothing when its marker is set to hide when off (Edit markers, "When it is off"). */
+  _xmasHtml(a) {
+    const ov = this._overlay;
+    if (ov !== "live" && ov !== "lights") return "";
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const shapes = Object.fromEntries(Object.entries(a.areas || {}).filter(([, v]) => v && v.shape).map(([k, v]) => [k, v.shape]));
+    let body = "";
+    let xi = 0;
+    for (const { item, src, chosen, on } of this._lightSrcs(a)) {
+      if (chosen !== "xmas" || this._hidden(item, ov)) continue;
+      const lit = on.length > 0;
+      // Off: the marker's "When it is off" (else the card's Live setting): hidden = no bulbs, faint / shown = dark bulbs.
+      if (!lit && (this._per(item, "live").off || (this._config.live || {}).show_off || "hidden") === "hidden") continue;
+      const L = src.light;
+      const sh = { ...L, x: Number.isFinite(L.cx) ? L.cx : item.x, y: Number.isFinite(L.cy) ? L.cy : item.y };
+      body += xmasSvg(sh, ratio, { on: lit, own: lit ? bulbRgb(on[0].attributes || {}, L.color) : null, still, rooms: xmasRooms(shapes, sh), realW: a.real_width_m, pxw: (this._boxW || 0) / 100, id: `c${xi++}` });
+    }
+    if (!body) return "";
+    return `<svg class="air xmas" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><style>${XMAS_CSS}</style>${body}</svg>`;
+  },
+
+  /** Lights that are on, as glowing pools from their shape in the Editor (default: a bulb). */
+  _pools(a) {
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const out = [];
+    for (const { item, src, chosen, lights, on } of this._lightSrcs(a)) {
+      {
       if (!on.length) continue;
       const shape = chosen ? { ...defaultShape(src.light.type, a.real_width_m), ...src.light } : defaultShape("bulb", a.real_width_m);
       if (["none", "screen", "drum", "line"].includes(shape.type)) continue;
@@ -2348,11 +2633,13 @@ class DeviceFloorplanCard extends HTMLElement {
       if (!start) start = under;
       if (!this._groups || this._groups.a !== a) this._groups = { a, by: {} };
       if (start && !(start in this._groups.by)) this._groups.by[start] = shapeGroup(areas, start);
+      // 0.13.3: Christmas lights glow as one soft halo around the string (their bulbs are drawn on top, crisp).
+      if (shape.type === "xmas") continue; // 0.13.6: Christmas lights draw their halo with their bulbs (animated)
       out.push({ rgb: bulbRgb(on[0].attributes || {}, src.light && src.light.color), b, ell: shapeEllipses(cx, cy, shape, ratio), shapes: start ? this._groups.by[start] : null });
       }
     }
     return out;
-  }
+  },
 
   /** 0.7.4: an appliance with a drum or line drawn in the Editor: its type and readings (null = not one). */
   _applOf(item) {
@@ -2373,7 +2660,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.8.2: a progress sensor in % (Midea, SmartThings washers and dryers since HA 2026.11).
     const progress = ents.find((e) => domainOf(e) === "sensor" && /progress/.test(e) && (hass.states[e].attributes || {}).unit_of_measurement === "%");
     return { item, type, status, remaining, running, power, door, plug, progress, ents };
-  }
+  },
 
   /** Current state of an appliance: phase, colour, label and the rows for its panel. */
   _applState(ap) {
@@ -2446,7 +2733,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const w = ap.power && live(S(ap.power)) ? `${Math.round(Number(S(ap.power).state))} W` : "";
     const col = APPL_COL[phase] || (phase === "run" ? (ap.type === "dryer" ? APPL_COL.heat : APPL_COL.water) : null);
     return { phase, col, word, time, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
-  }
+  },
 
   /** Live: appliances glow on their drum (front view) or along their line (seen from above) while they work;
    *  close ones share one label; tap opens a small panel (information, never the plug). */
@@ -2514,19 +2801,19 @@ class DeviceFloorplanCard extends HTMLElement {
       html += `<button class="applbl ${att ? "att" : ""}" style="left:${x}%;top:${y}%" data-anc="${anc}" data-appl="${cesc(grp.map((o) => o.id).join(","))}" aria-label="${cesc(grp.map((o) => this._applTip(o)).join(", "))}">${rows}</button>`;
     }
     return html;
-  }
+  },
 
   /** 0.8.1: "name · state · time" for the hover label, like the info card's headline. */
   _applTip(o) {
     const t = o.st.time ? o.st.time.replace(" remaining", "").replace(" elapsed", "") : "";
     return [this._dev(o.ap.item.id).name || o.ap.item.name, o.st.phase === "done" ? "Finished" : this._applWord(o), t].filter(Boolean).join(" · ");
-  }
+  },
 
   /** The appliance's word on its label: the leading entity chosen in Edit markers, else its status. */
   _applWord(o) {
     const l = this._per(o.ap.item, "live").lead;
     return l && this._hass.states[l] ? this._fmt(l) : o.st.word;
-  }
+  },
 
   /** 0.7.4: a TV that is on lights the room from its screen: a soft, slowly changing glow (Live, Lights). */
   _tvHtml(a) {
@@ -2571,9 +2858,19 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     if (!n) return "";
     return `<svg class="air" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
-  }
+  },
 
   /** #115: air flowing from ACs while they cool / heat (Live, Comfort), kept inside the room shapes. */
+  /** 0.13.4: what you tap follows the old order even though light is drawn over pictures: room-wide tap areas
+   *  (a room's motion / presence, an AC's air flow) sit in one transparent layer UNDER the pictures, touch areas
+   *  and markers, so tapping a picture or a marker never opens the room. Same shapes as the drawings. */
+  _tapLayer(pulseH, airH) {
+    const pulse = (pulseH.match(/<polygon points="[^"]*" fill="transparent" class="ptap"[^>]*\/>/g) || []).join("");
+    const air = (airH.match(/<g clip-path="url\(#[^)]*\)"><polygon class="atap"[^>]*\/>|<g><polygon class="atap"[^>]*\/>/g) || [])
+      .map((g) => `${g.replace(/fill="url\(#[^)]*\)"/, 'fill="transparent"')}</g>`).join("");
+    return pulse || air ? `<svg class="taps" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${pulse}${air}</svg>` : "";
+  },
+
   _airHtml(a) {
     const ov = this._overlay;
     if (ov !== "live" && ov !== "comfort") return "";
@@ -2635,7 +2932,7 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     if (!n) return "";
     return `<svg class="air" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>`;
-  }
+  },
 
   /** 0.7.0: every door / window / shutter spot on the plan (devices and entity spots, bonded too). */
   _openSpots(a) {
@@ -2690,14 +2987,14 @@ class DeviceFloorplanCard extends HTMLElement {
     this._osH = hass;
     this._os = out;
     return out;
-  }
+  },
 
   /** Entities that have a bar drawn: their markers step aside in Live. */
   _barEnts() {
     const a = this._a;
     if (!a || !this._hass) return new Set();
     return new Set(this._openSpots(a).filter((o) => o.geo).map((o) => o.eid));
-  }
+  },
 
   /** How far open, 0…1 (null = unknown). */
   _openFrac(o) {
@@ -2707,7 +3004,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const p = st.attributes.current_position;
     if (num(p)) return Math.max(0, Math.min(1, Number(p) / 100));
     return st.state === "closed" ? 0 : 1;
-  }
+  },
 
   /** 0.7.0: doors and windows as a light blue bar while open.
    *  0.7.4: shutters as a white bar for the part that is closed: open = nothing, closed = full bar.
@@ -2756,14 +3053,14 @@ class DeviceFloorplanCard extends HTMLElement {
       html += bar(`shut${track}`, `<i style="width:${w}%${roll ? `;margin-left:${((100 - shut * 100) / 2).toFixed(1)}%` : ""}"></i>`);
     }
     return html;
-  }
+  },
 
   /** 0.7.3: the shaped room a device sits in (its area, else the shape under it). */
-  _roomOf(item) {
-    const areas = (this._a && this._a.areas) || {};
+  _roomOf(item, a = this._a) {
+    const areas = (a && a.areas) || {};
     if (item.area_id && areas[item.area_id] && Array.isArray(areas[item.area_id].shape) && areas[item.area_id].shape.length >= 3) return item.area_id;
     return Object.keys(areas).find((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3 && inPoly(item.x, item.y, areas[k].shape)) || null;
-  }
+  },
 
   /** Motion and presence sensors on the plan, with their room. */
   _motionSpots(a) {
@@ -2784,7 +3081,7 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     }
     return out;
-  }
+  },
 
   /** 0.7.3: Room pulse. Motion: the room's edges glow and breathe; presence: a steady faint outline;
    *  cleared: fades out over 2 s. Only along real walls: where a room overlaps another (open plan),
@@ -2834,7 +3131,7 @@ class DeviceFloorplanCard extends HTMLElement {
       i++;
     }
     return body ? `<svg class="pulse" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${defs}</defs>${body}</svg>` : "";
-  }
+  },
 
   /** 0.7.2: daylight per room, spreading through the home.
    *  Sources: a window lets light in whatever its state; a shutter by how far it's open; doors don't count.
@@ -2890,7 +3187,7 @@ class DeviceFloorplanCard extends HTMLElement {
       d = nd;
     }
     return { ids, d };
-  }
+  },
 
   /** #117 / 0.7.2: one shading layer by day; each spot gets one value (no doubling where shapes overlap),
    *  soft between rooms that touch, crisp at walls and outside. */
@@ -2923,7 +3220,7 @@ class DeviceFloorplanCard extends HTMLElement {
 <clipPath id="shc">${clip}</clipPath>
 <mask id="shm" maskUnits="userSpaceOnUse" x="-5" y="-5" width="110" height="110"><rect x="-5" y="-5" width="110" height="110" fill="#000"/><g filter="url(#shf)">${paint}</g></mask></defs>
 <rect x="0" y="0" width="100" height="100" fill="rgb(12,18,34)" mask="url(#shm)" clip-path="url(#shc)"/></svg>`;
-  }
+  },
 
   _nightHtml(a) {
     const n = this._night();
@@ -2956,18 +3253,20 @@ class DeviceFloorplanCard extends HTMLElement {
       else html += `<div class="nglow day" style="background-image:${g};background-size:100% 100%"></div><div class="nglow2" style="background-image:${g};background-size:100% 100%;opacity:.35"></div>`;
     }
     return html;
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   // ------------------------------------------------------------- people (#67)
   _people() {
     return Array.isArray(this._config.people) ? this._config.people.filter((p) => p && p.entity) : [];
-  }
+  },
 
   _peopleShown() {
     if (!this._people().length) return false;
     const ov = this._overlay;
-    return ov === "live" || (Array.isArray(this._config.people_in) && this._config.people_in.includes(ov));
-  }
+    return ov === "live" || (Array.isArray(this._config.people_in) && this._config.people_in.includes(ov)) || this._pdOn();
+  },
 
   /** Which room a person is in: room sensor 1, else 2; state = area name, id or alias of a room pin. */
   _personRoom(p, a) {
@@ -2986,13 +3285,17 @@ class DeviceFloorplanCard extends HTMLElement {
       return { id: hit[0], ar: hit[1], low };
     }
     return null;
-  }
+  },
 
   _peopleData(a) {
     const hass = this._hass;
     const placed = [];
     const home = [];
+    const rings = [];
+    const pd = this._pdOn(); // 0.13.9.4: Network → Bluetooth shows the people with a distance sensor
+    const proxies = pd ? this._pdProxies(a) : [];
     for (const p of this._people()) {
+      if (pd && this._overlay === "network" && !p.distance) continue;
       const st = hass.states[p.entity];
       if (!st) continue;
       const name = p.name || entName(this._hass, p.entity);
@@ -3000,7 +3303,12 @@ class DeviceFloorplanCard extends HTMLElement {
       const initials = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
       const r = st.state === "home" || p.room || p.room2 ? this._personRoom(p, a) : null;
       const who = { eid: p.entity, name, pic, initials };
-      if (r && st.state !== "not_home") placed.push({ ...who, room: r.id, roomName: r.ar.name, low: r.low, x: r.ar.x, y: r.ar.y });
+      if (r && st.state !== "not_home") {
+        const rg = pd && p.distance ? this._pdRings(p, proxies) : [];
+        rings.push(...rg);
+        const spot = rg.length ? this._pdSpot(p.entity, r, rg, a) : null;
+        placed.push({ ...who, room: r.id, roomName: r.ar.name, low: r.low, x: spot ? spot.x : r.ar.x, y: spot ? spot.y : r.ar.y, pd: !!spot });
+      }
       else if (st.state === "home") home.push(who);
     }
     // Several people in one room: side by side under the room name.
@@ -3008,22 +3316,22 @@ class DeviceFloorplanCard extends HTMLElement {
     const H = W / (a.image_width && a.image_height ? a.image_width / a.image_height : 1.6);
     const size = (Number(this._look().size) || 34) * (this._scale || 1) * 1.15;
     const byRoom = {};
-    for (const x of placed) (byRoom[x.room] = byRoom[x.room] || []).push(x);
+    for (const x of placed) if (!x.pd) (byRoom[x.room] = byRoom[x.room] || []).push(x);
     for (const list of Object.values(byRoom)) list.forEach((x, i) => {
       x.x += ((i - (list.length - 1) / 2) * size * 1.08 * 100) / W;
       x.y += (size * 0.95 * 100) / H;
     });
-    return { placed, home };
-  }
+    return { placed, home, rings };
+  },
 
   _peopleHtml(a) {
     if (!this._peopleShown()) return { plan: "", row: "" };
-    const { placed, home } = this._peopleData(a);
+    const { placed, home, rings } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
-    const plan = placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
+    const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? " (not sure)" : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
     const row = this._overlay === "live" && home.length ? `<div class="prow"><span>Home</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: home, room unknown`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
-  }
+  },
 
   /** Tell chip cards on this screen which overlay is showing (#73). */
   _announce() {
@@ -3032,13 +3340,13 @@ class DeviceFloorplanCard extends HTMLElement {
     const key = (this._config && this._config.card_id) || "_";
     window.__dfpActive = { ...(window.__dfpActive || {}), [key]: this._overlay };
     window.dispatchEvent(new CustomEvent("device-floorplan-overlay", { detail: { card_id: (this._config && this._config.card_id) || null, overlay: this._overlay } }));
-  }
+  },
 
   _look() {
     const l = this._config.look || {};
     const markers = l.markers || (l.values === false || this._config.show_states === false ? "icon" : "icon_text");
     return { size: 34, chips: "dark", names: this._config.names || "hover", title: true, ...l, markers };
-  }
+  },
 
   _buttons() {
     const b = this._config.buttons || {};
@@ -3059,7 +3367,7 @@ class DeviceFloorplanCard extends HTMLElement {
       actions: b.actions || {},
       shortcuts: (Array.isArray(b.shortcuts) ? b.shortcuts : []).filter((x) => x && (x.name || x.icon)),
     };
-  }
+  },
 
   /** 0.8.2: the automatic status of the built-in overlay buttons, from the devices on this floor. */
   _autoStatus() {
@@ -3112,14 +3420,15 @@ class DeviceFloorplanCard extends HTMLElement {
       health: health ? { dot: "#ffa000" } : null,
       network: net ? { dot: "var(--error-color, #db4437)" } : null,
     };
-  }
+  },
 
   /** Status of a bar button: "auto" (built-ins), "off", or your own (entity + how it shows). */
   _btnStatus(st, auto) {
     if (st && st.mode === "off") return null;
     if (st && st.mode === "custom") return barStatus(this._hass, st);
+    if (st && st.mode === "auto") return auto || null; // 0.13.1: chosen on this button, no need for the switch above
     return this._buttons().auto ? auto || null : null;
-  }
+  },
 
   /** One bar button (an overlay or a shortcut), with its status on the icon (colour, dot or badge). */
   _barBtn({ attrs, cls, icon, label, st }) {
@@ -3127,7 +3436,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const col = s.color && s.badge == null ? ` style="color:${cesc(s.color)}"` : "";
     const mark = s.badge != null ? `<i class="bbadge"${s.color ? ` style="background:${cesc(s.color)}"` : ""}>${cesc(s.badge)}</i>` : s.dot ? `<i class="bdot" style="background:${cesc(s.dot)}"></i>` : "";
     return `<button class="${cls}" ${attrs} title="${cesc(label)}"><span class="bi"><ha-icon icon="${cesc(icon)}"${col}></ha-icon>${mark}</span><span class="bl">${cesc(label)}</span></button>`;
-  }
+  },
 
   /** Tap / hold of a shortcut or an overlay's hold: Home Assistant actions, plus reload and back. */
   _barRun(act, ent) {
@@ -3136,7 +3445,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (act.action === "reload") return location.reload();
     if (act.action === "back") return history.back();
     this.dispatchEvent(new CustomEvent("hass-action", { detail: { config: { entity: ent, tap_action: act }, action: "tap" }, bubbles: true, composed: true }));
-  }
+  },
 
   _barHold(t) {
     if (t.dataset.oact != null) {
@@ -3157,7 +3466,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const ent = (Array.isArray((sc.status || {}).entity) ? sc.status.entity[0] : (sc.status || {}).entity) || undefined;
     if (sc.hold_action) this._barRun(sc.hold_action, ent);
     else if (ent) this._moreInfo(ent);
-  }
+  },
 
   _barTap(i) {
     const sc = this._buttons().shortcuts[i];
@@ -3166,24 +3475,24 @@ class DeviceFloorplanCard extends HTMLElement {
     if (sc.tap_action) this._barRun(sc.tap_action, ent);
     else if (ent) this._moreInfo(ent);
     this._update(true);
-  }
+  },
 
   _rooms() {
     return { style: "label", size: "m", hidden: [], names: {}, ...(this._config.rooms || {}) };
-  }
+  },
 
   _lights() {
     return { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, scenes: [], ...(this._config.lights || {}) };
-  }
+  },
 
   _dev(id) {
     return (this._config.devices && this._config.devices[id]) || {};
-  }
+  },
 
   _sensor() {
     const id = this._config && (this._floor || this._planIds()[0]);
     return planSensors(this._hass).find((s) => s.attributes.plan_id === id) || null;
-  }
+  },
 
   // ------------------------------------------------------------- data
   /** Placed things: devices, helpers on their own, bonds (one item each). */
@@ -3224,21 +3533,21 @@ class DeviceFloorplanCard extends HTMLElement {
         byMember[m] = d.entities || [d.main_entity];
         mgroup[m] = d.group || ""; // 0.12.9: which temperatures count as a room's (Comfort)
       }
-      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms" });
+      out.push({ id: `ph:${pid}`, phantom: true, name: ph.name || "Phantom", icon: ph.icon, x: ph.x, y: ph.y, px: ph.px, py: ph.py, members: ph.members, names: mem.map(([, d]) => d.name), mains: mem.map(([, d]) => d.main_entity).filter(Boolean), units: phUnits(mem.map(([, d]) => d)), entities: ph.entities || [], byMember, mgroup, value: ph.value || "average", one: ph.one, group: "phantoms", ...(ph.pic ? { pic: ph.pic } : {}), ...(ph.touch ? { touch: ph.touch } : {}) });
     }
     return out;
-  }
+  },
 
   /** 0.10.2: entities hidden in Home Assistant are never picked automatically (a raw sensor behind a template). */
   _hiddenInHA(e) {
     const re = this._hass && this._hass.entities && this._hass.entities[e];
     return !!(re && re.hidden);
-  }
+  },
 
   _allowed(item) {
     const all = item.bond ? [...new Set([...(item.entities || []), ...(item.allEntities || [])])] : [...new Set([item.main_entity, ...(item.entities || [])].filter(Boolean))];
     return all.filter((e) => !this._hiddenInHA(e));
-  }
+  },
 
   /** 0.11: the selected marker in Edit markers when it's hidden or idle: a real, drawable marker (the quick
    *  "does it qualify" answer is only a key, which drew as "undefined" in custom overlays). */
@@ -3249,19 +3558,19 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.12.9: as it would look once shown (added): as itself, never a settings / technical value.
     const sp = this._asItself(item, name, this._addedLead(item));
     return sp ? [this._withExtras(sp, item, ov)] : [];
-  }
+  },
 
   _hidden(item, overlay) {
     const o = this._dev(item.id);
     return Array.isArray(o.hide_in) && o.hide_in.includes(overlay);
-  }
+  },
 
   _added(item, overlay) {
     const o = this._dev(item.id);
     if (this._ignoreAdded) return false;
     const c = this._custom().find((x) => x.id === overlay);
     return (Array.isArray(o.add_to) && o.add_to.includes(overlay)) || !!(c && Array.isArray(c.devices) && c.devices.includes(item.id));
-  }
+  },
 
   _mainKind(item) {
     if (item.bond) {
@@ -3269,7 +3578,7 @@ class DeviceFloorplanCard extends HTMLElement {
       return k || (item.domain === "cover" ? "cover" : item.domain === "switch" ? "switch" : "light");
     }
     return kindOf(item.main_entity, this._hass.states[item.main_entity]);
-  }
+  },
 
   /** Context the Network overlay needs: which placed devices are hubs, ZHA data. */
   _ctx(a) {
@@ -3277,7 +3586,9 @@ class DeviceFloorplanCard extends HTMLElement {
     const hubs = new Set();
     for (const d of Object.values(a.devices || {})) if (d.via && placed.has(d.via) && !(d.conns || []).includes("zigbee")) hubs.add(d.via);
     return { hubs, zha: (this._zha && this._zha.byIeee) || {} };
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Marker specs for the current overlay. */
   _markers(a) {
@@ -3301,7 +3612,7 @@ class DeviceFloorplanCard extends HTMLElement {
       out.push(...sp);
     }
     return this._robotSpecs(a, ov, out);
-  }
+  },
 
   /** 0.10: robots. Live: a robot out cleaning is one marker at its live position instead of its usual one.
    *  Cleaning: every robot, live or at its dock. Health: a robot not placed by hand sits at its dock with its battery.
@@ -3358,7 +3669,7 @@ class DeviceFloorplanCard extends HTMLElement {
       out.push({ type: "robot", kind: "appliance", key: `robot:${eid}`, item, eid, ents: [eid], name: dev.name || item.name, x: +p.x.toFixed(3), y: +p.y.toFixed(3), on: true, color: `rgb(${col})`, head, state: d.state, icon: this._per(item, ov).icon || dev.icon || st.attributes.icon || "mdi:robot-vacuum", badge, tone: ov === "health" ? "" : tone, tip: this._rbTip(st, d, info, a, cfg) });
     }
     return out;
-  }
+  },
 
   /** Everything the robot's device tells (HA's entity list): battery, consumables, dock, last run, error. Generic: names and units. */
   _rbInfo(eid, d) {
@@ -3407,7 +3718,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (d.state === "docked" && battery != null && battery < 100 && !charging) charging = true;
     const cons = Object.values(parts);
     return { battery, charging, cons, station, last, err, settings: [...new Set(settings)], attn: cons.some((c) => c.low) || station.length > 0 };
-  }
+  },
 
   /** Hover line: state, room and battery, or the robot's own error text. */
   _rbTip(st, d, info, a, cfg) {
@@ -3415,7 +3726,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (info.err) return info.err === "Error" ? word : `${word}: ${info.err}`;
     const room = this._rbRoom(a, cfg, d);
     return [word, room, info.battery != null ? `Battery ${Math.round(info.battery)}%` : ""].filter(Boolean).join(" · ");
-  }
+  },
 
   /** The room the robot is in: where it is on the plan's room shapes. */
   _rbRoom(a, cfg, d) {
@@ -3426,13 +3737,13 @@ class DeviceFloorplanCard extends HTMLElement {
     const p = rbApply(cfg.m, d.pos);
     const hit = Object.entries(a.areas || {}).find(([, r]) => Array.isArray(r.shape) && r.shape.length >= 3 && inPoly(p.x, p.y, r.shape));
     return hit ? (this._rooms().names || {})[hit[0]] || hit[1].name : "";
-  }
+  },
 
   /** "just now", "5 min ago", "2 d ago". */
   _agoTxt(t) {
     const x = this._ageTxt(t);
     return x === "just now" || !x ? x : `${x} ago`;
-  }
+  },
 
   _ageTxt(t) {
     const ms = this._now() - new Date(t).getTime();
@@ -3441,20 +3752,20 @@ class DeviceFloorplanCard extends HTMLElement {
     if (m < 60) return m < 2 ? "just now" : `${m} min`;
     const hrs = Math.round(m / 60);
     return hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`;
-  }
+  },
 
   /** A robot's name on the card: from Edit markers (placed or not), else its HA name. */
   _rbLabel(a, eid) {
     const placed = this._items(a).find((it) => !it.phantom && [it.main_entity, ...(it.entities || [])].includes(eid));
     const st = this._hass.states[eid];
     return this._dev(placed ? placed.id : `robot:${eid}`).name || (st && st.attributes.friendly_name) || eid;
-  }
+  },
 
   /** Days between cleanings of a room (plan setting per room, else the plan's default; 0 = never due). */
   _pace(a, id) {
     const v = (a.pace || {})[id] ?? a.pace_default ?? (this._config.cleaning || {}).overdue ?? 7;
     return Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 7;
-  }
+  },
 
   /** 0.10: rooms tinted by how long ago a robot cleaned them (a layer of Cleaning; tap a room to clean it). */
   _freshHtml(a) {
@@ -3471,7 +3782,7 @@ class DeviceFloorplanCard extends HTMLElement {
       return `<polygon data-croom="${cesc(id)}" points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:${fill}"></polygon>`;
     }).join("");
     return `<svg class="fresh" viewBox="0 0 100 100" preserveAspectRatio="none" style="opacity:${this._cleanOp() / 100}">${polys}</svg>`;
-  }
+  },
 
   /** 0.10: the cleaning path (a layer, always blue) and the dock of each robot; the dock is green while charging. */
   _robotHtml() {
@@ -3496,13 +3807,13 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     }
     return `${svg ? `<svg class="rpath" viewBox="0 0 100 100" preserveAspectRatio="none">${svg}</svg>` : ""}${html}`;
-  }
+  },
 
   _robotMarker(s) {
     const pulse = ["error", "paused"].includes(s.state) && this._overlay !== "health" ? s.state : "";
     const badge = s.badge ? `<span class="rbg ${s.tone}">${cesc(s.badge)}</span>` : "";
     return `<button class="m robot on ${pulse} ${this._hl === s.key ? "hl" : ""}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name} · ${s.tip}`)}"><span class="ic"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${s.head != null ? `<i class="rhd" style="transform:rotate(${s.head.toFixed(1)}deg)"></i>` : ""}</span>${badge}<span class="tip">${cesc(s.name)}<span class="tst"> · ${cesc(s.tip)}</span></span></button>`;
-  }
+  },
 
   /** 0.10: the robot panel (tap on a robot): state, last run, consumables, dock, and start / pause / dock. */
   _robotPop(p) {
@@ -3532,7 +3843,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="rbst" style="--c:rgb(${col})">${cesc(this._rbTip(st, d, info, a, cfg))}</div>
       ${rows.length ? `<div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>` : ""}${cons}${dock}
       <div class="rbcmds">${btns}</div><button class="more" data-mi="${cesc(eid)}">Details ›</button></div></div>`;
-  }
+  },
 
   /** 0.10: tap a room in Cleaning: when it was cleaned, and "Clean this room" (vacuum.clean_area, HA 2026.3). */
   _roomPop(p) {
@@ -3577,7 +3888,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const hint = btns ? "" : can.length ? `Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.` : robots.length ? "Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+)." : "";
     const close = `<button data-close="1" aria-label="Close">×</button>`;
     return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(name)}"><h3>${cesc(name)}${close}</h3><div>${cesc(when)}</div>${stats}${hint ? `<div class="rbhint">${cesc(hint)}</div>` : ""}${btns ? `<div class="acts">${btns}</div>` : ""}</div></div>`;
-  }
+  },
 
   /** Does this item show up in this overlay at all (ignoring its current state)? Used by the editor (#52). */
   _qualifies(item, ov, a) {
@@ -3588,19 +3899,46 @@ class DeviceFloorplanCard extends HTMLElement {
     } catch (_e) {
       return false;
     }
-  }
+  },
 
   /** Card settings of one device in one overlay (#100/#101): { lead, extras, icon, tap }. */
   /** 0.11: each camera its own colour (dot, line, picture border), stable: by its place among the plan's cameras. */
   _camColor(s) {
     const ids = this._a ? this._items(this._a).filter((it) => this._camOf(it)).map((it) => it.id).sort() : [];
     return E_COLORS[Math.max(0, ids.indexOf(s.item.id)) % E_COLORS.length];
-  }
+  },
 
   /** 0.11 Live camera, layer 3: a small dot where the camera is (spread like any marker). */
   _camHtml(s) {
     return `<button class="m camdot ${edgeCls(s.x, s.y, this._em)}" style="left:${s.x}%;top:${s.y}%;background:${this._camColor(s)}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(s.name)}"><span class="tip">${cesc(s.name)}</span></button>`;
-  }
+  },
+
+  /** 0.13.1: live video windows: one Home Assistant camera player per camera, kept between redraws and moved into
+   *  its window in the same task (so the stream keeps playing); dropped when its window is gone. */
+  _attachVids() {
+    // The players live in the card's own (light) DOM and are shown in their window through a <slot>: a redraw of the
+    // card never detaches them, so a stream isn't restarted on every state change.
+    const want = new Set();
+    for (const ph of this.shadowRoot.querySelectorAll(".cvid[data-vid]")) {
+      const eid = ph.dataset.vid;
+      const st = this._hass.states[eid];
+      if (!st) continue;
+      want.add(eid);
+      let v = [...this.children].find((n) => n.localName === "ha-camera-stream" && n.dataset.vid === eid);
+      if (!v) {
+        v = document.createElement("ha-camera-stream");
+        v.dataset.vid = eid;
+        v.slot = vidSlot(eid);
+        v.muted = true;
+        v.controls = false;
+        v.allowExoPlayer = false;
+        this.appendChild(v);
+      }
+      v.hass = this._hass;
+      if (!v.stateObj || v.stateObj.last_updated !== st.last_updated) v.stateObj = st; // a new object only when it changed
+    }
+    for (const n of [...this.children]) if (n.localName === "ha-camera-stream" && !want.has(n.dataset.vid)) n.remove();
+  },
 
   /** Layer 4, windows: camera pictures. Placed by _placeWins() after the markers, next to their dot. */
   _winHtml() {
@@ -3612,7 +3950,9 @@ class DeviceFloorplanCard extends HTMLElement {
     const tick = Math.floor(Date.now() / 10000);
     return `<div class="wins">${cams.map((sp) => {
       const pic = this._hass.states[sp.eid] && this._hass.states[sp.eid].attributes.entity_picture;
-      const src = pic ? `${pic}${pic.includes("?") ? "&" : "?"}_=${tick}` : "";
+      // 0.13.1: "Shows: live video" uses Home Assistant's own camera player (kept across redraws, see _attachVids).
+      const vid = this._per(sp.item, "live").video === "live";
+      const src = pic && !vid ? `${pic}${pic.includes("?") ? "&" : "?"}_=${tick}` : "";
       // Readings in the name bar: what you picked under Also show; automatically only a low battery.
       const lowAt = Number(this._ov("health").low ?? 20);
       const isLow = (e) => {
@@ -3634,9 +3974,9 @@ class DeviceFloorplanCard extends HTMLElement {
       const rds = ord.length ? `<span class="crd">${ord.map(pill).join("")}</span>` : "";
       const last = (this._camLast = this._camLast || {})[sp.key];
       this._camLast[sp.key] = src;
-      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="Close">×</button>` : ""}</span></div>`;
+      return `<div class="cwin" data-wk="${cesc(sp.key)}" data-c="${this._camColor(sp)}" role="button" aria-label="${cesc(sp.name)}" style="border-color:${this._camColor(sp)};${last ? `background:#222 url('${cesc(last)}') center/cover` : ""}">${vid ? `<div class="cvid" data-vid="${cesc(sp.eid)}"><slot name="${cesc(vidSlot(sp.eid))}"></slot></div>` : src ? `<img alt="" src="${cesc(src)}">` : ""}${rds}<span class="cnm"><span class="cn">${cesc(sp.name)}</span>${sp.trig ? `<button class="cx" data-camx="${cesc(sp.trig)}" aria-label="Close">×</button>` : ""}</span></div>`;
     }).join("")}</div>`;
-  }
+  },
 
   /** After the markers are laid out: each window next to its marker's final spot (above-right; left / below
    *  near the edges), clear of the other windows; an elbow line joins them. Returns the SVG lines. */
@@ -3706,7 +4046,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (g && g.y != null) out += `<line class="wguide" x1="0" y1="${(g.y / 100) * H}" x2="${W}" y2="${(g.y / 100) * H}"/>`;
     if (g && g.x != null) out += `<line class="wguide" x1="${(g.x / 100) * W}" y1="0" x2="${(g.x / 100) * W}" y2="${H}"/>`;
     return out;
-  }
+  },
 
   /** 0.11.1: the camera strip: every window in one row (film), in the frame space below or above the plan when
    *  there is room (else along the plan's bottom), ordered like their cameras left → right so lines stay short.
@@ -3753,7 +4093,7 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     out += lines.join("");
     return out;
-  }
+  },
 
   /** 0.11.1: where a camera window was put by hand (its centre, % of the plan), if it was. */
   _winPos(key) {
@@ -3761,14 +4101,14 @@ class DeviceFloorplanCard extends HTMLElement {
     const sp = this._specs && this._specs.get(key);
     const w = sp && sp.item && this._dev(sp.item.id).win;
     return w && Number.isFinite(w.x) && Number.isFinite(w.y) ? w : null;
-  }
+  },
 
   /** Camera windows can be moved in the Card Editor, and on the dashboard by admins (saved in the card). */
   _winDraggable() {
     if ((this._config.cameras || {}).cam_layout === "strip") return false; // the strip places them itself
     if (this._onWinMove) return true;
     return !this.preview && !this._editMode && !!(this._hass && this._hass.user && this._hass.user.is_admin);
-  }
+  },
 
   /** Drag a camera window: it snaps to the height or the column of another window; dropped on its own camera dot,
    *  it goes back to its automatic spot. */
@@ -3827,7 +4167,7 @@ class DeviceFloorplanCard extends HTMLElement {
     window.addEventListener("pointermove", mv);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
-  }
+  },
 
   async _winSave(id, pos) {
     if (this._onWinMove) return this._onWinMove(id, pos);
@@ -3848,7 +4188,7 @@ class DeviceFloorplanCard extends HTMLElement {
     } catch (err) {
       this._toast(err && err.message === "yaml" ? "This dashboard is kept in YAML: the camera spot lasts until the page reloads." : "Couldn't save the camera spot to the dashboard.");
     }
-  }
+  },
 
   /** 0.11: the device's camera entity, if it has one. */
   _camOf(item) {
@@ -3860,7 +4200,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const ok = (e) => !!e && domainOf(e) === "camera" && !!this._hass.states[e] && !/map|valetudo|xiaomi_cloud_map/i.test(e);
     if (lead && this._hass.states[lead]) return ok(lead) ? lead : null;
     return [item.main_entity, ...(item.entities || [])].find(ok) || null;
-  }
+  },
 
   /** What brings a device into Live: the picked trigger, else (cameras) its own motion / person / ring sensor. */
   _liveWhen(item) {
@@ -3878,33 +4218,54 @@ class DeviceFloorplanCard extends HTMLElement {
       if (domainOf(e) === "event") return ["doorbell", "motion"].includes(dc) || /ring|ding|doorbell|motion|person/.test(e);
       return domainOf(e) === "binary_sensor" && (MOTION_DC.has(dc) || (!dc && /motion|presence|occupancy|person|ring|ding|doorbell|visitor/.test(e)));
     }) || null;
-  }
+  },
 
   /** Closed with ✕ during this trigger event (opens again on the next one; per screen). */
+  /** 0.13.1: a trigger seen on while this card is open (for "Stays open: until I close it"). */
+  _trigMark(e) {
+    const st = this._hass.states[e];
+    if (!st) return;
+    this._trigSeen ||= new Set();
+    if (domainOf(e) === "event") {
+      // An event (a doorbell press) counts from the first press after the card opened, not an old one.
+      this._trigBase ||= new Map();
+      if (!this._trigBase.has(e)) this._trigBase.set(e, st.state);
+      else if (this._trigBase.get(e) !== st.state) this._trigSeen.add(e);
+    } else if (["on", "open", "detected", "home", "playing", "running", "recording", "streaming"].includes(st.state)) this._trigSeen.add(e);
+  },
+
   _camShut(trig) {
     const st = this._hass.states[trig];
     return !!(st && this._camX && this._camX[trig] === (domainOf(trig) === "event" ? st.state : st.last_changed));
-  }
+  },
 
   /** Is the trigger on (or was it, within the last 30 s; an event within the last minute)? */
-  _trigOn(e) {
+  _trigOn(e, stay = "") {
     const st = this._hass.states[e];
     if (!st) return false;
     const now = this._now();
     let left = 0;
-    if (domainOf(e) === "event") left = 60000 - (now - Date.parse(st.state));
-    else if (["on", "open", "detected", "home", "playing", "cleaning", "heating", "cooling", "running", "printing", "recording", "streaming"].includes(st.state)) return true;
-    else left = 30000 - (now - Date.parse(st.last_changed));
+    // 0.13.1: "Stays open" (per marker): automatic = 30 s after it ends (60 s after an event); "on" = only while
+    // it is on (an event, which is never "on", keeps its 60 s); a number of seconds; "x" = until closed with ✕.
+    const ev = domainOf(e) === "event";
+    const on = !ev && ["on", "open", "detected", "home", "playing", "cleaning", "heating", "cooling", "running", "printing", "recording", "streaming"].includes(st.state);
+    if (on) return true;
+    const t0 = ev ? Date.parse(st.state) : Date.parse(st.last_changed);
+    if (stay === "x") return !!this._trigSeen && this._trigSeen.has(e);
+    const keep = stay === "on" ? (ev ? 60 : 0) : Number(stay) > 0 ? Number(stay) : ev ? 60 : 30;
+    left = keep * 1000 - (now - t0);
     if (!(left > 0)) return false;
     clearTimeout(this._trigT);
     this._trigT = setTimeout(() => this._update(true), left + 200);
     return true;
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   _per(item, ov) {
     const o = this._dev(item.id);
     return (o.per && typeof o.per === "object" && o.per[ov]) || {};
-  }
+  },
 
   /** The ONE entity a device shows in an overlay (#100): per overlay → device → Editor main → best fitting. */
   _leadFor(item, ov, fits) {
@@ -3917,13 +4278,13 @@ class DeviceFloorplanCard extends HTMLElement {
     for (const e of [this._per(item, ov).lead, legacy]) if (exists(e)) return e;
     for (const e of [o.show, item.main_entity]) if (ok(e)) return e;
     return this._allowed(item).find(ok) || null;
-  }
+  },
 
   /** Kept for the editor (#90): the device-wide or per-overlay choice. */
   _shownEntity(item, ov) {
     const e = this._per(item, ov).lead || (this._dev(item.id).show_in || {})[ov] || this._dev(item.id).show;
     return e && this._hass.states[e] ? e : null;
-  }
+  },
 
   /** Value text of an extra line (#101). */
   _extraText(e) {
@@ -3931,7 +4292,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!st) return "—";
     if (domainOf(e) === "climate") return st.attributes.current_temperature != null ? this._attrVal(st, "current_temperature") : this._fmt(e);
     return ["temperature", "humidity", "battery", "sensor"].includes(kindOf(e, st)) ? this._fmtNum(e) : this._fmt(e);
-  }
+  },
 
   /** Attach the "Also show" lines: per-overlay setting, else the defaults given by the overlay. */
   _withExtras(spec, item, ov, defaults = []) {
@@ -3958,7 +4319,7 @@ class DeviceFloorplanCard extends HTMLElement {
       spec.ents = [...(spec.ents || []), ...list];
     }
     return spec;
-  }
+  },
 
   /** 0.8.2: space around the plan (+) or trimmed margin (-), % of the image per side: the card's own frame
    *  ("custom"), else the plan's default from the Floorplan Editor. Positions stay relative to the image. */
@@ -3978,7 +4339,7 @@ class DeviceFloorplanCard extends HTMLElement {
       crop: t < 0 || r < 0 || b < 0 || l < 0,
       style: `position:absolute;width:${(10000 / W).toFixed(3)}%;height:${(10000 / H).toFixed(3)}%;left:${((l * 100) / W).toFixed(3)}%;top:${((t * 100) / H).toFixed(3)}%;aspect-ratio:auto`,
     };
-  }
+  },
 
   /** 0.8.1: the readings a marker shows when nothing is picked under "Also show": its lines on the plan, else
    *  what its info card lists (appliances: time left and power; bonds and phantoms: their members). The
@@ -3997,14 +4358,14 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!item.bond && !item.phantom) return [];
     const lead = sp.phantom ? null : sp.eid || (sp.ents || [])[0];
     return [...new Set([...(sp.ents || []), ...(sp.also || []), ...(item.entities || [])])].filter((e) => e && e !== lead && this._hass.states[e]);
-  }
+  },
 
   /** Lights as glow only in this overlay (#112). */
   _glowOnly(ov) {
     if (ov === "live") return (this._ov("live").lights_as || "glow") === "glow";
     const def = this._ovDef(ov);
     return !!(def && def.custom && def.custom.lights_as === "glow");
-  }
+  },
 
   /** One entity per kind key (custom overlays, #109). */
   _entityForKind(item, key, allowed) {
@@ -4016,7 +4377,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const pick = allowed.filter((e) => LIVE_KEY[ks(e)] === key && !this._aux(e)); // 0.12.6: no setting switches
     if (item.main_entity && pick.includes(item.main_entity)) return item.main_entity;
     return pick[0] || null;
-  }
+  },
 
   _specsFor(item, ov, q) {
     const hass = this._hass;
@@ -4045,7 +4406,8 @@ class DeviceFloorplanCard extends HTMLElement {
         // A camera without a trigger shows only with Layers → Cameras; unavailable cameras never in Live.
         // 0.11: Layers → Cameras shows every camera; on top of that a trigger pops one up by itself.
         const layer = !!cam && this._layerOn("live", "cams", false) && this._layerOn("live", `cam:${item.id}`, true);
-        const popped = !!trig && this._trigOn(trig) && !this._camShut(trig);
+        if (trig) this._trigMark(trig);
+        const popped = !!trig && this._trigOn(trig, this._per(item, "live").stay) && !this._camShut(trig);
         const show = layer || popped;
         if (!show) return [];
         const lead = cam || this._per(item, ov).lead || this._addedLead(item);
@@ -4163,7 +4525,8 @@ class DeviceFloorplanCard extends HTMLElement {
         if (q) return [{ key: item.id }];
         const trig = this._liveWhen(item);
         const layer = this._layerOn(ov, "cams", false) && this._layerOn(ov, `cam:${item.id}`, true);
-        const popped = !!trig && this._trigOn(trig) && !this._camShut(trig);
+        if (trig) this._trigMark(trig);
+        const popped = !!trig && this._trigOn(trig, this._per(item, "live").stay) && !this._camShut(trig);
         const sp = this._liveSpec(item, name, lead, st, k, { values: false });
         return one({ ...sp, key: `${item.id}|${lead}`, on: true, dim: false, ents: trig ? [lead, trig] : [lead], trig: layer ? null : trig, cam: true, win: layer || popped });
       }
@@ -4178,7 +4541,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const def = this._ovDef(ov);
     if (def && def.custom) return this._customSpecs(item, name, allowed, def.custom, q, ov);
     return [];
-  }
+  },
 
   _comfortSpecs(item, name, allowed, opts) {
     const hass = this._hass;
@@ -4207,7 +4570,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (temps[0]) lines.push(this._fmtNum(temps[0]));
     if (hums[0]) lines.push(this._fmtNum(hums[0]));
     return [{ ...this._chipSpec(item, name, { lines, ents: [...temps.slice(0, 1), ...hums.slice(0, 1)], kind: "reading" }), rd: { t: temps[0] ? lines[0] : "", h: hums[0] ? lines[lines.length - 1] : "" } }];
-  }
+  },
 
   /** Combined number for bonds and phantoms: average · lowest · highest · one (#58, #60). */
   _combine(item, ents) {
@@ -4236,7 +4599,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const st = plain ? hass.states[plain] : null;
     const unit = st ? st.attributes.unit_of_measurement || "" : ents[0].includes("#h") ? "%" : "°";
     return `${this._num1(v)}${unit === "%" || unit === "°" ? "" : " "}${unit}`.trim();
-  }
+  },
 
   /** Phantom items per overlay: one chip/marker with the combined value; tap lists its devices. */
   _phantomSpecs(item, name, ov, q) {
@@ -4289,7 +4652,7 @@ class DeviceFloorplanCard extends HTMLElement {
     else value = n ? `${n} active` : "";
     const color = kind === "motion" ? "#43a047" : kind === "opening" ? "#fb8c00" : "var(--dfc-accent)";
     return [{ key: item.id, type: "marker", item, name, ents: list, eid: list[0], st: null, kind, on: n > 0, dim: false, unavail: false, color, value: this._look().markers !== "icon" ? value : "", icon: icon || kindIcon[kind] || "mdi:shape-outline", x: item.x, y: item.y, phantom: true }];
-  }
+  },
 
   /** ACs and thermostats, chip v2: [icon] Cooling / Set 24° │ 25.1° / 💧 68%; only what the unit reports. */
   _climateChip(item, name, clim, tempEid, humEid, { compact = false } = {}) {
@@ -4333,7 +4696,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const shown = live(st) && st.state === "off" ? "" : word;
     if (compact) return { key: `${item.id}|${clim}`, type: "chip", cl2: true, compact: true, item, name, lines: [temp || "—", word], word: on ? "" : shown, set: "", temp, hum: "", ents, src, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
     return { key: `${item.id}|${clim}`, type: "chip", cl2: true, item, name, lines: [temp || "—", word], word: shown, set, temp, hum, ents, src, heatEnts, kind: "climate", icon, cls: on ? "" : "off", color, x: item.x, y: item.y };
-  }
+  },
 
   /** Room thermometer / humidity sensor bonded with a climate unit (from another device than the unit). */
   _roomSensors(item, clim) {
@@ -4346,7 +4709,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const t = pool.find((e) => kindOf(e, hass.states[e]) === "temperature" && ambientTemp(e, hass.states[e], { standalone: true }));
     const h = pool.find((e) => kindOf(e, hass.states[e]) === "humidity");
     return { t, h };
-  }
+  },
 
   _num1(v) {
     const n = Math.round(Number(v) * 10) / 10;
@@ -4355,7 +4718,7 @@ class DeviceFloorplanCard extends HTMLElement {
     } catch (_e) {
       return String(n);
     }
-  }
+  },
 
   _healthSpecs(item, name, allowed, opts, q) {
     const hass = this._hass;
@@ -4384,7 +4747,9 @@ class DeviceFloorplanCard extends HTMLElement {
     if (q) return item.main_entity && !item.bond ? [{ key: item.id, offlineOnly: true }] : []; // shows only when offline
     if (unavailable) return [this._offChip({ ...item, x: pos.x, y: pos.y }, name)];
     return [];
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   // ------------------------------------------------------------------ 0.11 Energy
   /** Energy data from Home Assistant's own Energy settings: the devices (with their kWh statistic and power
@@ -4436,7 +4801,7 @@ class DeviceFloorplanCard extends HTMLElement {
         this._eBusy = false;
         this._update(true);
       });
-  }
+  },
 
   /** What Energy shows: "day" (kWh of the last 24 hours, rolling), "now" (live W), or one of those hours
    *  (its start, ms: kWh in that hour). */
@@ -4448,7 +4813,7 @@ class DeviceFloorplanCard extends HTMLElement {
       if (v <= cur && v >= cur - 23 * 3600000) return v;
     }
     return "day";
-  }
+  },
 
   /** Value of one statistic (+ its power sensor) for the current selection: { v, unit }. */
   _eVal(stat, rate) {
@@ -4461,7 +4826,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const from = Math.floor(Date.now() / 3600000) * 3600000 - 23 * 3600000;
     const v = sel === "day" ? Object.entries(by).reduce((x, [ts, y]) => (Number(ts) >= from ? x + y : x), 0) : by[sel] || 0;
     return { v, unit: "kWh" };
-  }
+  },
 
   /** Energy devices per plan item (by any of the item's entities), each with its colour. */
   _eIndex(a) {
@@ -4483,7 +4848,7 @@ class DeviceFloorplanCard extends HTMLElement {
     });
     this._eIdx = { key, map };
     return map;
-  }
+  },
 
   /** 0.11: Home Assistant's "Upstream device": the stat of the device whose meter already includes this one
    *  (only when that device is in Energy too). Such a device keeps its chip but isn't added again to totals. */
@@ -4492,7 +4857,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const d = devs.find((x) => x.stat_consumption === stat);
     const up = d && d.included_in_stat;
     return up && devs.some((x) => x.stat_consumption === up) ? up : null;
-  }
+  },
 
   /** Totals, room shading and lines: what a chip adds (its top-level devices) and where its line goes. */
   _eTree(sp, devs) {
@@ -4500,7 +4865,7 @@ class DeviceFloorplanCard extends HTMLElement {
     sp.eSum = devs.filter((d) => !this._eUp(d.stat)).reduce((t, d) => t + d.v, 0);
     const ups = devs.map((d) => this._eUp(d.stat));
     sp.up = ups.every((u) => u && !sp.stats.has(u)) ? ups[0] : null;
-  }
+  },
 
   _energySpecs(item, name, q) {
     const list = this._eIndex(this._a || {}).get(item.id);
@@ -4526,7 +4891,7 @@ class DeviceFloorplanCard extends HTMLElement {
     sp.area = item.area_id;
     this._eTree(sp, tree);
     return [sp];
-  }
+  },
 
   /** Area of an entity (its own, else its device's). */
   _eAreaOf(e) {
@@ -4535,7 +4900,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (en.area_id) return en.area_id;
     const dv = en.device_id && this._hass.devices && this._hass.devices[en.device_id];
     return dv ? dv.area_id || null : null;
-  }
+  },
 
   /** 0.11: energy devices with no marker on the plan show at their room's pin (so the plan adds up to HA's Energy);
    *  what's on no room of this plan is summed as "Not on this plan". */
@@ -4578,7 +4943,7 @@ class DeviceFloorplanCard extends HTMLElement {
       out.push(sp);
     }
     return out;
-  }
+  },
 
   /** Totals per room from the energy markers shown. */
   _eRooms(min = 1) {
@@ -4590,11 +4955,11 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     if (min > 1) for (const k of Object.keys(by)) if (n[k] < min) delete by[k];
     return by;
-  }
+  },
 
   _eFmt(v) {
     return this._eSel() === "now" ? fmtW(v) : fmtKwh(v);
-  }
+  },
 
   /** Rooms shaded by their share, in Home Assistant's energy colour. */
   _eFillHtml(a) {
@@ -4603,7 +4968,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const max = Math.max(...Object.values(by), 1e-9);
     const polys = Object.entries(a.areas || {}).filter(([id, r]) => by[id] > 0 && Array.isArray(r.shape) && r.shape.length >= 3).map(([id, r]) => `<polygon points="${r.shape.map(([x, y]) => `${x},${y}`).join(" ")}" style="fill:var(--energy-grid-consumption-color, #488fc2);fill-opacity:${(0.1 + 0.42 * Math.min(1, by[id] / max)).toFixed(3)}"></polygon>`).join("");
     return polys ? `<svg class="fresh efill" viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>` : "";
-  }
+  },
 
   /** Where the electrical panel and the solar / battery box are (placed in the Editor; else a good guess). */
   _ePoints(a) {
@@ -4628,7 +4993,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const battery = has(["battery_out", "battery_in"]) ? rB || pts.battery || null : null;
     // A point you set (no real device on the plan) is dashed, like phantoms.
     return { panel, source, battery, dummy: { panel: !rP, source: !rS, battery: !rB } };
-  }
+  },
 
   /** The panel, the source and the flow lines: panel → every device using energy; source → panel. */
   _eFlowHtml(a) {
@@ -4648,7 +5013,7 @@ class DeviceFloorplanCard extends HTMLElement {
       return `<div class="epin ${cls} ${dummy[cls] ? "dummy" : ""} ${v ? "val" : ""}" style="left:${p.x}%;top:${p.y}%" title="${cesc(label)}${v ? ` · ${cesc(v)}` : ""}"><ha-icon icon="${icon}"></ha-icon>${v ? `<span>${cesc(v)}</span>` : ""}</div>`;
     };
     return `${pin(panel, "mdi:flash", "Electrical panel", "panel")}${source ? pin(source, "mdi:solar-power-variant", "Solar", "source") : ""}${battery ? pin(battery, "mdi:home-battery", "Battery", "battery") : ""}`;
-  }
+  },
 
   /** Flow lines in pixels (drawn after the layout, to each chip's final spot), like Home Assistant's energy
    *  distribution: thin line, across then a rounded corner, one dot travelling along (faster = more). */
@@ -4691,13 +5056,13 @@ class DeviceFloorplanCard extends HTMLElement {
     if (bat && f.out > 0) out += line(elbow(bat, pan), "var(--energy-battery-out-color, #4db6ac)", 2);
     if (bat && f.chg > 0) out += line(elbow(sol || pan, bat), "var(--energy-battery-in-color, #f06292)", 2);
     return out;
-  }
+  },
 
   /** Total of one kind of source for the current selection. */
   _eSum(kind) {
     if (!this._eData) return 0;
     return this._eData.srcs.filter((x) => x.kind === kind).reduce((t, x) => t + this._eVal(x.stat, x.rate).v, 0);
-  }
+  },
 
   /** Under the plan: total, top 3, sources, and the day scrubber (00:00 → now; left end Today, right end Now). */
   _eLegendHtml() {
@@ -4716,27 +5081,29 @@ class DeviceFloorplanCard extends HTMLElement {
     const srcTxt = `${grid > 0 ? it("mdi:transmission-tower", "Grid", this._eFmt(grid), "var(--energy-grid-consumption-color, #488fc2)") : ""}${sol > 0 ? it("mdi:solar-power", "Solar", this._eFmt(sol), "var(--energy-solar-color, #ff9800)") : ""}${batt > 0 ? it("mdi:home-battery", "Battery", this._eFmt(batt), "var(--energy-battery-out-color, #4db6ac)") : ""}`;
     const hint = !this._ePoints(this._a || {}).panel && this._hass.user && this._hass.user.is_admin ? `<span class="cl">Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.</span>` : "";
     return `${this._eScrubHtml()}<div class="heatleg eleg">${sumTxt}${srcTxt}${top}${hint}</div>`;
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   // ------------------------------------------------------------- Home Replay (0.11.1)
   /** The card's clock: the replay time while replaying, else now (night look, motion, "ago", timers). */
   _now() {
     return this._rpT() ?? Date.now();
-  }
+  },
 
   _rpT() {
     return this._rp && this._rp.t != null ? this._rp.t : null;
-  }
+  },
 
   /** Replay is in use: open (rail / bar) or at a past time. */
   _rpIn() {
     return !!(this._rp && (this._rp.mode || this._rp.t != null));
-  }
+  },
 
   /** Replay is open (the rail or the bar), at a past time or at Now. */
   _rpOn() {
     return !!(this._rp && (this._rp.mode || this._rp.t != null));
-  }
+  },
 
   /** A replay control was pressed (on finger down, so a redraw while playing can't swallow it). */
   _rpCtl(t) {
@@ -4764,15 +5131,15 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     if (a === "prev" || a === "next") return this._rpJump(a === "prev" ? -1 : 1);
     return this._rpPlay();
-  }
+  },
 
   _rpSpan() {
     return ((this._rp && this._rp.range) || 24) * 3600000;
-  }
+  },
 
   _rpState() {
     return (this._rp = this._rp || { t: null, mode: false, speed: Number(lsGet("dfc_rp_speed")) || 900, range: RP_RANGES.includes(Number(lsGet("dfc_rp_range"))) ? Number(lsGet("dfc_rp_range")) : 24 });
-  }
+  },
 
 
   /** The history of everything the current overlay reads (plus the sun and every light, for the night look),
@@ -4790,7 +5157,8 @@ class DeviceFloorplanCard extends HTMLElement {
       const b = this._bodyOf(item);
       if (b && b.pic) {
         const pl = this._per(item, "live");
-        for (const e of [pl.when, pl.lead, pl.hl]) if (e) want.add(e); // picked on purpose: always replayed
+        // picked on purpose, or what decides the picture's On / Off (0.13.9.3: a sensor too): always replayed
+        for (const e of [pl.when, pl.lead, pl.hl, ...b.sents]) if (e) want.add(e);
         for (const e of [b.lead, ...b.ents]) if (e && !["sensor", "button", "event", "update", "image"].includes(domainOf(e))) want.add(e);
       }
     }
@@ -4819,7 +5187,7 @@ class DeviceFloorplanCard extends HTMLElement {
       });
     this._update(true);
     return rp.loading;
-  }
+  },
 
   /** Home Assistant at the replay time: every entity's state from its history (now's for the rest). */
   _rpHass() {
@@ -4854,7 +5222,7 @@ class DeviceFloorplanCard extends HTMLElement {
     rp.snapT = rp.t;
     rp.snapBase = real;
     return rp.snap;
-  }
+  },
 
   _rpSeek(t, light = false) {
     const rp = this._rp;
@@ -4868,7 +5236,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // 0.11.1: while playing, nothing on the plan changed → only the thumb, the time and the pill move.
     if (light && !enter && rp.sig === sig && this._rpMove()) return;
     this._update(true);
-  }
+  },
 
   /** Move the thumb, the fill and the times in place (no redraw). False if the controls aren't there. */
   _rpMove() {
@@ -4891,14 +5259,14 @@ class DeviceFloorplanCard extends HTMLElement {
     if (pill && rp.t != null) pill.textContent = this._rpPillTxt();
     this._rpBub();
     return true;
-  }
+  },
 
   /** test9: where the thumb is on the line (%). While dragging: under the finger. */
   _rpPct(T, t0, span) {
     const rp = this._rp;
     if (rp.drag && rp.dragPct != null) return rp.dragPct;
     return Math.max(0, Math.min(100, ((T - t0) / span) * 100));
-  }
+  },
 
   /** The time at the thumb, in words: the clock (+ the line's value). */
   _rpLabel() {
@@ -4913,17 +5281,17 @@ class DeviceFloorplanCard extends HTMLElement {
       if (v != null) lab += ` · ${Math.round(v * 10) / 10}${m.unit || ""}`;
     }
     return lab;
-  }
+  },
 
   /** The pill on the plan: the day and the time. */
   _rpPillTxt() {
     const T = this._rp.t;
     return `${this._rpWhen(T).day} ${rpClock(T)}`;
-  }
+  },
 
   _rpPill() {
     return this._rpT() != null ? `<button class="rppill" data-rp="pill" title="Tap to go to a day and time" aria-label="Replay time: ${cesc(this._rpPillTxt())}. Tap to go to a day and time"><ha-icon icon="mdi:history"></ha-icon><span>${cesc(this._rpPillTxt())}</span></button>` : "";
-  }
+  },
 
   /** test9: on a side rail the time bubble is drawn on the card itself, level with the thumb and right beside it
    *  (as a part of the rail the plan covered it). Shown while playing or dragging. */
@@ -4949,7 +5317,7 @@ class DeviceFloorplanCard extends HTMLElement {
     b.style.left = left ? `${t.right - c.left + 6}px` : "";
     b.style.right = left ? "" : `${c.right - t.left + 6}px`;
     b.hidden = false;
-  }
+  },
 
   /** test9: tap the time pill → a small entry (day, time with optional seconds) → Replay goes there, paused.
    *  The entry lives outside the card's own drawing, so the card can keep redrawing under it. */
@@ -5043,7 +5411,7 @@ class DeviceFloorplanCard extends HTMLElement {
     setTimeout(() => document.addEventListener("pointerdown", outside, true), 0);
     this._rpPop = close;
     el.querySelector("input").focus();
-  }
+  },
 
   _rpStop() {
     const rp = this._rp;
@@ -5051,7 +5419,7 @@ class DeviceFloorplanCard extends HTMLElement {
     clearInterval(rp.timer);
     rp.timer = null;
     rp.play = false;
-  }
+  },
 
   /** To Now: the real Home Assistant (Replay stays open, at its end). */
   _rpLive(draw = true) {
@@ -5061,7 +5429,7 @@ class DeviceFloorplanCard extends HTMLElement {
     rp.t = null;
     if (this._live) this._hass = this._live;
     if (draw) this._update(true);
-  }
+  },
 
   /** Replay on / off (the rail button; ← Now closes it). */
   _rpOpen(on) {
@@ -5073,7 +5441,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!this._dockShown) this._setLayer(this._overlay, "replay", on, false);
     if (on) this._rpLoad();
     this._update(true);
-  }
+  },
 
   /** Play / pause. From Now it starts at the beginning of the range; the end is Now again. */
   _rpPlay() {
@@ -5098,7 +5466,7 @@ class DeviceFloorplanCard extends HTMLElement {
         this._rpSeek(next, true);
       }, 200);
     });
-  }
+  },
 
   /** Previous / next moment worth seeing on this overlay's timeline (an event, a run starting, a busy hour);
    *  past the last one: Now. */
@@ -5119,12 +5487,12 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     };
     this._rpLoad().then(go);
-  }
+  },
 
   /** Overlays Replay can play back (the ones on the rail, without Network). */
   _rpOvs() {
     return this._overlays().filter((o) => !RP_SKIP.has(o));
-  }
+  },
 
   _rpWhen(T) {
     const d = new Date(T);
@@ -5132,7 +5500,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const y = new Date(now.getTime() - 86400000);
     const day = d.toDateString() === now.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString([], { weekday: "short" });
     return { day, clock: rpClock(T) };
-  }
+  },
 
   /** 0.11.1 test8: what this overlay's timeline shows (REPLAY-TIMELINE): { n, bars: [{kind: amount}], spans:
    *  [{lane, from, to, k}], line: [value | null] (per slot), jumps: [t] }. Bars and the line use n slots over the
@@ -5273,7 +5641,7 @@ class DeviceFloorplanCard extends HTMLElement {
     m.jumps.sort((x, y) => x - y);
     rp.model = m;
     return m;
-  }
+  },
 
   /** The timeline (horizontal or vertical): this overlay's bars, spans and line beside the line of time
    *  (REPLAY-TIMELINE), the line filled up to the thumb; the time shows on the thumb while dragging / playing. */
@@ -5339,7 +5707,7 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     const lab = (rp.lab = this._rpLabel());
     return `<div class="rptrack ${vert ? "v" : "h"} ${line ? "ln" : ""}" style="--lanes:${lanes}" role="slider" aria-label="Replay time" aria-valuetext="${cesc(lab)}"><div class="rpbars">${bars}</div>${spans ? `<div class="rpspans">${spans}</div>` : ""}${line}<div class="rpticks">${ticks}</div><div class="rpline"><b style="${vert ? "height" : "width"}:${pct.toFixed(2)}%"></b></div><span class="rpthumb" style="${side}:${pct.toFixed(2)}%"><em>${cesc(lab)}</em></span></div>`;
-  }
+  },
 
   /** 0.11.1: the replay rail: the overlay rail itself turned into Replay, same size, shape and colours
    *  (← Now · play · previous / next · timeline · speed · range); vertical in a side rail. The overlay to
@@ -5355,7 +5723,7 @@ class DeviceFloorplanCard extends HTMLElement {
     return vert
       ? `<div class="${cls}">${now}${play}${pn}<span class="rpend">Now</span>${this._rpTrack(true)}<span class="rpend">−${rp.range}h</span>${speed}${range}</div>`
       : `<div class="${cls}">${now}${play}${pn}<span class="rptl">${this._rpTrack(false)}<span class="rpscale"><span>−${rp.range}h</span><span>Now</span></span></span>${speed}${range}</div>`;
-  }
+  },
 
   /** 0.11.1: in Replay, beside Layers: the overlay that is replayed (its icon), with the list of the others. */
   _rpOvBtn() {
@@ -5366,12 +5734,12 @@ class DeviceFloorplanCard extends HTMLElement {
     const cur = this._ovDef(this._overlay) || {};
     const menu = this._rp.menu ? `<div class="rpmenu">${ovs.map((o) => `<button data-rpov="${cesc(o)}" class="${o === this._overlay ? "on" : ""}"><ha-icon icon="${cesc(this._ovDef(o).icon)}"></ha-icon>${cesc(labels[o] || this._ovDef(o).label)}</button>`).join("")}</div>` : "";
     return `<span class="rpovw"><button class="layers rpov ${this._rp.menu ? "on" : ""}" data-rp="menu" title="Overlay to replay" aria-label="Overlay to replay"><ha-icon icon="${cesc(cur.icon || "mdi:home")}"></ha-icon></button>${menu}</span>`;
-  }
+  },
 
   /** Without a rail: the same controls as a bar under the plan (Layers → Home Replay). */
   _rpHtml() {
     return `<div class="rpbar">${this._rpRail(false)}</div>`;
-  }
+  },
 
   /** test10: the last 24 hours, hour by hour (the current hour last), each split by source (grid, solar,
    *  battery; without sources: the devices' total). */
@@ -5388,7 +5756,7 @@ class DeviceFloorplanCard extends HTMLElement {
       else if (ed) for (const d of ed.devs) add("grid", (ed.hours[d.stat_consumption] || {})[ts] || 0);
       return { ts, parts, tot: Object.values(parts).reduce((x, y) => x + y, 0) };
     });
-  }
+  },
 
   /** test10: Energy's own hours are back under the plan (they were in Home Replay in test8 / test9): a bar per
    *  hour of the last 24 hours, stacked in the Energy colours; "Last 24 h" (their sum) and "Now" (live W) at the
@@ -5412,7 +5780,7 @@ class DeviceFloorplanCard extends HTMLElement {
     }).join("");
     const idx = sel === "day" ? 0 : sel === "now" ? 25 : 1 + hrs.findIndex((h) => h.ts === sel);
     return `<div class="escrub"><div class="etrack ${typeof sel === "number" ? "pick" : ""}" style="grid-template-columns:3fr repeat(24, minmax(0, 1fr)) 2.2fr"><i class="end ${sel === "day" ? "on" : ""}" data-at="day">Last 24 h</i>${cols}<i class="end ${sel === "now" ? "on" : ""}" data-at="now">Now</i></div><input type="range" class="erange" min="0" max="25" step="1" value="${idx}" aria-label="Energy: the last 24 hours, hour by hour" aria-valuetext="${cesc(this._eWhen())}"></div>`;
-  }
+  },
 
   /** What the scrubber points at, in words. */
   _eWhen() {
@@ -5421,7 +5789,9 @@ class DeviceFloorplanCard extends HTMLElement {
     if (sel === "day" || sel === "now") return sel === "day" ? "Last 24 h" : "Now (live)";
     const h = new Date(sel).getHours();
     return `${this._rpWhen(sel).day} ${p(h)}:00–${p((h + 1) % 24)}:00`;
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Network (#49): connection icon, role colour/shape, LQI as the ring; values only in the popup. */
   _netSpecs(item, name, cx, q) {
@@ -5476,7 +5846,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const rs = item.router && hass.states[item.router];
     const rt = rs ? { eid: item.router, ap: rs.attributes.connected_to || "", lan: /lan|ethernet|cable/i.test(rs.attributes.connection_type || "") && !/wlan|wifi|wi-fi|wireless/i.test(rs.attributes.connection_type || ""), ssid: rs.attributes.ssid || "", ip: rs.attributes.ip || "", home: rs.state === "home" } : null;
     return [{ key: item.id, type: "net", item, name, conns, conn, role, ring, z, sigEid, rt, unavailable, ents: [item.main_entity].filter(Boolean), icon: conn === "network" && !(rt && rt.lan) ? { good: "mdi:wifi-strength-4", fair: "mdi:wifi-strength-2", poor: "mdi:wifi-strength-1" }[tone] || CONNS[conn].icon : CONNS[conn].icon, sz, tone, value: label, ieee: z ? item.ieee : null, x: pos.x, y: pos.y }];
-  }
+  },
 
   /** 0.8.1: devices of the other floors (where they sit there), by device id, ZHA IEEE and access point. */
   _otherIdx() {
@@ -5500,7 +5870,7 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     }
     return idx;
-  }
+  },
 
   /** 0.8.1: a device here linked to one on another floor: that one is drawn faded at its spot, with a normal line.
    *  Zigbee: a device with no router / coordinator next to it here gets its strongest link to one on another floor; Wi-Fi / LAN: its access
@@ -5559,14 +5929,14 @@ class DeviceFloorplanCard extends HTMLElement {
       }
     }
     return [...out.values()];
-  }
+  },
 
   /** Connections shown in Network: the viewer's choice, else the card's default. */
   _netShow() {
     if (Array.isArray(this._net.conns) && this._net.conns.length) return this._net.conns;
     const opts = this._ov("network");
     return Array.isArray(opts.connections) && opts.connections.length && !opts.connections.includes("all") ? opts.connections : CONN_ORDER;
-  }
+  },
 
   /** 0.7.3: access points in a stable order (the one with most devices first) for their colours. */
   _apList() {
@@ -5581,7 +5951,7 @@ class DeviceFloorplanCard extends HTMLElement {
     this._apA = a;
     this._aps = Object.keys(n).sort((x, y) => n[y] - n[x] || x.localeCompare(y));
     return this._aps;
-  }
+  },
 
   /** 0.11: appliance "done" state lives in Home Assistant, shared by every screen (was browser storage). */
   _applLoad() {
@@ -5604,7 +5974,7 @@ class DeviceFloorplanCard extends HTMLElement {
       .catch(() => {
         this._applLoading = false; // older backend: try again later
       });
-  }
+  },
 
   _applSave() {
     if (!this._hass || this._applSent === undefined) return;
@@ -5612,12 +5982,14 @@ class DeviceFloorplanCard extends HTMLElement {
     if (v === this._applSent) return;
     this._applSent = v;
     this._hass.callWS({ type: "device_floorplan/card_state/set", key: `appl_${this._lsKey()}`, value: this._applDone || {} }).catch(() => {});
-  }
+  },
 
   _saveNet() {
     const n = this._net;
     lsSet(`dfc_net_${this._lsKey()}`, { conns: n.conns, roles: n.roles, links: n.links, hubs: n.hubs, wlinks: n.wlinks, legend: n.legend, lqiOff: n.lqiOff });
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Custom overlays (#109): ordered kinds; the first matching kind leads, the others become extra lines. */
   _customSpecs(item, name, allowed, def, q, ov) {
@@ -5670,7 +6042,7 @@ class DeviceFloorplanCard extends HTMLElement {
     if (!spec) return [];
     const extras = rest.map((x) => x[1]).filter((e) => !used.includes(e));
     return [this._withExtras(spec, item, ov, extras)];
-  }
+  },
 
   _isOn(eid, st, kind) {
     if (!live(st)) return false;
@@ -5684,7 +6056,7 @@ class DeviceFloorplanCard extends HTMLElement {
     // A status sensor as leading entity (printer, washer…): busy states count as "on".
     if (kind === "sensor" || kind === "other") return /^(on|running|printing|prepare|preparing|heating|busy|working|washing|drying|cleaning|active|in_progress|paused?)$/i.test(String(s).replace(/\s+/g, "_"));
     return s === "on" || s === "open" || s === "detected";
-  }
+  },
 
   _liveSpec(item, name, eid, st, kind, opts) {
     const hass = this._hass;
@@ -5714,7 +6086,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const showVal = look.markers !== "icon" && opts.values !== false;
     const bondAll = item.bond && (!eid || eid === item.main_entity);
     return { key: item.id, type: "marker", item, name, ents: bondAll ? this._parts(item) : [eid], eid, st, kind, on, dim, unavail, color, value: showVal ? value : "", icon: this._dev(item.id).icon || (bondAll ? item.icon : null), x: item.x, y: item.y };
-  }
+  },
 
   /** test9: a device that only measures (nothing to switch or run) shows its value as a chip, the Comfort look,
    *  in every overlay it is in; a device you control keeps its icon. */
@@ -5723,7 +6095,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const ok = (e) => e && this._hass.states[e] && !this._aux(e) && !NO_VALUE.has(domainOf(e));
     const all = [item.main_entity, ...this._allowed(item)];
     return all.find((e) => ok(e) && live(this._hass.states[e])) || all.find(ok) || null; // 0.12.9: none = nothing to draw
-  }
+  },
 
   /** 0.12.6: a device drawn as itself, the look of the overlay that owns its kind (Live and own overlays). */
   _asItself(item, name, lead) {
@@ -5746,23 +6118,23 @@ class DeviceFloorplanCard extends HTMLElement {
       return { ...this._chipSpec(item, name, { lines: [line], ents: [lead], kind: "reading" }), rd: { t: line, h: "" } };
     }
     return this._liveSpec(item, name, lead, st, k, {});
-  }
+  },
 
   _valueChip(item, name, e) {
     if (!e || item.bond || domainOf(e) !== "sensor") return null;
     if (!(item.group === "sensors" || (item.standalone && domainOf(item.main_entity || "") === "sensor"))) return null;
     const line = this._fmtNum(e);
     return { ...this._chipSpec(item, name, { lines: [line], ents: [e], kind: "reading" }), rd: { t: line, h: "" } };
-  }
+  },
 
   /** Health: a device without a battery shows only while offline, as this chip. */
   _offChip(item, name) {
     return { ...this._chipSpec(item, name, { lines: ["Offline"], icon: "mdi:alert-circle-outline", ents: [item.main_entity], kind: "other", cls: "warn" }), offline: true };
-  }
+  },
 
   _chipSpec(item, name, { lines, ents, kind, icon, cls = "" }) {
     return { key: `${item.id}|${ents.join(",")}`, type: "chip", item, name, lines, ents, kind, icon, cls, x: item.x, y: item.y };
-  }
+  },
 
   _fmt(eid) {
     const st = this._hass.states[eid];
@@ -5773,7 +6145,7 @@ class DeviceFloorplanCard extends HTMLElement {
       /* fall back */
     }
     return `${st.state}${st.attributes.unit_of_measurement ? ` ${st.attributes.unit_of_measurement}` : ""}`;
-  }
+  },
 
   /** Readings: the entity's own display precision if set, otherwise at most 1 decimal (#51). */
   _fmtNum(eid) {
@@ -5790,7 +6162,7 @@ class DeviceFloorplanCard extends HTMLElement {
       n = String(v);
     }
     return unit ? (unit === "%" ? `${n}%` : `${n} ${unit}`) : n;
-  }
+  },
 
   _attrVal(st, attr) {
     try {
@@ -5799,7 +6171,7 @@ class DeviceFloorplanCard extends HTMLElement {
       /* fall back */
     }
     return `${st.attributes[attr]}°`;
-  }
+  },
 
   // ------------------------------------------------------------- render
   _update(force = false) {
@@ -5833,7 +6205,7 @@ class DeviceFloorplanCard extends HTMLElement {
     this._key = key;
     this._dirty = false;
     this._render(sensor);
-  }
+  },
 
   /** Entities the current overlay reads for this item (what can change what it shows). */
   _reads(item, ov) {
@@ -5855,7 +6227,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const def = this._ovDef(ov);
     if (def && def.custom) for (const e of all) if (["temperature", "humidity", "battery", "climate"].includes(kindOf(e, hass.states[e]))) ents.add(e);
     return ents;
-  }
+  },
 
   _render(sensor) {
     const c = this._config;
@@ -5929,7 +6301,15 @@ class DeviceFloorplanCard extends HTMLElement {
     if (ov === "lights" || ((this._ns || {}).f > 0 && (this._night().overlays || []).includes(ov))) {
       for (const item of this._items(a)) for (const e of item.bond ? item.entities : [item.main_entity]) if (e && domainOf(e) === "light") watch.add(e);
     }
-    if (this._peopleShown()) for (const pp of this._people()) for (const e of [pp.entity, pp.room, pp.room2]) if (e) watch.add(e);
+    if (this._peopleShown()) for (const pp of this._people()) for (const e of [pp.entity, pp.room, pp.room2, pp.distance]) if (e) watch.add(e);
+    // 0.13.9.4 People distance: the Bermuda sensors of the same device (area, distance to each proxy)
+    if (this._pdOn()) {
+      const reg = this._hass.entities || {};
+      for (const pp of this._people()) {
+        const dev = pp.distance && (reg[pp.distance] || {}).device_id;
+        if (dev) for (const e of Object.keys(reg)) if (reg[e].device_id === dev && e.startsWith("sensor.")) watch.add(e);
+      }
+    }
     for (const x of this._ovActs()) if ((x.overlay || "cleaning") === ov) for (const e of barEnts(this._hass, x.status || {})) watch.add(e);
     if (["live", "cleaning", "health"].includes(ov)) {
       const ents = this._hass.entities || {};
@@ -5970,6 +6350,10 @@ class DeviceFloorplanCard extends HTMLElement {
     const atStart = touch && (vertical ? lpos.startsWith("top") : lpos.endsWith("left"));
     // Layers on the plan when it does not share the overlay buttons row.
     const lCorner = grpOn && !(layersInBar && dockShown) && !touch;
+    // 0.13.3: admin notes (new overlay, release tip) float on the plan: they never push the Overlay Bar away.
+    const notes = `${this._newOvHtml()}${this._tipHtml()}`;
+    const pulseH = this._pulseHtml(a);
+    const airH = this._airHtml(a);
     const cornerPos = ["top-left", "bottom-right", "bottom-left"].includes(lpos) ? lpos : "top-right";
     // 0.8.1: with several floors the floor button sits right next to Layers, on its right (one group, wherever Layers is).
     // test10: one order, counted from the plan's outer edge inwards: floors · Layers · Replay (so a group on the
@@ -5980,7 +6364,7 @@ class DeviceFloorplanCard extends HTMLElement {
     };
     const lgShown = () => lCorner || touch || (layersInBar && dockShown);
     const slot = (on) => `<span class="lslot ${on ? "" : "lvoid"}">${on ? lg() : ""}</span>`;
-    const autoSt = dockShown && btn.auto ? this._autoStatus() : {};
+    const autoSt = dockShown && (btn.auto || Object.values(btn.actions || {}).some((x) => x && x.status && x.status.mode === "auto")) ? this._autoStatus() : {};
     // Card overlays · your own overlays · shortcuts, with a faint line where the group changes.
     const barItems = [
       ...dock.map((o) => {
@@ -6011,12 +6395,12 @@ class DeviceFloorplanCard extends HTMLElement {
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${this._pulseHtml(a)}${this._picHtml(a)}${this._touchHtml(a)}${this._tvHtml(a)}${this._airHtml(a)}${this._barsHtml(a)}${this._applHtml(a)}
+          ${this._tapLayer(pulseH, airH)}${this._picHtml(a)}${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${pulseH}${this._xmasHtml(a)}${this._picHtml(a, "hl")}${this._touchHtml(a)}${this._tvHtml(a)}${airH}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
-        </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${this._newOvHtml()}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
+        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>All secure</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
@@ -6041,6 +6425,7 @@ class DeviceFloorplanCard extends HTMLElement {
         this._update(true);
       }, { once: true });
     }
+    this._attachVids();
     const box = this.shadowRoot.querySelector(".box");
     if (this._ro && box) {
       this._ro.disconnect();
@@ -6071,7 +6456,7 @@ class DeviceFloorplanCard extends HTMLElement {
     this._announce();
     if (this._popup && this._popup.type === "readings") this._fillHistory();
     if ((this._popup && this._popup.type === "info") || this._prevShown) requestAnimationFrame(() => this._placeInfo());
-  }
+  },
 
   /** Put the layers menu next to its button, inside the card (bar below, above, left or right). */
   _placeMenu() {
@@ -6121,7 +6506,7 @@ class DeviceFloorplanCard extends HTMLElement {
     menu.style.left = `${x - c.left}px`;
     menu.style.top = `${y - c.top}px`;
     menu.style.visibility = "visible";
-  }
+  },
 
   _loadZha(force = false) {
     if (!this._hass.user || !this._hass.user.is_admin || this._zhaBusy) return;
@@ -6134,7 +6519,7 @@ class DeviceFloorplanCard extends HTMLElement {
       this._zhaAt = Date.now();
       if (this._overlay === "network") this._update(true);
     });
-  }
+  },
 
   /** While Network is open: quietly reload ZHA data every 5 minutes (#66). */
   _netTimer(on) {
@@ -6143,7 +6528,7 @@ class DeviceFloorplanCard extends HTMLElement {
       clearInterval(this._netT);
       this._netT = null;
     }
-  }
+  },
 
   /** ↻ Refresh: ask ZHA for a new neighbour scan, then reload (#66). */
   async _refreshZha() {
@@ -6162,7 +6547,7 @@ class DeviceFloorplanCard extends HTMLElement {
     this._zhaBusy = false;
     this._scanning = false;
     this._loadZha(true);
-  }
+  },
 
   /** Floor rail (#75): Layers on top (Network), ▲ floors ▼. */
   /** 0.8.1: one round button with the floor number; tapped, it becomes the floor rail (▲ · floors · ▼), on the plan. */
@@ -6187,7 +6572,7 @@ class DeviceFloorplanCard extends HTMLElement {
       <button class="arrow" data-step="1" aria-label="Floor up" ${li <= 0 ? "disabled" : ""}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
       ${lv.map(btn).join("")}
       <button class="arrow" data-step="-1" aria-label="Floor down" ${li >= lv.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:chevron-down"></ha-icon></button>${side}</div>`;
-  }
+  },
 
   /** 0.8.1: the floor rail opens towards the plan: downwards from a button in the upper half, else upwards. */
   _alignFloor() {
@@ -6199,7 +6584,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const r = w.getBoundingClientRect();
       w.classList.toggle("up", r.top > c.top + c.height / 2);
     });
-  }
+  },
 
   /** Swipe up / down on the plan changes the floor (touch; option floors.swipe). */
   _bindSwipe(box) {
@@ -6224,7 +6609,9 @@ class DeviceFloorplanCard extends HTMLElement {
         this._stepSide(dx < 0 ? 1 : -1);
       }
     });
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.7.4: Comfort heatmap. Each shaped room is coloured from the temperatures on the plan: its own
    *  sensors count fully, rooms open to it (shapes that overlap) count less, the rest only a little, so a
@@ -6357,7 +6744,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const range = hi - lo;
     const step = range <= 2 ? 0.25 : range <= 4 ? 0.5 : 1;
     return { GW, GH, val, est, lo, hi, step, rooms: rooms.map(([, r], k) => (lit[k] ? r.shape : null)).filter(Boolean) };
-  }
+  },
 
   _drawHeat() {
     const h = this._heat;
@@ -6434,7 +6821,7 @@ class DeviceFloorplanCard extends HTMLElement {
       ctx.stroke();
     }
     ctx.restore();
-  }
+  },
 
   /** Heatmap strength in % (viewer's slider, else the card's setting, else 52). */
   /** Strength of the Last cleaned colours: this browser's slider, else the card setting. */
@@ -6442,27 +6829,27 @@ class DeviceFloorplanCard extends HTMLElement {
     const v = (this._lay.cleaning || {}).op;
     const d = Number((this._config.cleaning || {}).opacity);
     return Number.isFinite(v) ? v : Number.isFinite(d) && d > 0 ? d : 60;
-  }
+  },
 
   /** Under the plan in Cleaning: what the colours mean, and how strong they are. */
   _cleanLegendHtml() {
     if (this._overlay !== "cleaning" || !this._layerOn("cleaning", "fresh", true) || !Object.keys((this._a || {}).robots || {}).length) return "";
     const sw = (c, t) => `<span class="cl"><i style="background:${c}"></i>${t}</span>`;
     return `<div class="heatleg cleanleg"><span class="ht">Last cleaned</span>${sw("rgba(33,150,243,.55)", "Now")}${sw("rgba(76,175,80,.85)", "Fresh")}${sw("rgba(255,152,0,.7)", "Due")}<span class="hb"></span><label class="hop" title="Colour strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="100" step="5" value="${this._cleanOp()}" data-cleanop="1" aria-label="Colour strength"></label></div>`;
-  }
+  },
 
   _heatOp() {
     const v = (this._lay.comfort || {}).heatOp;
     const d = Number(this._ov("comfort").heatmap_opacity);
     return Number.isFinite(v) ? v : Number.isFinite(d) && d > 0 ? d : 52;
-  }
+  },
 
   _heatLegendHtml() {
     const h = this._heat;
     const f = (v) => `${this._num1 ? this._num1(v) : v.toFixed(1)}°`;
     const grad = HEAT_STOPS.map(([t, c]) => `rgb(${c.join(",")}) ${Math.round(t * 100)}%`).join(", ");
     return `<div class="heatleg"><span class="ht">Room temperature</span><div class="hb"><div class="bar" style="background:linear-gradient(90deg, ${grad})"></div><div class="tk"><span>${f(h.lo)}</span><span>${f((h.lo + h.hi) / 2)}</span><span>${f(h.hi)}</span></div></div><span class="est">Estimated between sensors</span><label class="hop" title="Heatmap strength"><ha-icon icon="mdi:circle-opacity"></ha-icon><input type="range" min="15" max="90" step="5" value="${this._heatOp()}" data-heatop="1" aria-label="Heatmap strength"></label></div>`;
-  }
+  },
 
   /** Rooms (#53): names at their spots, in the overlays chosen in the editor. */
   _roomsHtml(a) {
@@ -6493,7 +6880,7 @@ class DeviceFloorplanCard extends HTMLElement {
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
       return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}</div>`;
     }).join("");
-  }
+  },
 
   /** test11: the Matter mark = Home Assistant's own brand image (2026.3+: its local brands API, else the brands
    *  site), drawn white like the other marks; our "M" until it is there and when it can't load. */
@@ -6510,7 +6897,7 @@ class DeviceFloorplanCard extends HTMLElement {
         .catch(() => done("https://brands.home-assistant.io/matter/icon.png"));
     }
     return b.url && !b.bad ? `<img class="nbm" src="${cesc(b.url)}" alt="" data-brand="matter">` : `<b class="nbm">M</b>`;
-  }
+  },
 
   _markerHtml(s) {
     if (s.item && this._overlay === "live" && this._picStands(s.item)) return ""; // 0.12.2: its picture stands there
@@ -6540,7 +6927,7 @@ class DeviceFloorplanCard extends HTMLElement {
     const bond = ""; // #86: a bond is one device on the card, no badge
     const label = `${s.name}${s.st ? ` · ${this._fmt(s.eid)}` : ""}`;
     return `<button class="${cls}" style="left:${s.x}%;top:${s.y}%;--dfc-c:${s.color}${lc}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(label)}"><span class="ic">${icon}${bond}${s.badge && !noi ? `<span class="bdg">${cesc(s.badge)}</span>` : ""}</span>${s.badge && noi ? `<span class="bdg nb">${cesc(s.badge)}</span>` : ""}${s.value ? `<span class="val">${cesc(s.value)}</span>` : ""}${xs}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}${s.item.ofName ? `<br><small>Through ${cesc(s.item.ofName)}${(s.item.conns || []).length ? ` · ${cesc(s.item.conns.map((c) => (CONNS[c] || { label: c }).label).join(" + "))}` : ""}</small>` : ""}</span></button>`;
-  }
+  },
 
   _chipHtml(s) {
     const bdg = s.badge ? `<span class="bdg">${cesc(s.badge)}</span>` : "";
@@ -6562,7 +6949,7 @@ class DeviceFloorplanCard extends HTMLElement {
     }
     const first = s.icon ? `<span class="ico"><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.lines[0] || "")}</span>` : `<span class="l1">${cesc(s.lines[0] || "")}</span>`;
     return `<button class="chip ${s.cls} ${this._hl === s.key ? "hl" : ""} ${this._pick && this._selId === s.item.id ? "sel" : ""} ${s.ghost ? "ghost" : ""}" style="left:${s.x}%;top:${s.y}%;${s.color ? `--dfc-c:${s.color}` : ""}" data-k="${cesc(s.key)}" data-name="${cesc(s.name || "")}" data-x="${s.x}" data-y="${s.y}" aria-label="${cesc(`${s.name}: ${s.lines.join(", ")}`)}">${first}${s.lines[1] ? `<span class="l2">${cesc(s.lines[1])}</span>` : ""}${xl}${this._xb(s)}<span class="tip">${cesc(s.name)}${this._tipState(s) ? `<span class="tst"> · ${cesc(this._tipState(s))}</span>` : ""}</span></button>`;
-  }
+  },
 
   /** Connections present on this plan (for the layers menu). */
   _connsPresent(a) {
@@ -6570,11 +6957,11 @@ class DeviceFloorplanCard extends HTMLElement {
     for (const s of (this._specs || new Map()).values()) for (const cn of s.conns || []) set.add(cn);
     for (const d of Object.values(a.devices || {})) for (const cn of d.conns || []) if (CONNS[cn]) set.add(cn);
     return CONN_ORDER.filter((cn) => set.has(cn));
-  }
+  },
 
   _layersBtn(rail = false) {
     return `<button class="layers ${this._menu ? "on" : ""}" data-menu="1" title="Layers" aria-label="Layers" aria-expanded="${this._menu}"><ha-icon icon="mdi:layers-outline"></ha-icon>${rail ? "" : "<span>Layers</span>"}</button>`;
-  }
+  },
 
   _layersMenu(a) {
     const present = this._connsPresent(a);
@@ -6614,9 +7001,10 @@ class DeviceFloorplanCard extends HTMLElement {
       ${hasW ? `<button class="${n.wlinks ? "on" : ""}" data-tg="wlinks">${tick(n.wlinks)}Wi-Fi / LAN links</button>` : ""}
       ${hasH || n.hubs === false ? `<button class="${n.hubs ? "on" : ""}" data-tg="hubs">${tick(n.hubs)}Hub / bridge links</button>` : ""}
       <button class="${n.legend ? "on" : ""}" data-tg="legend">${tick(n.legend)}Legend</button>
+      ${shown.includes("bluetooth") && this._people().some((p) => p.distance) ? `<hr><h4>People</h4>${lay("pdist", "mdi:account-badge-outline", "People distance")}${this._layerOn(ov, "pdist", true) ? lay("pall", "mdi:radar", "Rings around all proxies") : ""}` : ""}
 ${reset}
     </div>`;
-  }
+  },
 
   /** Roles of the devices in Network on this floor (incl. hidden ones, so they can be switched back on). */
   _rolesPresent() {
@@ -6630,8 +7018,8 @@ ${reset}
     } finally {
       this._net.roles = saved;
     }
-    return ["coordinator", "ap", "router", "hub", "end", "device", "unknown", "unavailable"].filter((r) => set.has(r));
-  }
+    return Object.keys(ROLES).filter((r) => set.has(r)); // 0.13.9.3: every role drawn gets its legend entry
+  },
 
   /** 0.8.1: the legend shows only what is drawn now, in small groups (roles · LQI · lines · access points · Refresh). */
   _legendHtml(specs, withLayers) {
@@ -6677,7 +7065,7 @@ ${reset}
     }
     if (withLayers) groups.push(this._layersBtn());
     return groups.length ? `<div class="legend">${groups.map((g) => `<span class="lgrp">${g}</span>`).join("")}</div>` : "";
-  }
+  },
 
   /** Lights overlay: All off / All on / the user's scenes (#54). */
   _sceneBarHtml(specs) {
@@ -6695,13 +7083,35 @@ ${reset}
       b.push(`<button data-scene="${i}" class="${this._sceneActive(s) ? "on" : ""}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}</button>`);
     });
     return `<div class="bar" role="toolbar" aria-label="Light scenes">${b.join("")}</div>`;
-  }
+  },
 
   /** 0.10: Overlay actions: your own buttons under the plan, per overlay and per floor (any HA action, a popup…);
    *  in Cleaning first the robots' own Start / Pause / Dock. */
   _ovActs() {
     return Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
-  }
+  },
+
+  /** 0.13.2: "New in <version>" pill for admins (card setting release_tips: false hides it), until closed (✕). */
+  _tipHtml() {
+    const h = this._hass;
+    if (!RELEASE_TIP || this.preview || this._config.release_tips === false || !h || !h.user || !h.user.is_admin) return "";
+    if (window.__dfcTipSeen === undefined) {
+      window.__dfcTipSeen = null; // asked once per page
+      Promise.resolve(h.callWS({ type: "frontend/get_user_data", key: TIP_KEY }))
+        .then((r) => (window.__dfcTipSeen = (r && r.value) || ""))
+        .catch(() => (window.__dfcTipSeen = RELEASE_TIP.v)) // can't tell: stay quiet
+        .finally(() => window.dispatchEvent(new CustomEvent("dfc-tip")));
+      return "";
+    }
+    if (window.__dfcTipSeen === null || window.__dfcTipSeen === RELEASE_TIP.v) return "";
+    return `<div class="newov tipv"><ha-icon icon="mdi:information-outline"></ha-icon><span>New in ${cesc(RELEASE_TIP.v)}: <b>${cesc(RELEASE_TIP.text)}</b></span><button data-tipgo="1" data-add="1">${cesc(RELEASE_TIP.go)} ›</button><button data-tipx="1" aria-label="Close this tip">✕</button></div>`;
+  },
+
+  _tipClose() {
+    window.__dfcTipSeen = RELEASE_TIP.v;
+    window.dispatchEvent(new CustomEvent("dfc-tip"));
+    Promise.resolve(this._hass.callWS({ type: "frontend/set_user_data", key: TIP_KEY, value: RELEASE_TIP.v })).catch(() => {});
+  },
 
   /** 0.11: a card that lists its own overlays doesn't get new ones by itself: admins see a tip, once per overlay. */
   _newOvHtml() {
@@ -6711,7 +7121,7 @@ ${reset}
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
     if (!o) return "";
     return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ New: <b>${cesc(OVERLAYS[o].label)}</b> overlay${o === "energy" ? ". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines." : ""}</span><button data-newov="${o}" data-add="1">Add to this card</button><button data-newov="${o}">Not now</button></div>`;
-  }
+  },
 
   async _newOvAnswer(o, add) {
     const raw = { ...(this._raw || {}) };
@@ -6728,7 +7138,7 @@ ${reset}
     this.setConfig(raw);
     if (add) this._overlay = o;
     this._update(true);
-  }
+  },
 
   _ovActsHtml(ov) {
     const a = this._a || {};
@@ -6754,18 +7164,18 @@ ${reset}
       b.push(`<button data-oact="${i}" data-bh="1"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"${col}></ha-icon>${cesc(x.name || "Action")}${mark}</button>`);
     });
     return b.length ? `<div class="bar oacts" role="toolbar" aria-label="Actions">${b.join("")}</div>` : "";
-  }
+  },
 
   _ovActEnt(x) {
     const e = (x.status || {}).entity;
     return (Array.isArray(e) ? e[0] : e) || undefined;
-  }
+  },
 
   _lightEnts(specs) {
     const out = new Set();
     for (const s of specs || [...(this._specs || new Map()).values()]) for (const e of s.ents || []) if (TOGGLE_DOMAINS.has(domainOf(e)) && domainOf(e) !== "cover") out.add(e);
     return [...out];
-  }
+  },
 
   _sceneActive(s) {
     if (s.entity || !Array.isArray(s.lights) || !s.lights.length) return false;
@@ -6778,7 +7188,7 @@ ${reset}
       if (want.brightness_pct != null && st.attributes.brightness != null) return Math.abs((st.attributes.brightness / 255) * 100 - want.brightness_pct) <= 4;
       return true;
     });
-  }
+  },
 
   _runScene(id) {
     const L = this._lights();
@@ -6810,7 +7220,9 @@ ${reset}
       else if (src.rgb_color) data.rgb_color = src.rgb_color;
       this._hass.callService("light", "turn_on", data);
     }
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   // ------------------------------------------------------------- layout
   /** 0.8.2: the bar as long as the plan with its frame (next to it), and the scroll chevrons. */
@@ -6850,19 +7262,63 @@ ${reset}
       nav.addEventListener("scroll", upd, { passive: true });
     }
     upd();
-  }
+  },
 
   _layoutSoon() {
     cancelAnimationFrame(this._lraf);
     this._lraf = requestAnimationFrame(() => this._layout());
-  }
+  },
 
   /** Keep close markers readable: spread them in a small grid, then push any remaining overlaps apart; a leader line points to the real spot. */
   /** 0.8.2: in a card with a fixed height (panel view, sections grid, wall panel, preview) the plan fills the area
    *  left after the buttons, legend and people: as large as possible, never stretched. Elsewhere (masonry) the
    *  card grows with the plan, which then uses the full width as before. */
+  /** 0.13.2 (#22): a bar a theme keeps fixed along the bottom of the dashboard (Material You's navigation bar).
+   *  The plan's height reserve (170 px for Home Assistant's header and the card around the plan) grows by its
+   *  height. Home Assistant has no such bar, so with the standard layout (phones with a notch included) nothing
+   *  changes. */
+  _screenBars() {
+    const deep = (x, y) => {
+      let el = document.elementFromPoint(x, y);
+      for (let i = 0; el && el.shadowRoot && i < 30; i++) {
+        const inner = el.shadowRoot.elementFromPoint(x, y);
+        if (!inner || inner === el) break;
+        el = inner;
+      }
+      return el;
+    };
+    const fixedUp = (el) => {
+      for (let n = el, i = 0; n && i < 60; i++) {
+        if (n.nodeType === 1) {
+          const pos = getComputedStyle(n).position;
+          if (pos === "fixed" || pos === "sticky") return n;
+        }
+        n = n.assignedSlot || n.parentNode || n.host;
+      }
+      return null;
+    };
+    const mine = (n) => n === this || (n.contains && n.contains(this));
+    const x = Math.round(window.innerWidth / 2);
+    const H = window.innerHeight;
+    let bottom = 0;
+    try {
+      const b = fixedUp(deep(x, H - 1));
+      if (b && !mine(b)) {
+        const r = b.getBoundingClientRect();
+        if (r.top > H / 2) bottom = Math.max(0, H - r.top); // a bar along the bottom, not a full-screen layer
+      }
+    } catch (_e) {
+      /* keep the standard reserve */
+    }
+    return Math.round(bottom);
+  },
+
   _fitPlan() {
     const sr = this.shadowRoot;
+    // 0.13.2 (#22): the reserve follows what the screen really leaves free.
+    const extra = typeof document !== "undefined" && document.elementFromPoint ? this._screenBars() : 0;
+    if (extra > 0) this.style.setProperty("--dfc-chrome", `${170 + extra}px`);
+    else this.style.removeProperty("--dfc-chrome");
     const card = sr && sr.querySelector("ha-card");
     const wrap = sr && sr.querySelector(".wrap");
     if (!card || !wrap) return;
@@ -6897,7 +7353,7 @@ ${reset}
     const h = Math.max(120, card.clientHeight - others - padV - 2);
     const cur = parseFloat(this.style.getPropertyValue("--dfc-fit-h")) || 0;
     if (Math.abs(cur - h) > 1) this.style.setProperty("--dfc-fit-h", `${Math.round(h)}px`);
-  }
+  },
 
 
 
@@ -6909,6 +7365,10 @@ ${reset}
     const W = box.clientWidth;
     const H = box.clientHeight;
     if (!W || !H) return;
+    // 0.13.3: Christmas bulbs keep a minimum size on screen: redraw once when the plan's width changes a lot.
+    const wasW = this._boxW || 0;
+    this._boxW = W;
+    if (Math.abs(wasW - W) > 40 && box.querySelector("svg.xmas")) this._update(true);
     this._alignFloor();
     // Markers follow the card size (#76): full size from ~900 px width, smaller below.
     const look = this._look();
@@ -7014,7 +7474,7 @@ ${reset}
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       svg.innerHTML = this._eFlowSvg(box, W, H, svg.getCurrentTime ? svg.getCurrentTime() : 0) + this._linkLines(W, H) + lines + this._placeWins(box, W, H);
     }
-  }
+  },
 
   /** Zigbee links (all ZHA neighbours, coloured by LQI) and hub/bridge links (Matter bridges, hubs). */
   _linkLines(W, H) {
@@ -7077,7 +7537,9 @@ ${reset}
       }
     }
     return out;
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   // ------------------------------------------------------------- actions
   _tapAction(s) {
@@ -7096,7 +7558,7 @@ ${reset}
     // 0.12.8: Health is for checking (batteries, connections): a tap there opens details, it never switches.
     if (act === "toggle" && this._overlay === "health") return "more-info";
     return act;
-  }
+  },
 
   /** 0.12.8: the device's own word for "active": a door is open, motion is detected, an appliance is running. */
   _onWords(item, sp) {
@@ -7112,18 +7574,18 @@ ${reset}
     if (dm === "lock") return "it's unlocked";
     if (dm === "climate") return "it's running";
     return "it's on";
-  }
+  },
 
   /** Marker editing: ✕ on the selected marker hides it in this overlay (#108). */
   _xb(s) {
     return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="Hide it here (in this overlay only)">✕</span>` : "";
-  }
+  },
 
   _penHtml() {
     const m = this._penMode();
     if (m === "pen") return `<button class="pen" data-pen="1" title="Click markers to hide them, choose what they show, icon, name, tap"><ha-icon icon="mdi:pencil"></ha-icon>Edit markers</button>`;
     return "";
-  }
+  },
 
   _onClick(e) {
     const t = e.target;
@@ -7277,6 +7739,13 @@ ${reset}
     }
     const pl = t.closest("[data-pulse]");
     if (pl) return this._moreInfo(pl.dataset.pulse);
+    if (t.closest("[data-tipx]")) return this._tipClose();
+    if (t.closest("[data-tipgo]")) {
+      this._tipClose();
+      window.history.pushState(null, "", PANEL_PATH);
+      window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+      return;
+    }
     const nov = t.closest("[data-newov]");
     if (nov) return this._newOvAnswer(nov.dataset.newov, !!nov.dataset.add);
     const ad = t.closest("[data-appldone]");
@@ -7430,7 +7899,11 @@ ${reset}
       this._pickNote(tz.dataset.touch);
       return this._touchTap(tz.dataset.touch);
     }
-    const s = this._specs && this._specs.get(k.dataset.k);
+    return this._tapSpec(this._specs && this._specs.get(k.dataset.k));
+  },
+
+  /** A marker's tap (also a phantom's picture / touch area, which has no single device to switch). */
+  _tapSpec(s) {
     if (!s) return;
     this._pickNote(s.item.id, s); // marker editing (#87/#95): select, then act
     if (s.elist) {
@@ -7446,7 +7919,7 @@ ${reset}
       return this._update(true);
     }
     return this._runAction(s);
-  }
+  },
 
   /** The marker's own action ("Open ›" in the info card, a tap); 0.12.6: also a chosen long press (pre "hold_"). */
   _runAction(s, act = this._tapAction(s), pre = "") {
@@ -7491,7 +7964,7 @@ ${reset}
     }
     if (s.item.bond || (s.also && s.also.length)) return this._openList({ ...s, ents: [s.eid, ...(s.also || [])].filter(Boolean) });
     this._moreInfo(s.ents[0]);
-  }
+  },
 
   _onInput(e) {
     const t = e.target;
@@ -7530,7 +8003,7 @@ ${reset}
       this._drawHeat();
       return;
     }
-  }
+  },
 
   /** Hold / right-click: Home Assistant's details (graphs for a phantom). In Edit markers it's only simulated. */
   _holdEl(t) {
@@ -7539,14 +8012,14 @@ ${reset}
     else if (t.dataset.airent) this._moreInfo(t.dataset.airent);
     else if (t.dataset.touch) this._touchHold(t.dataset.touch, t.dataset.ent); // 0.12.6: the device's own long press
     else this._holdAppl(t.dataset.appl);
-  }
+  },
 
   _hold(key) {
     const s = this._specs && this._specs.get(key);
     if (!s) return;
     this._pickNote(s.item.id, s);
     this._runHold(s);
-  }
+  },
 
   /** 0.12.6: the long press chosen for a marker: per overlay, the device, the card's per kind; "" = the default. */
   _holdAction(s) {
@@ -7557,7 +8030,7 @@ ${reset}
     if (o.hold) return o.hold;
     const k = s.type === "chip" && s.kind === "reading" ? "reading" : tapKind(s.kind);
     return (this._config.hold || {})[k] || "";
-  }
+  },
 
   /** 0.12.6: run the long press: the chosen action, else the default (details; graphs for a phantom; a lamp bond's info card). */
   _runHold(s) {
@@ -7570,7 +8043,7 @@ ${reset}
     const ents = this._lampBond(s.item) ? this._parts(s.item) : s.ents;
     if (act === "toggle") return this._toggle({ ...s, ents });
     return this._runAction({ ...s, ents }, act, "hold_");
-  }
+  },
 
   /** 0.12.6: what a tap / long press does, in words (Edit markers, the card editor). */
   _actWords(s, hold) {
@@ -7584,7 +8057,7 @@ ${reset}
     if (this._lampBond(s.item) && !this._dev(s.item.id).tap && !this._per(s.item, this._overlay).tap) return "switch all";
     if (multi && !this._per(s.item, this._overlay).tap && !this._dev(s.item.id).tap) return "info card";
     return W[this._tapAction(s)] || this._tapAction(s);
-  }
+  },
 
   /** 0.12.6: tell the card editor which device was tapped / held (big editor: select it; HA's preview: open
    *  its settings). The action itself still runs, as on the dashboard. */
@@ -7592,7 +8065,7 @@ ${reset}
     if (!id) return;
     if (this._pick) this._pick(id, s);
     else if (this._isPreview()) window.dispatchEvent(new CustomEvent("dfc-preview-pick", { detail: { id, ov: this._overlay } }));
-  }
+  },
 
   /** 0.12.6: inside the card editor's preview (HA sets .preview on preview cards; the dialog as a fallback). */
   _isPreview() {
@@ -7603,13 +8076,13 @@ ${reset}
       n = n.parentNode || n.host;
     }
     return false;
-  }
+  },
 
   /** Home Assistant's details of a marker: graphs for a phantom, the leading entity's dialog otherwise. */
   /** 0.12.10: a phantom chip of readings (thermometers): tap = readings, long press = info card. */
   _rdPhantom(s) {
     return !!(s && s.phantom && s.type === "chip" && s.kind === "reading");
-  }
+  },
 
   _details(s) {
     if (this._rdPhantom(s)) {
@@ -7623,7 +8096,7 @@ ${reset}
       return this._update(true);
     }
     this._moreInfo(s.eid || (s.ents || [])[0]);
-  }
+  },
 
   /** Hold on an appliance: its details. */
   _holdAppl(ids) {
@@ -7632,7 +8105,7 @@ ${reset}
     this._pickNote(o.ap.item.id);
     const ap = o.ap;
     this._moreInfo(ap.status || ap.running || ap.power || ap.plug || ap.item.main_entity);
-  }
+  },
 
   /** A short message on the card (Edit markers simulation). */
   _toast(text) {
@@ -7648,7 +8121,7 @@ ${reset}
     el.classList.add("show");
     clearTimeout(this._toastT);
     this._toastT = setTimeout(() => el.classList.remove("show"), 2600);
-  }
+  },
 
   /** "Name · state" of the thing at a screen point (markers, chips, openings, appliances, people). */
   _tipAt(x, y) {
@@ -7663,7 +8136,7 @@ ${reset}
     }
     if (el && !text) text = el.getAttribute("aria-label") || el.getAttribute("title") || "";
     return { text, el };
-  }
+  },
 
   /** The one tooltip, placed inside the card above the point (finger or mouse). */
   _showTip(text, x, y, el, finger) {
@@ -7692,14 +8165,14 @@ ${reset}
     tip.style.left = `${left}px`;
     tip.style.top = `${top}px`;
     tip.classList.add("show");
-  }
+  },
 
   _hideTip() {
     clearTimeout(this._hovT);
     this._hovEl = null;
     const tip = this.shadowRoot && this.shadowRoot.querySelector(".xtip");
     if (tip) tip.classList.remove("show");
-  }
+  },
 
   /** PC hover: after a short pause over a thing, its name and state. */
   _hoverSoon(x, y) {
@@ -7713,13 +8186,13 @@ ${reset}
       if (!el || !text) return this._showTip("", 0, 0);
       this._hovT = setTimeout(() => this._showTip(text, x, y, el, false), 150);
     });
-  }
+  },
 
   /** Explore (touch): show the name and state of what's under the finger. */
   _explore(x, y) {
     const { text } = this._tipAt(x, y);
     this._showTip(text, x, y, null, true); // above the finger, never under it
-  }
+  },
 
   _exploreEnd() {
     clearTimeout(this._xtipT);
@@ -7727,12 +8200,12 @@ ${reset}
       const tip = this.shadowRoot && this.shadowRoot.querySelector(".xtip");
       if (tip) tip.classList.remove("show");
     }, 1000);
-  }
+  },
 
   /** "Name · state" for the hover tooltip and explore. */
   _tipText(s) {
     return `${s.name}${this._tipState(s) ? ` · ${this._tipState(s)}` : ""}`;
-  }
+  },
 
   _tipState(s) {
     if (s.type === "net") return "";
@@ -7740,20 +8213,22 @@ ${reset}
     if (s.type === "chip") return ""; // 0.11: a chip already shows its values: the tip only names it
     else if (s.eid || (s.ents || [])[0]) t = this._fmt(s.eid || s.ents[0]);
     return t && t !== "—" ? t : t === "—" ? "unavailable" : "";
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.11.1: a bond whose members are all lights acts as one lamp. */
   _lampBond(item) {
     const e = this._parts(item);
     return !!(item && item.bond) && e.length > 0 && e.every((x) => domainOf(x) === "light");
-  }
+  },
 
   /** 0.12.9: a bond's real parts: its entities without settings / technical ones (an "Internet access" switch). */
   _parts(item) {
     const e = (item && item.entities) || [];
     const r = e.filter((x) => !this._aux(x));
     return r.length ? r : e;
-  }
+  },
 
   /** Entities the info card can switch (lights, switches, fans, helpers). */
   _infoToggles(s) {
@@ -7762,7 +8237,7 @@ ${reset}
     if (this._applOf(s.item)) return [];
     const lamp = domainOf(s.eid || "") === "light" || s.item.group === "lights" || s.item.actsAs === "light" || s.item.as === "light";
     return lamp ? ents.filter((e) => domainOf(e) === "light" || (s.item.group === "lights" && e === s.eid)) : [];
-  }
+  },
 
   /** A configuration or diagnostic entity (Home Assistant's category): never listed or switched. */
   _aux(e) {
@@ -7770,7 +8245,7 @@ ${reset}
     const st = this._hass.states[e];
     const cat = (reg && reg.entity_category) || (st && st.attributes && st.attributes.entity_category);
     return cat === "config" || cat === "diagnostic";
-  }
+  },
 
   /** Edit markers (0.7.5): the selected bond / phantom / appliance shows its info card as a preview. */
   _previewPop() {
@@ -7779,7 +8254,7 @@ ${reset}
     if ((this._appls || []).some((o) => o.ap.item.id === id)) return { type: "info", appl: id, prev: true };
     const sp = [...((this._specs && this._specs.values()) || [])].find((x) => x.item && x.item.id === id);
     return sp && (sp.phantom || sp.item.bond || sp.item.phantom) ? { type: "info", key: sp.key, prev: true } : null;
-  }
+  },
 
   /** 0.7.5: the info card: name, state, every reading, buttons; "Open ›" = the marker's action. */
   _infoHtml(p) {
@@ -7849,11 +8324,11 @@ ${reset}
     // 0.8.1: redrawn for new values at the spot it already had (no fade out and in).
     const was = this._icPos && this._icPos.anc === anchor ? this._icPos : null;
     return `<div class="pop ip ${p.prev ? "prev" : ""}"><div class="icard ${was ? "placed" : ""}" ${was ? `style="left:${was.left}px;top:${was.top}px"` : ""} role="dialog" aria-label="${cesc(name)}" data-anc="${cesc(anchor)}"><div class="ih"><b>${cesc(name)}</b>${close}</div><div class="ist"><i style="background:${dot}"></i><span>${cesc(state)}</span></div>${rows ? `<div class="irows">${rows}</div>` : ""}${attention || pr ? `<div class="ibtns">${attention}${pr}</div>` : ""}${open ? `<div class="iacts">${open}</div>` : ""}</div></div>`;
-  }
+  },
 
   _entName(e) {
     return entName(this._hass, e);
-  }
+  },
 
   /** 0.12.9: an entity's name without its device's name in front (the card's name, HA's device names). */
   _shortName(item, e, name, multi) {
@@ -7872,7 +8347,7 @@ ${reset}
       }
     }
     return full;
-  }
+  },
 
   /** Put the info card next to its marker, inside the card. */
   _placeInfo() {
@@ -7899,13 +8374,15 @@ ${reset}
     ic.style.top = `${top}px`;
     ic.classList.add("placed");
     this._icPos = { anc: ic.dataset.anc, left, top };
-  }
+  },
 
   /** 0.11: was this just turned off in Live (still within its few undo seconds)? */
   _undoFor(eids) {
     const u = this._undo;
     return !!(u && Date.now() < u.until && eids.some((e) => u.ents.includes(e)));
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.12.1 Touch areas: invisible tap areas for devices already drawn in the plan picture (a TV, an AC), set
    *  in the Floorplan Editor. Live only; they work when the device is off too. The smaller one wins where two
@@ -7924,13 +8401,13 @@ ${reset}
         return `<div class="touch ${hint === "outline" ? "outline" : ""} ${busy}" data-touch="${cesc(it.id)}" data-ent="${cesc(b.lead)}" role="button" aria-label="${cesc(b.name)}" style="left:${it.x - w / 2}%;top:${it.y - h / 2}%;width:${w}%;height:${h}%"></div>`;
       })
       .join("");
-  }
+  },
 
   /** 0.12.2 Device pictures (Live): the picture stands at the device and is its tap area (tap = the device's
    *  tap, hold = details, also when off). One look per state, changeable per device in the Floorplan Editor:
    *  on = full, off = faint, unavailable = dotted outline. The outline is traced from the picture's transparency
    *  when it is picked; "inset" pulls it a little inside. A tint keeps the picture's shading (blend "color"). */
-  _picHtml(a) {
+  _picHtml(a, part = "body") {
     if (this._overlay !== "live") return "";
     const replay = this._rpIn(); // 0.12.3: in Replay the picture takes the look of the replayed moment
     const out = [];
@@ -7941,19 +8418,26 @@ ${reset}
       // 0.12.4: one rule for every picture. The entity picked in Edit markers ("Show in Live when…") decides
       // On / Off (with an optional "counts as on when"); without one, the item's own entities do.
       const pl = this._per(it, "live");
-      const st = this._picState(body.ents, pl.when || pl.lead, pl.when_on); // 0.12.5: else the entity that leads
+      const st = this._picState(body.sents, pl.when || pl.lead, pl.when_on); // 0.12.5: else the entity that leads
       const state = st;
       const look = (p.looks || {})[state] || PIC_LOOK[state];
-      // Highlight: a second entity, shown on top (by default only while On).
-      const hl = p.hl && p.hl.look && pl.hl && (pl.hl_any || state === "on") && this._picState([pl.hl], pl.hl, pl.hl_on) === "on" ? p.hl : null;
+      // Highlight: with an entity picked in Edit markers it follows that entity (by default only while On);
+      // 0.13.3: without one, every highlight look shows while the picture is On.
+      const hl = !p.hl || !p.hl.look ? null
+        : pl.hl ? ((pl.hl_any || state === "on") && this._picState([pl.hl], pl.hl, pl.hl_on) === "on" ? p.hl : null)
+          : state === "on" ? p.hl : null;
       if (look === "hidden") continue;
       const url = this._picUrl(p.src);
       if (!url) continue;
       const busy = !replay && this._busyOn(it.id);
-      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? " · unavailable" : ""}`)}"` }));
+      if (part === "hl") {
+        out.push(picMarkup({ p, url, look, hl, x: it.x, y: it.y, part }));
+        continue;
+      }
+      out.push(picMarkup({ p, url, look, hl, busy, x: it.x, y: it.y, part, attrs: `data-touch="${cesc(it.id)}" data-ent="${cesc(body.lead)}" role="button" aria-label="${cesc(`${body.name}${state === "un" ? " · unavailable" : ""}`)}"` }));
     }
     return out.join("");
-  }
+  },
 
   /** 0.12.6: does the device have a look of its own here (Live: a touch area; its chosen light shape while on)?
    *  Then its marker draws no icon. Same rule for every marker; pictures replace the marker anyway. */
@@ -7961,12 +8445,12 @@ ${reset}
     if (!s || !s.item || this._overlay !== "live" || s.type === "net") return false;
     const b = this._bodyOf(s.item);
     return !!(b && b.touch); // 0.12.7: a light shape is not a look (Live's "Lights as" decides for lamps)
-  }
+  },
 
   /** Does a picture stand for this item (itself or its bond)? Its marker is then not drawn in Live. */
   _picStands(it) {
     return !!it.pic;
-  }
+  },
 
   /** 0.12.3: the "body" of an item (its picture / touch area). A bond is one item on the card (members merged),
    *  carrying the picture / touch area of the member that has one. Works the same for a device, a bond and an
@@ -7977,8 +8461,15 @@ ${reset}
     const lead = it.main_entity || ents[0];
     if (!lead) return null;
     const sw = it.bond ? it.entities || [lead] : [lead]; // a bond switches its members' main entities together
-    return { pic: it.pic, touch: it.touch, ents, lead, sw, name: this._dev(it.id).name || it.name || "", bond: !!it.bond };
-  }
+    // 0.13.9.1: what the picture's own On / Off follows: the same as its marker (a bond: its members' main
+    // entities; a device: its main entity); without one, only the device's primary entities (Home Assistant's
+    // own label: no "config" / "diagnostic" category, not hidden), so a setting such as a delay number never
+    // keeps it On.
+    const reg = (this._hass && this._hass.entities) || {};
+    const primary = ents.filter((e) => { const r = reg[e]; return !r || (!r.entity_category && !r.hidden); });
+    const sents = it.bond ? sw : it.main_entity ? [it.main_entity] : primary.length ? primary : ents;
+    return { pic: it.pic, touch: it.touch, ents, sents, lead, sw, name: this._dev(it.id).name || it.name || "", bond: !!it.bond };
+  },
 
   /** 0.12.4: "on" / "off" / "un" of a picture. With an entity picked: its state, "on" by the Overlay Bar rule
    *  (on, open, home, playing…) or by "counts as on when" (same syntax: "charging, CHARGING", ">0"). Without one:
@@ -7992,7 +8483,7 @@ ${reset}
     const sts = ents.map((e) => this._hass.states[e]).filter(Boolean);
     if (!sts.length || sts.every((x) => x.state === "unavailable")) return "un";
     return sts.some((x) => !PIC_OFF.has(x.state)) ? "on" : "off";
-  }
+  },
 
   /** The picture's address: the library is a static file; an own picture needs a signed address (async). */
   _picUrl(src) {
@@ -8011,15 +8502,22 @@ ${reset}
         .finally(() => (this._picSigning = false));
     }
     return null;
-  }
+  },
 
   _touchTap(id) {
     const it = this._items(this._a || {}).find((x) => x.id === id);
     const b = it && this._bodyOf(it);
     if (!b) return;
+    // 0.13.2: a phantom's picture / touch area does what its marker does (readings, or its info card).
+    if (it.phantom) {
+      const sp = [...((this._specs && this._specs.values()) || [])].find((x) => x && x.item && x.item.id === id);
+      if (sp) return this._tapSpec(sp);
+      this._popup = { type: "info", key: id };
+      return this._update(true);
+    }
     // 0.12.3: a bond's picture / touch area switches the whole bond (its members' main entities), as its marker.
     this._runAction({ type: "dev", key: `touch:${id}`, item: it, ents: b.bond ? b.sw : b.ents, eid: b.lead, kind: kindOf(b.lead, this._hass.states[b.lead]) });
-  }
+  },
 
   /** 0.12.6: a touch area / picture held = its device's long press (a lamp bond: its info card). */
   _touchHold(id, ent) {
@@ -8030,7 +8528,7 @@ ${reset}
     const b = it && this._bodyOf(it);
     if (!b) return this._moreInfo(ent);
     this._runHold({ type: "dev", key: `touch:${id}`, item: it, ents: b.bond ? b.sw : b.ents, eid: b.lead, kind: kindOf(b.lead, this._hass.states[b.lead]) });
-  }
+  },
 
   /** Tapping empty plan briefly shows where the touch areas are (hint "flash"). */
   _flashTouch() {
@@ -8040,7 +8538,7 @@ ${reset}
     zs.forEach((z) => z.classList.add("flash"));
     clearTimeout(this._flashT);
     this._flashT = setTimeout(() => zs.forEach((z) => z.classList.remove("flash")), 700);
-  }
+  },
 
   /** 0.12.1: after a tap, a short "working" pulse until the device answers (slow IR ACs, shutters), max 8 s. */
   _markBusy(item, ents) {
@@ -8049,7 +8547,7 @@ ${reset}
     this._busy.set(item.id, { until: Date.now() + 8000, ents, was: ents.map((e) => (this._hass.states[e] || {}).state).join("|") });
     clearTimeout(this._busyT);
     this._busyT = setTimeout(() => this._update(true), 8100);
-  }
+  },
 
   _busyOn(id) {
     const b = this._busy && this._busy.get(id);
@@ -8060,7 +8558,7 @@ ${reset}
       return false;
     }
     return true;
-  }
+  },
 
   _toggle(s) {
     const ents = s.ents.filter((e) => TOGGLE_DOMAINS.has(domainOf(e)));
@@ -8079,13 +8577,13 @@ ${reset}
       this._undoT = setTimeout(() => this._update(true), 6100);
     }
     this._hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: ents });
-  }
+  },
 
   _coverCmd(eid, cmd) {
     const ents = eid === "__all" ? ((this._popup && this._popup.ents) || (this._specs.get(this._popup && this._popup.key) || { ents: [] }).ents).filter((e) => domainOf(e) === "cover") : [eid];
     const svc = { open: "open_cover", close: "close_cover", stop: "stop_cover" }[cmd];
     if (svc && ents.length) this._hass.callService("cover", svc, { entity_id: ents });
-  }
+  },
 
   /** Highlight a marker for a few seconds (from a popup list, #65). */
   _highlight(key) {
@@ -8097,7 +8595,9 @@ ${reset}
       this._hl = null;
       this._update(true);
     }, 4000);
-  }
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
 
   /** Zigbee: each device's best parent (strongest link to a router / the coordinator). */
   _zbParents() {
@@ -8111,7 +8611,7 @@ ${reset}
       if (!out[l.a] || l.lqi > out[l.a].lqi) out[l.a] = { p: l.b, lqi: l.lqi };
     }
     return out;
-  }
+  },
 
   /** Path from the top (coordinator / hub) to this device, as names. */
   _chain(s) {
@@ -8133,7 +8633,7 @@ ${reset}
       cur = up;
     }
     return names;
-  }
+  },
 
   /** Devices connected through this one: via a hub/bridge, or Zigbee children (best parent). */
   _children(s) {
@@ -8153,19 +8653,19 @@ ${reset}
       for (const [id, d] of Object.entries(f.sensor.attributes.devices || {})) if (d.via === s.item.id && !placed.has(id)) extra.push(`${d.name} (${f.name})`);
     }
     return { out, extra };
-  }
+  },
 
   _moreInfo(eid) {
     if (!eid) return;
     this._popup = null;
     this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: eid }, bubbles: true, composed: true }));
     this._update(true);
-  }
+  },
 
   _openList(s) {
     this._popup = { type: "list", key: s.key };
     this._update(true);
-  }
+  },
 
   _openReadings(s) {
     // 0.12.11: the popup charts what the marker shows: its own values (for a chip, where its numbers come from)
@@ -8176,7 +8676,7 @@ ${reset}
     this._popup = { type: "readings", key: s.key, ents: [...new Set([...(vals.length ? vals : core), ...extra])], lead: s.eid || core[0] };
     this._hist = null;
     this._update(true);
-  }
+  },
 
   _popupHtml() {
     const p = this._popup || this._previewPop();
@@ -8262,7 +8762,7 @@ ${reset}
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3><ha-icon icon="${cesc(s.icon)}"></ha-icon>${cesc(s.name)}${close}</h3><div class="kv">${rows.map(([k, v]) => `<span>${cesc(k)}</span><span>${cesc(v)}</span>`).join("")}</div>${hint}${conn}${s.ents[0] ? `<button class="more" data-mi="${cesc(s.ents[0])}">Details ›</button>` : ""}</div></div>`;
     }
     return this._rdHtml(s, p, close);
-  }
+  },
 
   /** 0.12.10: the readings popup. Temperature and humidity share one chart; a marker of several devices (a phantom,
    *  a bond) shows its total first, then one row per device; a row opens that device's own chart. */
@@ -8301,7 +8801,9 @@ ${reset}
       const mode = this._dev(s.item.id).value || (s.item.phantom && s.item.value) || this._ov("comfort").combine || "average";
       const ts = groups.map((g) => g.t).filter(Boolean);
       const hs = groups.map((g) => g.h).filter(Boolean);
-      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(s.icon || "dfp:phantom")}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[mode] || "average")} · ${groups.length} devices</small></div>`;
+      // 0.13.2: the icon the user gave it, else what it measures (no ghost: the ghost only marks phantoms in the Editor).
+      const phIcon = s.icon || this._dev(s.item.id).icon || (s.item.icon && s.item.icon !== "dfp:phantom" ? s.item.icon : ts.length ? "mdi:thermometer" : "mdi:water-percent");
+      const sum = `<div class="phsum">${s.phantom ? `<ha-icon icon="${cesc(phIcon)}"></ha-icon>` : ""}<b>${cesc((s.lines || []).join(" · "))}</b><small>${cesc({ min: "lowest", max: "highest", one: "one sensor" }[mode] || "average")} · ${groups.length} devices</small></div>`;
       const rows = groups.map((g) => `<button class="rcrow" data-rdsub="${cesc(g.id)}"><span class="nm">${cesc(g.name)}${g.t || g.h ? now(g, "rcv") : `<small>${cesc(g.ents.map((e) => this._fmt(e)).join(" · "))}</small>`}</span>${g.t || g.h ? chart(g.t ? [g.t] : [], g.h ? [g.h] : [], "one", true) : ""}<span class="go">›</span></button>`).join("");
       body = `${sum}${ts.length || hs.length ? chart(ts, hs, mode) : ""}<div class="rclist">${rows}</div>`;
     } else {
@@ -8311,7 +8813,7 @@ ${reset}
     }
     const title = sub ? sub.name : s.name;
     return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(title)}"><h3>${cesc(title)}${close}</h3>${body}</div></div>`;
-  }
+  },
 
   /** The devices behind a readings marker: a phantom's members, otherwise HA's devices of its entities. Each with its
    *  temperature (t), humidity (h) and other readings. */
@@ -8335,7 +8837,7 @@ ${reset}
       const name = (devs[g] && devs[g].name) || (dv && (dv.name_by_user || dv.name)) || entName(hass, es[0]);
       return { id: g, name, ...this._rdSplit(es) };
     });
-  }
+  },
 
   /** A chart line's name: its device (an AC, a room thermometer), else the entity's name. */
   _rdName(e) {
@@ -8344,14 +8846,14 @@ ${reset}
     const reg = (hass.entities || {})[id];
     const dv = reg && reg.device_id && (hass.devices || {})[reg.device_id];
     return (dv && (dv.name_by_user || dv.name)) || entName(hass, id);
-  }
+  },
 
   /** A humidity value; "climate.x#h" = the thermostat's own humidity. */
   _hv(e) {
     if (!e.endsWith("#h")) return this._fmtNum(e);
     const st = this._hass.states[e.slice(0, -2)];
     return st && Number(st.attributes.current_humidity) > 0 ? `${Math.round(Number(st.attributes.current_humidity))}%` : "—";
-  }
+  },
 
   _rdSplit(es) {
     const hass = this._hass;
@@ -8360,7 +8862,7 @@ ${reset}
     const hs = es.filter((e) => k(e) === "humidity");
     // t / h: the first of each (the marker's own value comes first); ts / hs: all of them, all charted.
     return { t: ts[0] || null, h: hs[0] || null, ts, hs, ents: es, other: es.filter((e) => !ts.includes(e) && !hs.includes(e)) };
-  }
+  },
 
   /** 24 h history sparklines for the readings popup. */
   async _fillHistory() {
@@ -8406,7 +8908,7 @@ ${reset}
       el.querySelector(".range").textContent = `${Math.round(min * 10) / 10}–${Math.round(max * 10) / 10} ${unit}`;
     }
     for (const el of this.shadowRoot.querySelectorAll("[data-rc]")) this._drawRc(el, (this._rdCharts || [])[Number(el.dataset.rc)]);
-  }
+  },
 
   /** 0.12.10: one 24 h series on a 10-minute grid (the value then), or several combined as the marker combines them. */
   _rdSeries(eids, mode) {
@@ -8435,7 +8937,7 @@ ${reset}
       return vs.reduce((a, b) => a + b, 0) / vs.length;
     });
     return res.filter((v) => v != null).length >= 2 ? res : null;
-  }
+  },
 
   /** 0.12.10: temperature (left axis) and humidity (right axis) in one chart; touch it for the values at a time.
    *  Colours and text follow the theme (--dfc-rt / --dfc-rh can be set, e.g. with card-mod). */
@@ -8562,7 +9064,7 @@ ${reset}
     svg.addEventListener("pointermove", show);
     svg.addEventListener("pointerdown", show);
     svg.addEventListener("pointerleave", hide);
-  }
+  },
 
   _setOverlay(o) {
     if (o === "plan" || o === "people") o = "live"; // 0.7.4: Plan is gone, 0.8.2: People too (people are in Live)
@@ -8580,8 +9082,115 @@ ${reset}
     this._menu = false;
     this._update(true);
     if (this._onOv) this._onOv(o);
-  }
-}
+  },
+});
+Object.assign(DeviceFloorplanCard.prototype, {
+
+  /** 0.13.9.4 People distance (test; Network with Bluetooth shown). A person with a distance sensor (Bermuda:
+   *  metres to the nearest Bluetooth proxy) gets a ring around that proxy and stands on it, inside the room
+   *  that room sensor 1 / 2 says. With Bermuda's "Distance to <proxy>" sensors on, every proxy that hears the
+   *  person adds a ring and the spot is the room's point that fits all of them best. Needs a measured floor. */
+  _pdOn() {
+    return this._overlay === "network" && !this._rpIn() && this._netShow().includes("bluetooth")
+      && this._people().some((p) => p.distance) && this._layerOn("network", "pdist", true);
+  },
+
+  /** The Bluetooth proxies on this floor: where they stand (%), their HA area and device name. */
+  _pdProxies(a) {
+    const h = this._hass;
+    const reg = h.entities || {};
+    const devs = h.devices || {};
+    const out = [];
+    for (const it of this._items(a)) {
+      if (!it.bt_proxy || !Number.isFinite(it.x)) continue;
+      const er = reg[it.main_entity || (it.entities || [])[0]] || {};
+      const dv = devs[er.device_id] || {};
+      out.push({ x: it.x, y: it.y, area: er.area_id || dv.area_id || null, name: String(dv.name_by_user || dv.name || this._dev(it.id).name || it.name || "").toLowerCase() });
+    }
+    return out;
+  },
+
+  /** The rings of one person: [{x, y (%), d (m), near}]. The nearest proxy comes from the device's area
+   *  sensor (Bermuda: the area of the nearest proxy); the others from its "Distance to <proxy>" sensors. */
+  _pdRings(p, proxies) {
+    const h = this._hass;
+    const reg = h.entities || {};
+    const num = (e) => {
+      const s = h.states[e];
+      const v = s && live(s) ? Number(s.state) : NaN;
+      return Number.isFinite(v) && v >= 0 ? v : null;
+    };
+    const d0 = num(p.distance);
+    const dev = (reg[p.distance] || {}).device_id;
+    const mine = dev ? Object.keys(reg).filter((e) => e !== p.distance && e.startsWith("sensor.") && reg[e].device_id === dev && h.states[e]) : [];
+    // A proxy by its name ("Distance to <name>"), else the only proxy in that area.
+    const find = (area, label) => {
+      const n = String(label || "").toLowerCase();
+      return proxies.find((x) => x.name && n.endsWith(`to ${x.name}`)) || (area && proxies.filter((x) => x.area === area).length === 1 ? proxies.find((x) => x.area === area) : null);
+    };
+    const rings = [];
+    for (const e of mine) {
+      const at = h.states[e].attributes || {};
+      if (at.unit_of_measurement !== "m" || !/distance to /i.test(at.friendly_name || "")) continue;
+      const d = num(e);
+      const px = d == null ? null : find(at.area_id, at.friendly_name);
+      if (px && !rings.some((r) => r.px === px)) rings.push({ px, d });
+    }
+    const areaS = mine.map((e) => h.states[e]).find((s) => s.attributes && "area_id" in s.attributes && "current_mac" in s.attributes);
+    const near = areaS && live(areaS) ? find(areaS.attributes.area_id, null) : null;
+    if (near && d0 != null) {
+      const r = rings.find((x) => x.px === near);
+      if (r) r.d = d0;
+      else rings.push({ px: near, d: d0 });
+    }
+    rings.sort((x, y) => x.d - y.d);
+    return rings.map((r, i) => ({ x: r.px.x, y: r.px.y, d: r.d, near: r.px === near || (!near && i === 0) }));
+  },
+
+  /** Where the person stands (%): the point of the room that fits the rings best (one ring: of those on it,
+   *  the one nearest the room's pin). Moves only when the new spot is 0.5 m or more away. */
+  _pdSpot(eid, room, rings, a) {
+    const W = Number(a.real_width_m);
+    const shape = room.ar && room.ar.shape;
+    if (!(W > 0) || !rings.length || !Array.isArray(shape) || shape.length < 3) return null;
+    const H = W / (a.image_width && a.image_height ? a.image_width / a.image_height : 1.6);
+    const m = (x, y) => [(x / 100) * W, (y / 100) * H];
+    const poly = shape.map(([x, y]) => m(x, y));
+    const cs = rings.map((r) => [...m(r.x, r.y), r.d, 1 / Math.max(r.d, 0.5)]);
+    const pin = m(room.ar.x, room.ar.y);
+    const xs = poly.map((q) => q[0]);
+    const ys = poly.map((q) => q[1]);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const step = Math.max(0.05, Math.max(x1 - x0, y1 - y0) / 80);
+    let best = null;
+    for (let x = x0 + step / 2; x < x1; x += step) for (let y = y0 + step / 2; y < y1; y += step) {
+      if (!inPoly(x, y, poly)) continue;
+      let c = 0.01 * ((x - pin[0]) ** 2 + (y - pin[1]) ** 2);
+      for (const [cx, cy, d, w] of cs) c += w * (Math.hypot(x - cx, y - cy) - d) ** 2;
+      if (!best || c < best[2]) best = [x, y, c];
+    }
+    if (!best) return null;
+    this._pdLast = this._pdLast || {};
+    const last = this._pdLast[eid];
+    if (last && last.room === room.id && Math.hypot(last.mx - best[0], last.my - best[1]) < 0.5) return last;
+    return (this._pdLast[eid] = { room: room.id, mx: best[0], my: best[1], x: (best[0] / W) * 100, y: (best[1] / H) * 100 });
+  },
+
+  /** The rings as SVG in plan %: the nearest proxy's ring stronger; others only with "Rings around all proxies". */
+  _pdRingsSvg(list, a) {
+    const W = Number(a.real_width_m);
+    if (!(W > 0) || !list.length) return "";
+    const ratio = a.image_width && a.image_height ? a.image_width / a.image_height : 1.6;
+    const all = this._layerOn("network", "pall", false);
+    const out = [];
+    for (const r of list) {
+      if (!r.near && !all) continue;
+      const rx = (r.d / W) * 100;
+      out.push(`<ellipse class="${r.near ? "near" : ""}" cx="${r.x}" cy="${r.y}" rx="${rx}" ry="${rx * ratio}"/>`);
+    }
+    return out.length ? `<svg class="pdr" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${out.join("")}</svg>` : "";
+  },
+});
 
 // =================================================================== editor
 /** JSON with sorted keys, to compare configs regardless of key order. */
@@ -8920,13 +9529,13 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _emit() {
     this._sent = stableJson(this._config);
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+    // 0.11.1 / 0.13.5: the Card Editor's preview follows every setting: every save comes through here.
+    if (this._big && this._big.card) this._big.card.setConfig(this._config);
   }
 
   _set(c, { devices = true, sections = false } = {}) {
     this._config = this._prune(c);
     this._emit();
-    // 0.11.1: the Card Editor's preview follows every setting.
-    if (this._big && this._big.set) this._big.card.setConfig(this._config);
     this._engine(true);
     if (sections) this._renderSections();
     if (devices) this._renderDevices();
@@ -9110,6 +9719,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         ...(rail ? [] : [{ name: "buttons_space", selector: { select: { options: [{ value: "reserve", label: "Reserve space (the plan fits beside it)" }, { value: "float", label: "Float over the plan" }], mode: "dropdown" } } }]),
         { name: "layers_button", selector: { select: { options: [{ value: "auto", label: "Automatic (away from a side Overlay Bar)" }, { value: "top-right", label: "Top right of the plan" }, { value: "top-left", label: "Top left of the plan" }, { value: "bottom-right", label: "Bottom right of the plan" }, { value: "bottom-left", label: "Bottom left of the plan" }, { value: "bar", label: "In the overlay buttons" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
         { name: "replay_button", selector: { select: { options: [{ value: "layers", label: "Next to the Layers button (round, on the plan)" }, { value: "bar", label: "In the Overlay Bar (its last button)" }, { value: "hidden", label: "Hidden" }], mode: "dropdown" } } },
+        { name: "release_tips", selector: { boolean: {} } },
         { type: "expandable", name: "overlay_names", title: "Overlay names", icon: "mdi:rename", schema: ovOpts.filter((o) => OVERLAYS[o.value]).map((o) => ({ name: o.value, selector: { text: {} } })) },
       ],
       // 0.8.2: space around the plan for this card: the plan's default, or its own (linked or per side).
@@ -9206,7 +9816,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
   _label(s) {
     const L = {
       plan: "Plan", title: "Title on the card (optional, empty = none)", overlays: "Which buttons, in which order (drag to reorder). New overlays from updates appear here, marked ✨", default_overlay: "Overlay when the card opens",
-      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers). Beside a side Overlay Bar it always sits on the plan's other side", replay_button: "Home Replay button",
+      buttons_position: "Where the Overlay Bar is", buttons_style: "Labels", buttons_bar: "Overlay Bar background", buttons_shape: "Buttons", buttons_size: "Size", buttons_auto: "Automatic status on the card's overlay buttons (lights on, doors open, low batteries, offline devices)", plan_position: "Plan position in a fixed-height card (wall panel, sections)", buttons_space: "Space for the Overlay Bar", frame_mode: "Space around the plan", frame_linked: "Same on all four sides", frame_all: "All sides (+ space, − trim)", frame_t: "Top", frame_r: "Right", frame_b: "Bottom", frame_l: "Left", layers_button: "Layers button (viewers switch room names and other layers). Beside a side Overlay Bar it always sits on the plan's other side", replay_button: "Home Replay button", release_tips: "Show release tips (admins only: one tip per new version, until closed)",
       cam_size: "Size of the camera pictures", cam_layout: "Where the camera pictures are", lights_as: "Lights show as", motion_as: "Motion and presence show as", show_off: "Things that are off", touch_hint: "Touch areas (devices drawn in your plan) show", show: "Show", quiet_small: "Closed doors and idle sensors: small and faint", values: "Values next to icons (thermostat temperature, open lamps)",
       switches: "Include switches and plugs that run lights", brightness: "Show brightness of lights that are on", off: "Lights that are off", all_off: "“All off” button", all_on: "“All on” button",
       heatmap: "Heatmap shown by default (viewers can switch it under Layers)", heatmap_opacity: "Heatmap strength (viewers can change it with the slider under the plan)", opacity: "Strength of the Last cleaned colours (viewers can change it with the slider under the plan)", readings: "Temperature labels shown by default", climate_shown: "Climate devices (ACs, thermostats) shown by default", airflow: "AC air flow shown by default",
@@ -9252,6 +9862,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       // test9: nothing saved = Automatic (the card picks the corner away from a side Overlay Bar); it is not written.
       layers_button: c.layers_button || ((c.network || {}).layers === false ? "hidden" : "auto"),
       replay_button: c.replay === false ? "hidden" : c.replay_button || "layers",
+      release_tips: c.release_tips !== false,
       live: { show: LIVE_DEFAULT, quiet_small: true, values: true, lights_as: "glow", show_off: "hidden", motion_as: "pulse", ...(c.live || {}) },
       cameras: { cam_size: "m", cam_layout: "plan", ...(c.cameras || {}) },
       lights: { switches: true, brightness: false, off: "faint", all_off: true, all_on: false, ...(c.lights || {}) },
@@ -9281,6 +9892,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     // test10: one setting for the Replay button (the older "replay: false" is folded into it); the default is not written.
     if (out.replay_button) delete out.replay;
     if (out.replay_button === "layers") delete out.replay_button;
+    if (out.release_tips !== false) delete out.release_tips; // shown by default: only "off" is written
     if (out.look) {
       out.look = { ...out.look };
       delete out.look.show_title; // 0.11: a title shows when there is one
@@ -9484,7 +10096,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const box = this.querySelector("#people");
     if (!box) return;
     box.innerHTML = "";
-    const list = Array.isArray(this._config.people) ? this._config.people : [];
+    // Always read the current list: edits are saved without a redraw, so a list captured at draw time goes stale.
+    const cur = () => (Array.isArray(this._config.people) ? this._config.people : []);
+    const list = cur();
     const save = (next, redraw) => {
       const c = { ...this._config, people: next };
       this._config = this._prune(c);
@@ -9499,11 +10113,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           { name: "entity", selector: { entity: { domain: "person" } } },
           { name: "room", selector: { entity: {} } },
           { name: "room2", selector: { entity: {} } },
+          { name: "distance", selector: { entity: { domain: "sensor", device_class: "distance" } } },
         ],
         { ...pp },
-        { entity: "Person", room: "Room sensor 1", room2: "Room sensor 2 (fallback)" },
+        { entity: "Person", room: "Room sensor 1", room2: "Room sensor 2 (fallback)", distance: "Distance sensor (Bermuda; test: Network → Bluetooth)" },
         (v) => {
-          const next = list.slice();
+          const next = cur().slice();
           next[i] = Object.fromEntries(Object.entries(v).filter(([, x]) => x));
           save(next, false);
         },
@@ -9511,7 +10126,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const del = document.createElement("button");
       del.className = "del";
       del.innerHTML = `<ha-icon icon="mdi:delete-outline"></ha-icon>Remove`;
-      del.addEventListener("click", () => save(list.filter((_x, j) => j !== i), true));
+      del.addEventListener("click", () => save(cur().filter((_x, j) => j !== i), true));
       row.appendChild(del);
       box.appendChild(row);
     });
@@ -9519,9 +10134,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     add.className = "add";
     add.innerHTML = `<ha-icon icon="mdi:plus"></ha-icon>Add person`;
     add.addEventListener("click", () => {
-      const used = new Set(list.map((x) => x.entity));
+      const now = cur();
+      const used = new Set(now.map((x) => x.entity));
       const next = Object.keys(this._hass.states).find((e) => e.startsWith("person.") && !used.has(e));
-      save([...list, next ? { entity: next } : {}], true);
+      save([...now, next ? { entity: next } : {}], true);
     });
     box.appendChild(add);
     if (list.length) {
@@ -9585,18 +10201,20 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     });
     return f;
   }
+}
+Object.assign(DeviceFloorplanCardEditor.prototype, {
 
   // ---- custom overlays (#55)
   _renderCustom() {
     const box = this.querySelector("#custom");
     if (!box) return;
-    const list = this._custom();
-    box.innerHTML = list.map((o, i) => `<div class="row" data-i="${i}"><button class="hd" data-copen="${i}"><ha-icon icon="${cesc(o.icon || "mdi:layers-outline")}"></ha-icon>${cesc(o.name || "Custom")}<small style="margin-left:auto">${cesc(o.mode === "manual" ? "devices you add" : `${(o.kinds || []).length} kind${(o.kinds || []).length === 1 ? "" : "s"}`)}</small><ha-icon class="cv ${this._copen === i ? "up" : ""}" icon="mdi:chevron-down"></ha-icon></button>${this._copen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-cadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add overlay</button>`;
+    const curList = () => this._custom(); // read fresh: edits save without a redraw
+    box.innerHTML = curList().map((o, i) => `<div class="row" data-i="${i}"><button class="hd" data-copen="${i}"><ha-icon icon="${cesc(o.icon || "mdi:layers-outline")}"></ha-icon>${cesc(o.name || "Custom")}<small style="margin-left:auto">${cesc(o.mode === "manual" ? "devices you add" : `${(o.kinds || []).length} kind${(o.kinds || []).length === 1 ? "" : "s"}`)}</small><ha-icon class="cv ${this._copen === i ? "up" : ""}" icon="mdi:chevron-down"></ha-icon></button>${this._copen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-cadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add overlay</button>`;
     box.querySelector("[data-cadd]").addEventListener("click", () => {
-      const used = new Set([...list.map((o) => o.id), ...OVERLAY_ORDER]);
+      const used = new Set([...curList().map((o) => o.id), ...OVERLAY_ORDER]);
       let n = 1;
       while (used.has(`custom${n}`)) n++;
-      const next = [...list, { id: `custom${n}`, name: `Custom ${n}`, icon: "mdi:layers-outline", kinds: [] }];
+      const next = [...curList(), { id: `custom${n}`, name: `Custom ${n}`, icon: "mdi:layers-outline", kinds: [] }];
       const c = { ...this._config, custom_overlays: next };
       if (Array.isArray(c.overlays)) c.overlays = [...c.overlays, `custom${n}`];
       this._copen = next.length - 1;
@@ -9610,7 +10228,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const body = this._copen != null && box.querySelector(`.row[data-i="${this._copen}"] .body`);
     if (!body) return;
     const i = this._copen;
-    const o = list[i];
+    const o = curList()[i];
     body.appendChild(this._form(
       [
         { name: "name", selector: { text: {} } },
@@ -9622,12 +10240,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       { kinds: [], mode: "kinds", lights_as: "markers", ...o },
       { name: "Button name", icon: "Icon", mode: "Which devices", kinds: "Shows these kinds (the order below decides what leads)", lights_as: "Lights show as" },
       (v) => {
-        const prev = list[i] || {};
+        const prev = curList()[i] || {};
         // Keep the user's order for kinds that stay; new ones go to the end (#109).
         if (Array.isArray(v.kinds)) v.kinds = [...(prev.kinds || []).filter((k) => v.kinds.includes(k)), ...v.kinds.filter((k) => !(prev.kinds || []).includes(k))];
         if (v.mode === "kinds") delete v.mode;
         if (v.lights_as === "markers") delete v.lights_as;
-        const next = list.map((x, j) => (j === i ? { ...x, ...v, id: x.id } : x));
+        const next = curList().map((x, j) => (j === i ? { ...x, ...v, id: x.id } : x));
         if (v.mode === undefined) delete next[i].mode;
         if (v.lights_as === undefined) delete next[i].lights_as;
         this._config = this._prune({ ...this._config, custom_overlays: next });
@@ -9649,7 +10267,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         const n = Number(b.dataset.up);
         const ks = [...o.kinds];
         [ks[n - 1], ks[n]] = [ks[n], ks[n - 1]];
-        const next = list.map((x, j) => (j === i ? { ...x, kinds: ks } : x));
+        const next = curList().map((x, j) => (j === i ? { ...x, kinds: ks } : x));
         this._set({ ...this._config, custom_overlays: next }, { devices: false });
         this._renderCustom();
       });
@@ -9659,7 +10277,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     btns.className = "btns";
     btns.innerHTML = `<button class="del"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove this overlay</button>`;
     btns.querySelector(".del").addEventListener("click", () => {
-      const next = list.filter((_x, j) => j !== i);
+      const next = curList().filter((_x, j) => j !== i);
       const c = { ...this._config, custom_overlays: next };
       if (Array.isArray(c.overlays)) c.overlays = c.overlays.filter((x) => x !== o.id);
       if (c.default_overlay === o.id) delete c.default_overlay;
@@ -9677,7 +10295,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._set(c, { sections: true });
     });
     body.appendChild(btns);
-  }
+  },
 
   // ---- light scenes (#54)
   // ---- 0.8.2 Overlay Bar Reloaded: hold, status, shortcuts
@@ -9686,7 +10304,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const show = st.show === "icon" ? "color" : st.show || "dot";
     const badge = show === "count" || show === "value";
     return [
-      { name: "st_mode", selector: { select: { options: [...(allowAuto ? [{ value: "auto", label: "Automatic (when switched on above)" }] : []), { value: "off", label: "None" }, { value: "custom", label: "From entities I pick" }], mode: "dropdown" } } },
+      { name: "st_mode", selector: { select: { options: [...(allowAuto ? [{ value: "auto", label: "Automatic" }] : []), { value: "off", label: "None" }, { value: "custom", label: "From entities I pick" }], mode: "dropdown" } } },
       ...(mode === "custom" ? [
         { name: "st_entity", selector: { entity: { multiple: true } } },
         { name: "st_show", selector: { select: { options: [{ value: "color", label: "Icon colour" }, { value: "dot", label: "Dot" }, { value: "count", label: "Badge: how many are active" }, { value: "value", label: "Badge: short value (e.g. 62%)" }], mode: "dropdown" } } },
@@ -9695,7 +10313,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           : [1, 2, 3].flatMap((n) => [{ name: `st_when_${n}`, selector: { text: {} } }, { name: `st_color_${n}`, selector: { text: {} } }])),
       ] : []),
     ];
-  }
+  },
 
   _statusData(st, allowAuto) {
     const rules = Array.isArray(st.rules) && st.rules.length ? st.rules : [{ when: st.when, color: st.color }];
@@ -9705,7 +10323,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       d[`st_color_${n}`] = (rules[n - 1] || {}).color || "";
     }
     return d;
-  }
+  },
 
   _statusFrom(v, allowAuto) {
     const mode = v.st_mode || (allowAuto ? "auto" : "off");
@@ -9720,32 +10338,32 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (rules.length) st.rules = rules.map((r) => ({ ...(r.when ? { when: r.when } : {}), ...(r.color ? { color: r.color } : {}) }));
     }
     return st;
-  }
+  },
 
   /** 0.10: Overlay actions (buttons under the plan), per overlay and per floor. */
   /** The floor picked in the tabs (its plan id). */
   _curFloor() {
     const ids = this._planIds();
     return ids[Math.min(this._ftab || 0, Math.max(0, ids.length - 1))] || null;
-  }
+  },
 
   /** Is a per-floor list (actions, scenes: items with plans) in scope: this floor, or every floor (no plans)? */
   _inScope(x, scope) {
     const pl = Array.isArray(x.plans) ? x.plans : [];
     return scope ? pl.includes(scope) : !pl.length;
-  }
+  },
 
   /** 0.10: overlay actions on this floor (in the floor menu) and on every floor (card settings). */
   _renderActs() {
     this._actsIn("#oacts", null);
     this._actsIn("#oacts_f", this._curFloor());
-  }
+  },
 
   _actsIn(sel, scope) {
     const box = this.querySelector(sel);
     if (!box) return;
-    const list = Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : [];
-    const idx = list.map((_x, i) => i).filter((i) => this._inScope(list[i], scope));
+    const curList = () => Array.isArray(this._config.overlay_actions) ? this._config.overlay_actions : []; // read fresh: edits save without a redraw
+    const idx = curList().map((_x, i) => i).filter((i) => this._inScope(curList()[i], scope));
     const plans = planSensors(this._hass).map((x) => ({ value: x.attributes.plan_id, label: x.attributes.plan_name || x.attributes.plan_id }));
     const ovName = (o) => (this._ovOptions().find((x) => x.value === o) || {}).label || o;
     const save = (next, redraw = true) => {
@@ -9756,7 +10374,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       if (redraw) this._renderActs();
     };
     const rb = (this._config.cleaning || {}).robot_buttons !== false;
-    box.innerHTML = (scope ? "" : `<div class="oaopt"></div>`) + idx.map((i) => [list[i], i]).map(([x, i]) => `<div class="row" data-i="${i}"><button class="hd" data-aopen="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || `Action ${i + 1}`)}<small style="margin-left:auto">${cesc(ovName(x.overlay || "cleaning"))} · ${cesc(Array.isArray(x.plans) && x.plans.length ? x.plans.map((id) => (plans.find((q) => q.value === id) || {}).label || id).join(", ") : "every floor")}</small></button>${this._aopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-aadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add action</button>`;
+    box.innerHTML = (scope ? "" : `<div class="oaopt"></div>`) + idx.map((i) => [curList()[i], i]).map(([x, i]) => `<div class="row" data-i="${i}"><button class="hd" data-aopen="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || `Action ${i + 1}`)}<small style="margin-left:auto">${cesc(ovName(x.overlay || "cleaning"))} · ${cesc(Array.isArray(x.plans) && x.plans.length ? x.plans.map((id) => (plans.find((q) => q.value === id) || {}).label || id).join(", ") : "every floor")}</small></button>${this._aopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-aadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add action</button>`;
     if (!scope) box.querySelector(".oaopt").appendChild(this._form([{ name: "rb", selector: { boolean: {} } }], { rb }, { rb: "Cleaning: the robot's Start / Pause / Dock under the plan" }, (v) => {
       const c = { ...(this._config.cleaning || {}) };
       if (v.rb) delete c.robot_buttons;
@@ -9767,8 +10385,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._emit();
     }));
     box.querySelector("[data-aadd]").addEventListener("click", () => {
-      this._aopen = list.length;
-      save([...list, { name: "Action", icon: "mdi:gesture-tap", overlay: "cleaning", ...(scope ? { plans: [scope] } : {}) }]);
+      this._aopen = curList().length;
+      save([...curList(), { name: "Action", icon: "mdi:gesture-tap", overlay: "cleaning", ...(scope ? { plans: [scope] } : {}) }]);
     });
     for (const el of box.querySelectorAll("[data-aopen]")) el.addEventListener("click", () => {
       const i = Number(el.dataset.aopen);
@@ -9778,7 +10396,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const body = this._aopen != null && box.querySelector(`.row[data-i="${this._aopen}"] .body`);
     if (!body) return;
     const i = this._aopen;
-    const x = list[i] || {};
+    const x = curList()[i] || {};
     const tk = (x.tap_action || {}).action;
     const bm = tk === "fire-dom-event" && x.tap_action.browser_mod && x.tap_action.browser_mod.service === "browser_mod.popup" ? x.tap_action.browser_mod.data || {} : null;
     const data = {
@@ -9812,22 +10430,22 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       const st = this._statusFrom(v, false);
       if (st) nx.status = st;
       const redraw = v.tap_kind !== data.tap_kind || v.hold_kind !== data.hold_kind || v.st_mode !== data.st_mode || (v.st_show === "count" || v.st_show === "value") !== (data.st_show === "count" || data.st_show === "value");
-      save(list.map((y, j) => (j === i ? nx : y)), redraw);
+      save(curList().map((y, j) => (j === i ? nx : y)), redraw);
     }));
     const at = idx.indexOf(i);
     body.insertAdjacentHTML("beforeend", `<div class="btns"><button data-amv="-1" ${at <= 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon>Up</button><button data-amv="1" ${at >= idx.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon>Down</button><button class="del" data-adel="1"><ha-icon icon="mdi:delete-outline"></ha-icon>Remove</button></div>`);
     for (const el of body.querySelectorAll("[data-amv]")) el.addEventListener("click", () => {
       const j = idx[at + Number(el.dataset.amv)];
-      const next = [...list];
+      const next = [...curList()];
       [next[i], next[j]] = [next[j], next[i]];
       this._aopen = j;
       save(next);
     });
     body.querySelector("[data-adel]").addEventListener("click", () => {
       this._aopen = null;
-      save(list.filter((_y, j) => j !== i));
+      save(curList().filter((_y, j) => j !== i));
     });
-  }
+  },
 
   _renderBar() {
     const box = this.querySelector("#bbar");
@@ -9837,9 +10455,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const shortcuts = Array.isArray(b.shortcuts) ? b.shortcuts : [];
     const ovs = (Array.isArray(this._config.overlays) && this._config.overlays.length ? this._config.overlays : [...OVERLAY_ORDER, ...this._custom().map((x) => x.id)]).filter((o) => o !== "plan" && o !== "people");
     const def = (o) => OVERLAYS[o] || (this._custom().find((x) => x.id === o) ? { label: this._custom().find((x) => x.id === o).name || "Custom", icon: this._custom().find((x) => x.id === o).icon || "mdi:layers-outline" } : null);
-    const AUTO = { lights: "badge with how many of the lights the Lights overlay shows are on", security: "red dot when a door or window is open, the alarm armed or a lock unlocked (not shutters)", health: "amber dot when a battery is low or a device offline", network: "red dot when a device is offline" };
+    const AUTO = { lights: "badge with how many of the lights the Lights overlay shows are on", security: "red dot when a door or window is open, the alarm armed or a lock unlocked (not shutters)", health: "amber dot when a battery is low or a device offline", network: "red dot when a device is offline", cleaning: "red dot when a robot reports an error, amber when it needs attention" };
     const actTxt = (a) => (!a ? "" : { reload: "reload page", back: "back", navigate: "open a page", url: "open a link", "more-info": "details", "perform-action": "action", "call-service": "action", toggle: "toggle", "fire-dom-event": "popup", assist: "Assist", none: "" }[a.action] || a.action);
-    const stTxt = (st, o) => (st && st.mode === "off" ? "no status" : st && st.mode === "custom" ? `status: ${{ color: "icon colour", icon: "icon colour", dot: "dot", count: "badge", value: "badge" }[st.show || "dot"]}` : o && AUTO[o] && b.auto_status ? "auto status" : "");
+    const stTxt = (st, o) => (st && st.mode === "off" ? "no status" : st && st.mode === "auto" ? "auto status" : st && st.mode === "custom" ? `status: ${{ color: "icon colour", icon: "icon colour", dot: "dot", count: "badge", value: "badge" }[st.show || "dot"]}` : o && AUTO[o] && b.auto_status ? "auto status" : "");
     const save = (nb, redraw = true) => {
       const next = { ...nb };
       if (next.actions && !Object.keys(next.actions).length) delete next.actions;
@@ -9868,17 +10486,22 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (kind === "o") {
       const cur = actions[id] || {};
       const hk = (cur.hold_action || {}).action;
-      const data = { hold_kind: hk === "reload" || hk === "back" ? hk : cur.hold_action ? "action" : "none", hold_action: hk && hk !== "reload" && hk !== "back" ? cur.hold_action : undefined, ...this._statusData(cur.status || {}, true) };
+      const canAuto = !!AUTO[id];
+      const stData = this._statusData(cur.status || {}, canAuto);
+      if (canAuto && !cur.status) stData.st_mode = b.auto_status ? "auto" : "off"; // 0.13.1: unset follows the switch above
+      const data = { hold_kind: hk === "reload" || hk === "back" ? hk : cur.hold_action ? "action" : "none", hold_action: hk && hk !== "reload" && hk !== "back" ? cur.hold_action : undefined, ...stData };
       const schema = [
         { name: "hold_kind", selector: { select: { options: [{ value: "none", label: "Nothing" }, { value: "action", label: "A Home Assistant action" }, { value: "reload", label: "Reload this page" }, { value: "back", label: "Back to where you were" }], mode: "dropdown" } } },
         ...(data.hold_kind === "action" ? [{ name: "hold_action", selector: { ui_action: {} } }] : []),
-        ...this._statusSchema(cur.status || {}, !!AUTO[id]),
+        ...this._statusSchema(cur.status || { mode: stData.st_mode }, canAuto),
       ];
       const f = this._form(schema, data, LBL, (v) => {
         const nx = {};
         if (v.hold_kind === "reload" || v.hold_kind === "back") nx.hold_action = { action: v.hold_kind };
         else if (v.hold_kind === "action") nx.hold_action = v.hold_action && v.hold_action.action ? v.hold_action : { action: "navigate", navigation_path: "/" };
-        const st = this._statusFrom(v, !!AUTO[id]);
+        // 0.13.1: the status is written only once you change it; "Automatic" chosen here is kept for this button.
+        const touched = !!cur.status || v.st_mode !== data.st_mode;
+        const st = !touched ? null : v.st_mode === "auto" && canAuto ? { mode: "auto" } : this._statusFrom(v, canAuto);
         if (st) nx.status = st;
         const na = { ...actions };
         if (Object.keys(nx).length) na[id] = nx;
@@ -9887,7 +10510,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         save({ ...b, actions: na }, redraw);
       });
       body.appendChild(f);
-      if (AUTO[id]) body.insertAdjacentHTML("beforeend", `<p class="note">Automatic: ${cesc(AUTO[id])}, for the floor shown. Only while <i>Automatic status</i> is switched on above.</p>`);
+      if (AUTO[id]) body.insertAdjacentHTML("beforeend", `<p class="note">Automatic: ${cesc(AUTO[id])}, for the floor shown. A button you haven't set follows <i>Automatic status</i> above.</p>`);
       return;
     }
     const i = Number(id);
@@ -9941,20 +10564,19 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._bopen = null;
       save({ ...b, shortcuts: shortcuts.filter((x, j) => j !== i) });
     });
-  }
+  },
 
   /** Light scenes on this floor (floor menu) and on every floor (card settings). */
   _renderScenes() {
     this._scenesIn("#scenes", null);
     this._scenesIn("#scenes_f", this._curFloor());
-  }
+  },
 
   _scenesIn(sel, scope) {
     const box = this.querySelector(sel);
     if (!box) return;
-    const L = this._config.lights || {};
-    const list = Array.isArray(L.scenes) ? L.scenes : [];
-    const idx = list.map((_x, i) => i).filter((i) => this._inScope(list[i], scope));
+    const curList = () => { const l = (this._config.lights || {}).scenes; return Array.isArray(l) ? l : []; }; // read fresh: edits save without a redraw
+    const idx = curList().map((_x, i) => i).filter((i) => this._inScope(curList()[i], scope));
     const setList = (next, sections = true) => {
       const lights = { ...(this._config.lights || {}), scenes: next };
       if (!next.length) delete lights.scenes;
@@ -9965,10 +10587,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         this._emit();
       }
     };
-    box.innerHTML = idx.map((i) => [list[i], i]).map(([s, i]) => `<div class="row" data-i="${i}"><button class="hd" data-sopen="${i}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}<small style="margin-left:auto">${s.entity ? cesc(s.entity) : `${(s.lights || []).length} lights${s.states ? " · saved state" : ""}`}</small></button>${this._sopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-sadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add scene</button>`;
+    box.innerHTML = idx.map((i) => [curList()[i], i]).map(([s, i]) => `<div class="row" data-i="${i}"><button class="hd" data-sopen="${i}"><ha-icon icon="${cesc(s.icon || "mdi:palette-outline")}"></ha-icon>${cesc(s.name || `Scene ${i + 1}`)}<small style="margin-left:auto">${s.entity ? cesc(s.entity) : `${(s.lights || []).length} lights${s.states ? " · saved state" : ""}`}</small></button>${this._sopen === i ? `<div class="body"></div>` : ""}</div>`).join("") + `<button class="add" data-sadd="1"><ha-icon icon="mdi:plus"></ha-icon>Add scene</button>`;
     box.querySelector("[data-sadd]").addEventListener("click", () => {
-      this._sopen = list.length;
-      setList([...list, { name: list.length ? `Scene ${list.length + 1}` : "Movie night", icon: "mdi:movie-open-outline", lights: [], brightness: 30, ...(scope ? { plans: [scope] } : {}) }]);
+      this._sopen = curList().length;
+      setList([...curList(), { name: curList().length ? `Scene ${curList().length + 1}` : "Movie night", icon: "mdi:movie-open-outline", lights: [], brightness: 30, ...(scope ? { plans: [scope] } : {}) }]);
     });
     for (const b of box.querySelectorAll("[data-sopen]")) b.addEventListener("click", () => {
       const i = Number(b.dataset.sopen);
@@ -9978,7 +10600,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const body = this._sopen != null && box.querySelector(`.row[data-i="${this._sopen}"] .body`);
     if (!body) return;
     const i = this._sopen;
-    const s = list[i];
+    const s = curList()[i];
     body.appendChild(this._form(
       [
         { name: "name", selector: { text: {} } },
@@ -9991,7 +10613,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       { lights: [], brightness: 50, plans: [], ...s },
       { name: "Button name", icon: "Icon", lights: "Lights in this scene", brightness: "Brightness (0 = off), unless the state is saved below", entity: "…or run a Home Assistant scene / script instead", plans: "Floors (none ticked = every floor)" },
       (v) => {
-        const next = list.map((x, j) => (j === i ? { ...v, ...(x.states ? { states: x.states } : {}) } : x));
+        const next = curList().map((x, j) => (j === i ? { ...v, ...(x.states ? { states: x.states } : {}) } : x));
         if (!next[i].entity) delete next[i].entity;
         if (!(next[i].plans || []).length) delete next[i].plans;
         if (JSON.stringify(next[i].plans || []) !== JSON.stringify(s.plans || [])) return setList(next);
@@ -10008,7 +10630,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     note.className = "note";
     note.textContent = s.states ? `Saved: on/off, brightness and colour of ${Object.keys(s.states).length} light(s).` : "Tip: set the lights the way you want them, then save their current state.";
     btns.querySelector(".cap").addEventListener("click", () => {
-      const cur = (this._config.lights && this._config.lights.scenes) || list;
+      const cur = (this._config.lights && this._config.lights.scenes) || curList();
       const sc = { ...cur[i] };
       const states = {};
       for (const e of sc.lights || []) {
@@ -10030,7 +10652,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     });
     const clr = btns.querySelector(".clr");
     if (clr) clr.addEventListener("click", () => {
-      const cur = (this._config.lights && this._config.lights.scenes) || list;
+      const cur = (this._config.lights && this._config.lights.scenes) || curList();
       setList(cur.map((x, j) => {
         if (j !== i) return x;
         const y = { ...x };
@@ -10040,12 +10662,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     });
     btns.querySelector(".del").addEventListener("click", () => {
       this._sopen = null;
-      const cur = (this._config.lights && this._config.lights.scenes) || list;
+      const cur = (this._config.lights && this._config.lights.scenes) || curList();
       setList(cur.filter((_x, j) => j !== i));
     });
     body.appendChild(btns);
     body.appendChild(note);
-  }
+  },
 
   // ---- rooms (#53)
   /** The areas of the floor picked in the tabs (0.8.1: Rooms are set per floor). */
@@ -10054,7 +10676,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const id = ids[Math.min(this._ftab || 0, Math.max(0, ids.length - 1))];
     const sen = planSensors(this._hass).find((x) => x.attributes.plan_id === id);
     return sen ? sen.attributes.areas || {} : {};
-  }
+  },
 
   _renderRooms() {
     const r0 = this._config.rooms || {};
@@ -10107,7 +10729,9 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         save({ names, hidden });
       },
     ));
-  }
+  },
+});
+Object.assign(DeviceFloorplanCardEditor.prototype, {
 
   // ---- devices (#52)
   _renderDevices() {
@@ -10173,7 +10797,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       },
       rerender: () => this._renderDevices(),
     });
-  }
+  },
 
   /** Save per-device card settings (devices.<id>), dropping empty values. */
   _saveDev(id, patch) {
@@ -10188,12 +10812,11 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     this._config = this._prune({ ...this._config, devices: all });
     this._emit();
     this._engine(true);
-    if (this._big) this._big.card.setConfig(this._config);
-  }
+  },
 
   _entName(e) {
     return entName(this._hass, e);
-  }
+  },
 
   /** Save one overlay's settings of a device: devices.<id>.per.<ov> (#100/#101). */
   /** 0.12.5: "Shows as On when [entity] is [value]" and "Highlight when [entity] is [value] [x] only while On".
@@ -10248,7 +10871,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         : `<select data-pv="${vKey}"><option value="">on / open / home… (automatic)</option>${vals.map((x) => `<option value="${cesc(x)}" ${x === v ? "selected" : ""}>${cesc(x)}</option>`).join("")}${v && !vals.includes(v) ? `<option value="${cesc(v)}" selected>${cesc(v)}</option>` : ""}</select>`;
       const defName = def ? `Automatic: ${short(def)} · ${val(def)}` : "Automatic: its own state";
       return `<div class="mpr pics"><span class="mpk">${title}</span>
-        <select data-pe="${eKey}"><option value="">${eKey === "hl" ? "nothing (no highlight)" : cesc(defName)}</option><optgroup label="${cesc(devNames[0] || "This device")}">${opts}</optgroup><option value="__other">Another entity…</option></select>
+        <select data-pe="${eKey}"><option value="">${eKey === "hl" ? "Automatic: while it is On" : cesc(defName)}</option><optgroup label="${cesc(devNames[0] || "This device")}">${opts}</optgroup><option value="__other">Another entity…</option></select>
         ${cur ? `<span class="pis">is</span>${vsel}` : ""}<div class="pother" data-po="${eKey}" hidden></div></div>`;
     };
     box.innerHTML = `${sentence("Shows as On when", "when", "when_on", item.main_entity || "")}
@@ -10276,7 +10899,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const any = box.querySelector("[data-pany]");
     if (any) any.addEventListener("change", () => save({ hl_any: !any.checked }));
     return box;
-  }
+  },
 
   _savePer(id, ov, patch) {
     const cur = (this._config.devices || {})[id] || {};
@@ -10286,7 +10909,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     if (Object.keys(o).length) per[ov] = o;
     else delete per[ov];
     this._saveDev(id, { per });
-  }
+  },
 
   /** 0.12.6: a device's entities for the marker settings: its own (by short name, with value), the candidates. */
   _entTools(item) {
@@ -10310,7 +10933,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     };
     const aux = (e) => this._engine()._aux(e);
     return { own, cands, short, val, aux, devName: devNames[0] || "" };
-  }
+  },
 
   /** 0.12.6: one entity choice as a plain drop-down: the closed box always shows the current choice (or what
    *  "automatic" uses), entities by short name with their value, "Another entity…" for anything else. */
@@ -10331,7 +10954,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       onPick(sel.value);
     });
     return w;
-  }
+  },
 
   /** 0.12.6 marker settings (#108 reworked): overlay chips on top; the chosen overlay's settings as sentences that
    *  always show their current value ("automatic" says what it uses); then the settings for every overlay.
@@ -10451,7 +11074,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     // 0.12.7: open when it holds only the name; folded (as you left it) when there is more.
     all.open = all.querySelectorAll("ha-form").length <= 1 || !!this._mpAllOpen;
     all.addEventListener("toggle", () => (this._mpAllOpen = all.open));
-  }
+  },
 
   /** 0.12.6: the settings of one shown overlay, in reading order. */
   _mpOverlay(sec, row, { item, id, eng, ov, per, dev, T, name, done, saved }) {
@@ -10513,7 +11136,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     // 0.12.9: said from what the plan draws: a chip's icon, a camera's dot, Health's offline chip.
     const chipIcon = !!(sp && sp.type === "chip" && (sp.cl2 || (!sp.rd && (sp.icon || sp.icon0))));
     if (picE) looks.push("picture");
-    if (sp && sp.cam) looks.push("a dot in the camera's colour");
+    if ((sp && sp.cam) || camE) looks.push("a dot in the camera's colour, its camera beside it when it shows");
     if (hOff) looks.push("an “Offline” chip with its icon, only while it is offline");
     else if (sp && sp.type === "chip") looks.push(sp.rd && !chipIcon ? "chip with its values" : chipIcon ? "chip with its icon" : "chip");
     if (ov === "live" && body && body.touch && !picE) looks.push("touch area");
@@ -10558,7 +11181,17 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           this._savePer(id, "live", { popup: s.value === "1" ? "" : "off" });
           done();
         });
-        sec.appendChild(row("Shows the picture", "", pops, s, true));
+        sec.appendChild(row("Shows the camera", "", pops, s, true));
+        // 0.13.1: its picture (a still, refreshed) or live video (Home Assistant's camera player).
+        {
+          const v = document.createElement("select");
+          v.innerHTML = `<option value="">Automatic (its picture, refreshed every 10 s)</option><option value="live" ${p0.video === "live" ? "selected" : ""}>Live video</option>`;
+          v.addEventListener("change", () => {
+            this._savePer(id, "live", { video: v.value });
+            done();
+          });
+          sec.appendChild(row("Shows", "", !p0.video, v, true));
+        }
       }
       if (!picE && (!camE || (p0.popup !== "off" && p0.popup !== false))) {
         const autoT = !p0.when ? eng._liveWhen(item) : null;
@@ -10570,6 +11203,19 @@ class DeviceFloorplanCardEditor extends HTMLElement {
           done();
         } });
         sec.appendChild(row("When it shows", "", !cur, ctl, true));
+        // 0.13.1: how long it stays after its trigger, for every marker that has one (cameras and any device).
+        if (p0.when || (camE && autoT)) {
+          const ev = domainOf(p0.when || autoT) === "event";
+          const st0 = p0.stay || "";
+          const opts = [["", `Automatic (${ev ? "1 min after it fires" : "while it is on, then 30 s"})`], ["on", ev ? "Only briefly (1 min after it fires)" : "Only while it is on"], ["10", "10 s after it ends"], ["30", "30 s after it ends"], ["60", "1 min after it ends"], ["120", "2 min after it ends"], ["300", "5 min after it ends"], ["x", "Until I close it (✕)"]];
+          const s2 = document.createElement("select");
+          s2.innerHTML = opts.map(([val, lab]) => `<option value="${val}" ${val === st0 ? "selected" : ""}>${cesc(lab)}</option>`).join("");
+          s2.addEventListener("change", () => {
+            this._savePer(id, "live", { stay: s2.value });
+            done();
+          });
+          sec.appendChild(row("Stays open", "", !st0, s2, true));
+        }
       }
       if (picE) sec.appendChild(this._picBox(item, id, p0, done));
       if (!picE && !item.phantom && !camE && (TOGGLE_DOMAINS.has(domainOf(item.main_entity || "")) || item.bond)) {
@@ -10596,7 +11242,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     }
     // 6. Tap and long press, in words; try them on the plan.
     this._mpActions(sec, row, { item, id, ov, per, dev, eng, sp, done });
-  }
+  },
 
   /** 0.12.6: "Also shows": the lines drawn with the marker, each with its value; a pick the plan can't draw says so. */
   _mpExtras(sec, row, { item, id, ov, per, eng, T, sp, camE, done, saved }) {
@@ -10665,7 +11311,7 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._savePer(id, ov, { extras: null, badge: "" });
       done();
     });
-  }
+  },
 
   /** 0.12.6: Tap and Long press, said in words, each changeable (a dashboard / a popup asks for its target). */
   _mpActions(sec, row, { item, id, ov, per, dev, eng, sp, done }) {
@@ -10713,12 +11359,12 @@ class DeviceFloorplanCardEditor extends HTMLElement {
     const hcur = p0.hold || dev().hold || "";
     const hopts = [{ value: "default", label: "" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }];
     mk("hold", "hold_", hopts, hcur, holdW, true);
-  }
+  },
 
   /** People in Edit markers (#107): the same fields as card editor → People. */
   _personPanel(body, entity, rerender) {
-    const list = Array.isArray(this._config.people) ? this._config.people : [];
-    const idx = list.findIndex((x) => x.entity === entity);
+    const curList = () => Array.isArray(this._config.people) ? this._config.people : []; // read fresh: edits save without a redraw
+    const idx = curList().findIndex((x) => x.entity === entity);
     if (idx < 0) {
       body.innerHTML = `<p class="bg-hint">This person isn't in this card's People list.</p>`;
       return;
@@ -10727,29 +11373,29 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       this._config = this._prune({ ...this._config, people: next, ...extra });
       this._emit();
       this._engine(true);
-      if (this._big) this._big.card.setConfig(this._config);
     };
     body.innerHTML = "";
     body.appendChild(this._form([
       { name: "entity", selector: { entity: { domain: "person" } } },
       { name: "room", selector: { entity: {} } },
       { name: "room2", selector: { entity: {} } },
-    ], { ...list[idx] }, { entity: "Person", room: "Room sensor 1", room2: "Room sensor 2 (when 1 is unknown or not a room here)" }, (v) => {
-      const next = list.map((x, j) => (j === idx ? { ...x, ...v } : x));
+          { name: "distance", selector: { entity: { domain: "sensor", device_class: "distance" } } },
+    ], { ...curList()[idx] }, { entity: "Person", room: "Room sensor 1", room2: "Room sensor 2 (when 1 is unknown or not a room here)", distance: "Distance sensor (Bermuda; test: Network → Bluetooth)" }, (v) => {
+      const next = curList().map((x, j) => (j === idx ? { ...x, ...v } : x));
       save(next);
     }));
     const eng = this._engine();
     const ovs = eng._overlays().filter((o) => o !== "plan" && o !== "people" && o !== "live" && o !== "network" && o !== "health");
-    body.appendChild(this._form([{ name: "people_in", selector: { select: { options: ovs.map((o) => ({ value: o, label: eng._ovDef(o).label })), multiple: true, mode: "list" } } }], { people_in: this._config.people_in || [] }, { people_in: "People show in Live; also show them in (all people)" }, (v) => save(list, { people_in: v.people_in })));
+    body.appendChild(this._form([{ name: "people_in", selector: { select: { options: ovs.map((o) => ({ value: o, label: eng._ovDef(o).label })), multiple: true, mode: "list" } } }], { people_in: this._config.people_in || [] }, { people_in: "People show in Live; also show them in (all people)" }, (v) => save(curList(), { people_in: v.people_in })));
     const del = document.createElement("button");
     del.className = "qbtn";
     del.textContent = "Remove this person from the card";
     del.addEventListener("click", () => {
-      save(list.filter((_x, j) => j !== idx));
+      save(curList().filter((_x, j) => j !== idx));
       rerender(null);
     });
     body.appendChild(del);
-  }
+  },
 
   /** The Marker Editor (#108): the card full-screen; click a marker, settings for THIS overlay. */
   _openBig({ direct = false, onClose = null } = {}) {
@@ -10859,8 +11505,15 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         const ql = q.trim().toLowerCase();
         const name = (it) => ((this._config.devices || {})[it.id] || {}).name || it.name;
         const rows = { hidden: [], on: [], off: [] };
+        // 0.13.9.1: search matches the name, the entities, the category and the room; "lights" also finds "light".
+        const qs = ql ? [...new Set([ql, ql.replace(/(?<=\w{3})s$/, "")])] : [];
+        const hay = (it) => {
+          const r = e2._roomOf(it, a) || it.area_id;
+          const room = r ? (e2._rooms().names || {})[r] || ((a.areas || {})[r] || {}).name || "" : "";
+          return `${name(it)} ${it.id} ${(it.entities || []).join(" ")} ${it.main_entity || ""} ${it.group || ""} ${LIVE_KINDS[it.group] || ""} ${room}`.toLowerCase();
+        };
         for (const it of items) {
-          if (ql && !`${name(it)} ${it.id}`.toLowerCase().includes(ql)) continue;
+          if (qs.length && !qs.some((w) => hay(it).includes(w))) continue;
           if (ov === "plan") continue;
           const qual = e2._qualifies(it, ov, a);
           if (qual && e2._hidden(it, ov)) rows.hidden.push(it);
@@ -10876,8 +11529,10 @@ class DeviceFloorplanCardEditor extends HTMLElement {
         const lbl = def ? def.label : "";
         const og = (this._grpOpen = this._grpOpen || { on: true, hidden: true, off: false });
         // 0.11.1: the shown devices grouped by room (as Home Assistant groups by area).
+        // 0.13.9.1: the room is where the marker stands on THIS floor (any kind of spot, bonds included), else the
+        // Home Assistant area it is in.
         const roomName = (it) => {
-          const r = e2._roomOf(it);
+          const r = e2._roomOf(it, a) || (it.area_id && (a.areas || {})[it.area_id] ? it.area_id : null);
           return r ? (e2._rooms().names || {})[r] || ((a.areas || {})[r] || {}).name || r : "No room";
         };
         const byRoom = (list, btn) => {
@@ -10972,8 +11627,8 @@ class DeviceFloorplanCardEditor extends HTMLElement {
       e.preventDefault();
       close();
     });
-  }
-}
+  },
+});
 
 if (!customElements.get("device-floorplan-card")) customElements.define("device-floorplan-card", DeviceFloorplanCard);
 if (!customElements.get("device-floorplan-card-editor")) customElements.define("device-floorplan-card-editor", DeviceFloorplanCardEditor);

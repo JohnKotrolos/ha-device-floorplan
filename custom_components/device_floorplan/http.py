@@ -80,7 +80,11 @@ class FloorplanUploadView(HomeAssistantView):
         except ValueError:
             width = height = 0
 
-        await data.async_set_image(plan_id, body, ext, width, height)
+        try:
+            turn = int(request.query.get("turn", "0")) % 4  # 0.13.2 (#21): the same floor, turned
+        except ValueError:
+            turn = 0
+        await data.async_set_image(plan_id, body, ext, width, height, turn)
         return self.json(data.plan_public(plan_id))
 
 

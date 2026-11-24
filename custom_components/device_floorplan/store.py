@@ -554,6 +554,9 @@ class FloorplanData:
                 for kk in ("icon", "value", "one"):
                     if v.get(kk):
                         entry[kk] = str(v[kk])[:80]
+                # 0.13.2: a phantom gets a picture / touch area like every other spot (same cleaning).
+                body = _clean_pos({"x": entry["x"], "y": entry["y"], "pic": v.get("pic"), "touch": v.get("touch")})
+                entry.update({kk: body[kk] for kk in ("pic", "touch") if kk in body})
                 uses = v.get("uses")
                 if isinstance(uses, dict):
                     # #103: which entities of a member count (empty/missing = all its readings).
@@ -613,8 +616,10 @@ class FloorplanData:
         async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, plan_id)
 
     async def async_set_image(
-        self, plan_id: str, body: bytes, ext: str, width: int, height: int
+        self, plan_id: str, body: bytes, ext: str, width: int, height: int, turn: int = 0
     ) -> None:
+        """Store a new picture for a plan. 0.13.2 (#21): turn = quarter turns clockwise (1..3) when the picture is the
+        same floor turned by the Floorplan Editor: everything placed on it turns with it (turn_plan)."""
         async with self._image_lock(plan_id):
             stamp = int(time.time() * 1000)
             filename = f"{plan_id}_{stamp}.{ext}"
@@ -628,10 +633,16 @@ class FloorplanData:
             plan["image_external"] = None
             plan["image_backup"] = None
             plan["image_version"] = int(time.time())
-            if width > 0 and height > 0:
+            if turn % 4:
+                turn_plan(plan, turn)
+            elif width > 0 and height > 0:
                 plan["width"] = width
                 plan["height"] = height
             await self._commit_image(plan_id, old)
+            if turn % 4:  # the house frame depends on every floor
+                for other in self.plans:
+                    if other != plan_id:
+                        async_dispatcher_send(self.hass, SIGNAL_PLAN_UPDATED, other)
 
     @property
     def pics_path(self) -> Path:
@@ -854,6 +865,95 @@ _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 _LOOKS = ("full", "faint", "outline", "dotted", "hidden")
 
 
+def turn_plan(plan: dict[str, Any], quarters: int) -> None:
+    """0.13.2 (#21): turn a plan by quarter turns clockwise, with everything placed on it.
+
+    The picture itself is turned by the caller. Coordinates are % of the picture, so one clockwise turn maps
+    (x, y) to (100 - y, x). Lengths kept in % of the width are rescaled (the width changes), sizes in % of width
+    and height swap, directions gain 90°. The floor's alignment goes back to centred.
+    """
+    for _ in range(quarters % 4):
+        w, h = plan.get("width") or 0, plan.get("height") or 0
+        k = w / h if w and h else 1.0  # a length in % of the old width, in % of the new width
+
+        def pt(x: Any, y: Any) -> tuple[float, float]:
+            return round(100.0 - float(y), 3), round(float(x), 3)
+
+        def pts_in(d: dict[str, Any], pairs: tuple[tuple[str, str], ...]) -> None:
+            for kx, ky in pairs:
+                if d.get(kx) is not None and d.get(ky) is not None:
+                    d[kx], d[ky] = pt(d[kx], d[ky])
+
+        def ang(a: Any) -> float:
+            return round((float(a) + 90.0) % 360.0, 2)
+
+        def turn_body(d: dict[str, Any]) -> None:
+            """A spot's picture (width in % of the plan's width, turned with the floor) and touch area."""
+            pic = d.get("pic")
+            if isinstance(pic, dict):
+                pic["w"] = round(min(100.0, float(pic.get("w", 6)) * k), 3)
+                pic["r"] = ang(pic.get("r", 0))
+            touch = d.get("touch")
+            if isinstance(touch, dict) and touch.get("w") and touch.get("h"):
+                touch["w"], touch["h"] = touch["h"], touch["w"]
+
+        for pos in (plan.get("positions") or {}).values():
+            pts_in(pos, (("x", "y"),))
+            if isinstance(pos.get("box"), dict):
+                pts_in(pos["box"], (("x", "y"),))
+            light = pos.get("light")
+            if isinstance(light, dict):
+                pts_in(light, (("x1", "y1"), ("x2", "y2"), ("cx", "cy")))
+                if isinstance(light.get("pts"), list):  # Christmas lights along a line
+                    light["pts"] = [list(pt(q[0], q[1])) for q in light["pts"]]
+                if light.get("r") is not None:
+                    light["r"] = round(float(light["r"]) * k, 3)
+                if light.get("w") is not None or light.get("h") is not None:
+                    lw, lh = light.get("w"), light.get("h")
+                    if lw is not None and lh is None:  # a square panel: its height was w × the ratio
+                        lh = float(lw) * k
+                    light["w"], light["h"] = (round(float(lh), 3) if lh is not None else None), (round(float(lw), 3) if lw is not None else None)
+                    for kk in ("w", "h"):
+                        if light[kk] is None:
+                            light.pop(kk)
+                if light.get("type") == "wall" and light.get("a") is not None:
+                    light["a"] = ang(light["a"])  # a wall light's direction; a screen's a is its spread
+                elif light.get("type") == "wall":
+                    light["a"] = ang(90)
+            op = pos.get("opening")
+            if isinstance(op, dict):
+                pts_in(op, (("x1", "y1"), ("x2", "y2")))
+            air = pos.get("air")
+            if isinstance(air, dict) and air.get("type") != "none":
+                pts_in(air, (("x1", "y1"), ("x2", "y2")))
+                if air.get("a") is not None:
+                    air["a"] = ang(air["a"])
+                if air.get("r") is not None:
+                    air["r"] = round(float(air["r"]) * k, 2)
+            turn_body(pos)
+        for a in (plan.get("anchors") or {}).values():
+            pts_in(a, (("x", "y"),))
+        for ph in (plan.get("phantoms") or {}).values():
+            pts_in(ph, (("x", "y"),))
+            turn_body(ph)
+        for aid, poly in list((plan.get("shapes") or {}).items()):
+            plan["shapes"][aid] = [list(pt(p[0], p[1])) + list(p[2:]) for p in poly]
+        for ref in plan.get("refs") or []:
+            pts_in(ref, (("ax", "ay"), ("bx", "by")))
+            ref["dir"] = "h" if ref.get("dir") == "v" else "v"
+        fr = plan.get("frame")
+        if fr:
+            plan["frame"] = {nk: fr[ok] for nk, ok in (("t", "l"), ("r", "t"), ("b", "r"), ("l", "b")) if ok in fr}
+        for r in (plan.get("robots") or {}).values():
+            m = r.get("m")
+            if isinstance(m, list) and len(m) == 6:  # robot units -> plan %, then the turn
+                r["m"] = [-m[3], -m[4], 100.0 - m[5], m[0], m[1], m[2]]
+        if plan.get("orig_size"):
+            plan["orig_size"] = [plan["orig_size"][1], plan["orig_size"][0]]
+        plan["width"], plan["height"] = h, w
+        plan["align"] = {}
+
+
 def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "x": round(min(100.0, max(0.0, float(pos["x"]))), 3),
@@ -866,12 +966,34 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
     if isinstance(pos.get("label"), str) and pos["label"].strip():
         entry["label"] = pos["label"].strip()[:60]  # 0.8.0: an automatic bond's name on the plan
     light = pos.get("light")
-    if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "screen", "drum", "line", "none"):
+    if isinstance(light, dict) and light.get("type") in ("bulb", "spot", "strip", "panel", "wall", "screen", "drum", "line", "xmas", "none"):
         # Light shape on the plan (#74), in percent of the image (x / y axes).
         clean: dict[str, Any] = {"type": light["type"]}
         for k in ("r", "x1", "y1", "x2", "y2", "w", "h", "a", "cx", "cy"):  # 0.12.6: cx / cy = its own centre
             if light.get(k) is not None:
                 clean[k] = round(float(light[k]), 3)
+        if light["type"] == "xmas":
+            # 0.13.2 Christmas lights: a line through points (corners allowed) or rings; bulbs, size, effect, speed.
+            choices = {"lay": ("line", "rings", "spiral", "scatter"), "bulb": ("multi", "white", "own"), "size": ("s", "m", "l"), "fx": ("steady", "twinkle", "chase", "flash"), "sp": ("slow", "normal", "fast")}
+            for kk, ok in choices.items():
+                if light.get(kk) in ok:
+                    clean[kk] = light[kk]
+            if light.get("k") is not None:
+                clean["k"] = int(min(6500, max(2000, float(light["k"]))))
+            if light.get("cm") is not None:  # 0.13.3: bulb size in centimetres
+                clean["cm"] = round(min(8.0, max(0.5, float(light["cm"]))), 1)
+            if light.get("gl") is not None:  # 0.13.6: glow around each bulb, cm
+                clean["gl"] = round(min(50.0, max(0.5, float(light["gl"]))), 1)
+            pts = light.get("pts")
+            if isinstance(pts, list):
+                good = []
+                for pt in pts[:40]:
+                    try:
+                        good.append([round(min(100.0, max(0.0, float(pt[0]))), 3), round(min(100.0, max(0.0, float(pt[1]))), 3)])
+                    except (TypeError, ValueError, IndexError):
+                        continue
+                if len(good) >= 2:
+                    clean["pts"] = good
         col = light.get("color")
         if isinstance(col, str) and col and col != "auto":
             entry_col = col.strip()[:12]  # #112: "k:<kelvin>" or "#rrggbb"
@@ -922,9 +1044,15 @@ def _clean_pos(pos: dict[str, Any]) -> dict[str, Any]:
         if isinstance(tint, str) and _HEX.match(tint):
             p["tint"] = tint
         hl = pic.get("hl")
-        if isinstance(hl, dict) and hl.get("look") in ("glow", "breathing", "flow", "tint", "pulse"):
+        if isinstance(hl, dict) and hl.get("look") in ("glow", "breathing", "flow", "tint", "pulse", "sparkle", "spin"):
             # 0.12.4: the Highlight look (shown on top while a second entity, picked on the card, is on).
             p["hl"] = {"look": hl["look"], "color": hl["color"] if isinstance(hl.get("color"), str) and _HEX.match(hl["color"]) else "#2196f3"}
+            for kk in ("ox", "oy"):  # 0.13.8: Spin turns around this point (% of the picture; default its centre)
+                if hl.get(kk) is not None:
+                    try:
+                        p["hl"][kk] = round(min(100.0, max(0.0, float(hl[kk]))), 1)
+                    except (TypeError, ValueError):
+                        pass
         looks = pic.get("looks")
         if isinstance(looks, dict):
             lk = {k: v for k, v in looks.items() if k in ("on", "off", "un") and v in _LOOKS}
