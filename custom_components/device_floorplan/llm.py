@@ -102,7 +102,9 @@ class BetweenTool(_FloorplanTool):
     name = f"{DOMAIN}__between"
     description = (
         "Between two devices or rooms (\"here\" allowed): the way through the rooms, the distance in metres when the "
-        "floor is measured, the compass direction when known, and the walls or openings a straight line crosses."
+        "floor is measured, the compass direction when known, and the walls or openings a straight line crosses. "
+        "For \"I am in room A looking at room B, what is on my left / right?\" call it with from = A, to = B: "
+        "the answer starts with on_your_left / on_your_right."
     )
     parameters = vol.Schema({vol.Required("from"): str, vol.Optional("to"): str})
 

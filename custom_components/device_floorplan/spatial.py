@@ -555,8 +555,13 @@ class Home:
     def layout(self, floor: str | None = None, room: str | None = None) -> dict[str, Any]:
         if room:
             hits = self.find_rooms(room)
+            if floor:  # 0.13.9.9: the floor filter applies to a room too
+                n = _norm(floor)
+                hits = [r for r in hits if n in (_norm(r["plan"]["name"]), _norm(r["plan"]["floor"]), _norm(r["plan"]["id"]))] or hits
             if not hits:
                 return {"error": f"No room called “{room}” on the floorplan.", "rooms": self.room_names()}
+            # The copy that knows most (most drawn connections) first.
+            hits = sorted(hits, key=lambda r: -sum(1 for lk in r["links"].values() if lk["type"] in WALKABLE))
             return {"rooms": [self.room_facts(r, with_devices=True) for r in hits]}
         plans = self.plans
         if floor:
@@ -653,7 +658,12 @@ class Home:
 
     def _miss(self, text: str | None, hit: dict[str, Any] | None) -> dict[str, Any] | None:
         if hit is None:
-            return {"error": "Say which device or room (or ask from a voice device)." if _is_here(text) else f"“{text}” is not on the floorplan."}
+            if _is_here(text):
+                return {
+                    "error": "No voice device here, so \"here\" is unknown. Name the room you are in. "
+                    "For \"I am in room A looking at room B, what is on my left / right?\" call between with from = A and to = B."
+                }
+            return {"error": f"“{text}” is not on the floorplan."}
         if hit["kind"] == "many":
             return {"error": f"“{text}” matches several things.", "candidates": hit["names"]}
         if hit["kind"] == "spot" and not self.visible(hit["spot"]):
@@ -750,6 +760,13 @@ class Home:
                 out["note"] = "No way through is drawn between these rooms (rooms without a shape, or not glued)."
             else:
                 out["route"] = [self.room_name(x) for x in path]
+                # 0.13.9.9: standing in the first room, facing the next one: the answer first, for small models.
+                if len(path) > 1:
+                    rx = next((r for r in self.rooms.get(path[0], []) if path[1] in r["links"]), None)
+                    if rx and rx["links"][path[1]]["type"] in WALKABLE:
+                        at = self._beside(rx, rx["plan"]["rooms"][path[1]], rx["links"][path[1]])
+                        if at:
+                            out = {"standing_in": self.room_name(path[0]), "looking_at": self.room_name(path[1]), **at, **out}
                 steps = []
                 for x, y in pairwise(path):
                     rx = next((r for r in self.rooms.get(x, []) if y in r["links"]), None)

@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.8";
+const VERSION = "0.13.9.9";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -5034,6 +5034,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
   _onInput(e) {
     const t = e.target;
     if (t.id === "rbpicop") return this._onChange(e);
+    if (t.dataset && t.dataset.hfor && t.type === "number") return this._setHeight(t, false); // live, one delayed save
     if (t.id === "q") {
       this.s.q = t.value;
       this._fresh = null;
@@ -5073,24 +5074,37 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     }
   },
 
+  /** 0.13.9.8: a spot's mounting height; a bond's height goes on every member. 0.13.9.9: the metres box updates live
+   *  (no redraw per arrow press), one undo step per field and one delayed save; the preset list saves and redraws. */
+  _setHeight(t, now) {
+    const id = this.s.sel;
+    const pos = id && this.work.positions[id];
+    if (!pos) return;
+    const v = t.value === "" ? null : Math.min(10, Math.max(0, Math.round(Number(t.value) * 100) / 100));
+    if (v != null && !Number.isFinite(v)) return;
+    const bond = this._bondOf(id);
+    const apply = () => {
+      const recs = t.dataset.hfor === "box" ? [pos.box].filter(Boolean) : (bond ? bond[1] : [id]).map((m) => this.work.positions[m]).filter(Boolean);
+      for (const r of recs) {
+        if (v == null) delete r.h;
+        else r.h = v;
+      }
+    };
+    if (now) return this._change(apply);
+    if (!t._undoDone) {
+      this._pushUndo();
+      t._undoDone = true;
+    }
+    apply();
+    this._scheduleSave();
+  },
+
   _onChange(e) {
     const t = e.target;
     const act = t.dataset.act;
     if (t.dataset && t.dataset.hfor) {
-      // 0.13.9.8: a spot's mounting height (select preset or type metres); a bond's height goes on every member.
-      const id = this.s.sel;
-      const pos = id && this.work.positions[id];
-      if (!pos) return;
-      const v = t.value === "" ? null : Math.min(10, Math.max(0, Math.round(Number(t.value) * 100) / 100));
-      if (v != null && !Number.isFinite(v)) return;
-      const bond = this._bondOf(id);
-      this._change(() => {
-        const recs = t.dataset.hfor === "box" ? [pos.box].filter(Boolean) : (bond ? bond[1] : [id]).map((m) => this.work.positions[m]).filter(Boolean);
-        for (const r of recs) {
-          if (v == null) delete r.h;
-          else r.h = v;
-        }
-      });
+      // 0.13.9.8: the preset list saves at once; the metres box is handled live in _onInput (0.13.9.9).
+      if (t.type !== "number") this._setHeight(t, true);
       return;
     }
     if (t.id === "fnorth") {
