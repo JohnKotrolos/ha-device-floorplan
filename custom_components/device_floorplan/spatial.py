@@ -89,6 +89,12 @@ def _bbox(poly: list[Pt]) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def _across(s: dict[str, Any], B: dict[str, Any], tol: dict[str, float]) -> bool:
+    """Is room B straight through this piece of wall (within a wall's thickness), not just past a corner?"""
+    (x, y), (nx, ny) = s["p"], s["n"]
+    return any(_pip((x + nx * tol["wall"] * f, y + ny * tol["wall"] * f), B["poly"]) for f in (0.3, 0.55, 0.8, 1.0))
+
+
 def _compass(dx: float, dy: float, north: float) -> str:
     """Image coordinates (y down) to a compass word; north = where north points on the image, ° clockwise from up."""
     bearing = (degrees(atan2(dx, -dy)) - north) % 360
@@ -118,6 +124,11 @@ class Home:
             payload = build_plan_payload(hass, data, plan)
             floor = floor_reg.async_get_floor(plan["floor_id"]) if plan.get("floor_id") else None
             self.plans.append(self._plan(plan, payload, floor.name if floor else None))
+        # A room's facts come from its floor plans; a view (garden, an overview) only adds rooms no floor plan has.
+        for aid, rooms in self.rooms.items():
+            on_floor = [r for r in rooms if r["plan"]["kind"] == "floor"]
+            if on_floor:
+                self.rooms[aid] = on_floor
 
     # -------------------------------------------------------------- one plan
     def _plan(self, plan: dict[str, Any], payload: dict[str, Any], floor_name: str | None) -> dict[str, Any]:
@@ -153,7 +164,7 @@ class Home:
         }
         # Rooms with a drawn shape (the only ones whose walls we know); pins alone give a room's place.
         for aid, a in payload["areas"].items():
-            room = {"area_id": aid, "name": a["name"], "plan": P, "pin": to(a["x"], a["y"])}
+            room = {"area_id": aid, "name": a["name"], "plan": P, "pin": to(a["x"], a["y"]), "links": {}, "samples": []}
             if a.get("shape") and len(a["shape"]) >= 3:
                 poly = [to(p[0], p[1]) for p in a["shape"]]
                 room.update(poly=poly, size=_area(poly), centre=_centroid(poly), box=_bbox(poly))
@@ -237,12 +248,17 @@ class Home:
             for i in range(len(poly)):
                 a, b = poly[i - 1], poly[i]
                 ln = hypot(b[0] - a[0], b[1] - a[1])
+                if not ln:
+                    continue
+                nrm = ((b[1] - a[1]) / ln, (a[0] - b[0]) / ln)  # a normal of the edge, turned to point out of the room
+                mid, eps = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), tol["touch"] / 4
+                if _pip((mid[0] + nrm[0] * eps, mid[1] + nrm[1] * eps), poly):
+                    nrm = (-nrm[0], -nrm[1])
                 n = max(1, ceil(ln / tol["step"]))
                 for k in range(n):
                     t = (k + 0.5) / n
-                    samples.append({"p": (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), "w": ln / n, "cls": "outside", "to": None})
+                    samples.append({"p": (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), "n": nrm, "w": ln / n, "cls": "outside", "to": None})
             r["samples"] = samples
-            r["links"] = {}
         for i, A in enumerate(shaped):
             for B in shaped[i + 1 :]:
                 ax0, ay0, ax1, ay1 = A["box"]
@@ -277,13 +293,29 @@ class Home:
                     if B is A or px < bx0 - tol["wall"] or px > bx1 + tol["wall"] or py < by0 - tol["wall"] or py > by1 + tol["wall"]:
                         continue
                     d = 0.0 if _pip(s["p"], B["poly"]) else _dpoly(s["p"], B["poly"])
-                    if d <= tol["wall"] and (best is None or d < best[0]):
+                    if (d <= tol["touch"] or (d <= tol["wall"] and _across(s, B, tol))) and (best is None or d < best[0]):
                         best = (d, B)
                 if best:
                     d, B = best
                     link = A["links"].get(B["area_id"])
                     walk = link and link["type"] in WALKABLE and d <= tol["touch"]
                     s["cls"], s["to"] = ("open" if walk else "wall"), B["area_id"]
+                elif self._indoors(s, A, shaped, tol):
+                    s["cls"] = "inner"  # an undrawn space (closet, shaft) with rooms beyond it: not an outside wall
+
+    @staticmethod
+    def _indoors(s: dict[str, Any], A: dict[str, Any], shaped: list[dict[str, Any]], tol: dict[str, float]) -> bool:
+        """Looking out through this wall, is there another room within a few metres?"""
+        (x, y), (nx, ny) = s["p"], s["n"]
+        reach = tol["wall"] * 6.5  # about 3 m on a measured floor
+        steps = 12
+        for c, sn in ((1.0, 0.0), (0.82, 0.57), (0.82, -0.57)):  # straight out, and 35° to each side
+            dx, dy = nx * c - ny * sn, nx * sn + ny * c
+            for k in range(1, steps + 1):
+                q = (x + dx * reach * k / steps, y + dy * reach * k / steps)
+                if any(B is not A and _pip(q, B["poly"]) for B in shaped):
+                    return True
+        return False
 
     @staticmethod
     def _side(A: dict[str, Any], B: dict[str, Any], tol: dict[str, float]) -> tuple[float, float, list[Pt]]:
@@ -299,7 +331,7 @@ class Home:
             if d <= tol["touch"]:
                 touch += s["w"]
                 pts.append(p)
-            elif d <= tol["wall"]:
+            elif d <= tol["wall"] and _across(s, B, tol):
                 near += s["w"]
         return touch, near, pts
 
@@ -371,8 +403,10 @@ class Home:
                 link = room["links"].get(s["to"]) or {}
                 what = "door" if link.get("type") == "door" else "open side" if link.get("type") == "open_space" else "passage"
                 words.append(f"by the {what} to {self.room_name(s['to'])}")
-            else:
+            elif s["cls"] == "wall":
                 words.append(f"by the wall to {self.room_name(s['to'])}")
+            else:
+                words.append("by a wall")
         elif d >= 0.45 * half:
             middle = True
             words.append("in the middle of the room")
@@ -400,7 +434,7 @@ class Home:
         if not room["poly"]:
             out["note"] = "The room has no drawn shape, so its walls and connections are unknown."
         else:
-            out["has_outside_wall"] = any(s["cls"] == "outside" for s in room["samples"])
+            out["has_outside_wall"] = sum(s["w"] for s in room["samples"] if s["cls"] == "outside") >= (0.8 if P["measured"] else 2 * P["tol"]["edge"])
             conns, walls = [], []
             for other, link in sorted(room["links"].items(), key=lambda kv: self.room_name(kv[0]) or ""):
                 B = P["rooms"][other]
@@ -420,7 +454,11 @@ class Home:
             out["connects_to"] = conns
             if walls:
                 out["shares_a_wall_with"] = walls  # close by, but no way through
-        others = [r["plan"]["floor"] for r in self.rooms.get(room["area_id"], []) if r["plan"] is not P]
+        others = [
+            r["plan"]["floor"]
+            for r in self.rooms.get(room["area_id"], [])
+            if r["plan"] is not P and P["kind"] == "floor" and r["plan"]["kind"] == "floor" and r["plan"]["level"] != P["level"]
+        ]
         if others:
             out["also_on"] = others  # the same room on another plan (stairs, a split floor)
         if with_devices:
@@ -552,7 +590,7 @@ class Home:
             if s["plan"] is not P or (hit["kind"] == "spot" and s is hit["spot"]) or not self.visible(s):
                 continue
             if want:
-                tags = {_norm(s["category"]).rstrip("s"), _norm((s["main"] or "").split(".")[0]).rstrip("s")}
+                tags = {_norm(s["category"] or (s["main"] or "").split(".")[0]).rstrip("s")}  # the type of thing, else the entity type
                 if not any(want in t or t and t in want for t in tags):
                     continue
             d = hypot(s["at"][0] - at[0], s["at"][1] - at[1])
