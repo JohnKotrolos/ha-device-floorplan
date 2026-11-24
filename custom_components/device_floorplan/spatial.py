@@ -35,7 +35,7 @@ CONN_WORDS = {
     "passage": "a passage (door width)",
     "door": "a door",
 }
-_DOOR_DC = {"door", "garage_door", "opening"}
+_DOOR_DC = {"door", "garage_door"}  # a generic "opening" (relay, appliance door) only counts when drawn as a door
 _COVER_DOOR_DC = {"door", "garage", "gate"}
 
 Pt = tuple[float, float]
@@ -101,8 +101,26 @@ def _compass(dx: float, dy: float, north: float) -> str:
     return DIRS[int((bearing + 22.5) // 45) % 8]
 
 
+_SAME_WORD = {"bedroom": "room", "bathroom": "bath", "livingroom": "living"}
+
+
 def _norm(text: Any) -> str:
-    return " ".join(str(text or "").casefold().replace("_", " ").split())
+    """A name as people say it: no case, apostrophes or dashes; "bedroom" = "room"; no plural / possessive s."""
+    t = str(text or "").casefold()
+    for ch in "'’`´":
+        t = t.replace(ch, "")
+    for ch in "_-.,:;!?()":
+        t = t.replace(ch, " ")
+    words = []
+    for w in t.split():
+        w = _SAME_WORD.get(w, w)
+        words.append(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return " ".join(words)
+
+
+def _is_here(text: Any) -> bool:
+    """No target, or "here" / "me" / "this room": the voice device that heard the question."""
+    return not text or _norm(text) in {"here", "me", "thi room", "thi device", "where i am"}
 
 
 # ------------------------------------------------------------------ the model
@@ -129,6 +147,10 @@ class Home:
             on_floor = [r for r in rooms if r["plan"]["kind"] == "floor"]
             if on_floor:
                 self.rooms[aid] = on_floor
+        # The drawn copy of a room (and things placed in a drawn room) answer first; a plan with only pins knows less.
+        for aid, rooms in self.rooms.items():
+            rooms.sort(key=lambda r: r["poly"] is None)
+        self.spots.sort(key=lambda sp: not (sp["room"] and sp["plan"]["rooms"][sp["room"]]["poly"]))
 
     # -------------------------------------------------------------- one plan
     def _plan(self, plan: dict[str, Any], payload: dict[str, Any], floor_name: str | None) -> dict[str, Any]:
@@ -489,12 +511,29 @@ class Home:
                     **({"level": P["level"]} if P["level"] is not None else {}),
                     "measured": P["measured"],
                     "compass": P["north"] is not None,
+                    "summary": self._floor_summary(P),
                     "rooms": [self.room_facts(r) for r in sorted(P["rooms"].values(), key=lambda r: r["name"])],
                 }
                 for P in plans
                 if P["rooms"]
             ]
         }
+
+    def _floor_summary(self, P: dict[str, Any]) -> str:
+        """One plain line of a floor's connections, easy for small models to repeat."""
+        ways, walls, seen = [], [], set()
+        for r in sorted(P["rooms"].values(), key=lambda r: r["name"]):
+            for other, link in sorted(r["links"].items(), key=lambda kv: self.room_name(kv[0]) or ""):
+                pair = frozenset((r["area_id"], other))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                names = f"{r['name']} – {P['rooms'][other]['name']}"
+                (ways if link["type"] in WALKABLE else walls).append(f"{names}: {CONN_WORDS[link['type']]}" if link["type"] in WALKABLE else names)
+        out = "Connected: " + ("; ".join(ways) if ways else "none drawn") + "."
+        if walls:
+            out += " Share only a wall (no way through): " + "; ".join(walls) + "."
+        return out
 
     def room_names(self) -> list[str]:
         return sorted({rs[0]["name"] for rs in self.rooms.values()})
@@ -505,15 +544,16 @@ class Home:
         for aid, rs in self.rooms.items():
             area = self.area_reg.async_get_area(aid)
             names = {_norm(aid), _norm(rs[0]["name"])} | {_norm(a) for a in (getattr(area, "aliases", None) or [])}
+            words = set(n.split())
             if n in names:
                 exact += rs
-            elif any(n in x or x in n for x in names if x):
+            elif any(n in x or x in n or (set(x.split()) and (set(x.split()) <= words or words <= set(x.split()))) for x in names if x):
                 part += rs
         return exact or part
 
     def resolve(self, text: str | None, device_id: str | None = None) -> dict[str, Any] | None:
         """A thing to measure from: a placed device / entity (by name, id or entity id), a room, or "here"."""
-        if not text or _norm(text) in ("here", "me", "this room", "this device"):
+        if _is_here(text):
             if not device_id:
                 return None
             spot = next((s for s in self.spots if s["device_id"] == device_id), None)
@@ -552,7 +592,7 @@ class Home:
 
     def _miss(self, text: str | None, hit: dict[str, Any] | None) -> dict[str, Any] | None:
         if hit is None:
-            return {"error": "Say which device or room (or ask from a voice device)." if not text else f"“{text}” is not on the floorplan."}
+            return {"error": "Say which device or room (or ask from a voice device)." if _is_here(text) else f"“{text}” is not on the floorplan."}
         if hit["kind"] == "many":
             return {"error": f"“{text}” matches several things.", "candidates": hit["names"]}
         if hit["kind"] == "spot" and not self.visible(hit["spot"]):

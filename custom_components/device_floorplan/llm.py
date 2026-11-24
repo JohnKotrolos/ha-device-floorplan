@@ -66,8 +66,8 @@ class _FloorplanTool(llm.Tool):
 class LayoutTool(_FloorplanTool):
     name = f"{DOMAIN}__layout"
     description = (
-        "Layout of the home from its floorplan: floors, rooms, which rooms connect (one open space, passage, door) "
-        "and which only share a wall, outside walls, compass position when known. Give a room to also list what is in it."
+        "Use for questions about rooms: which rooms are next to or connect to a room (one open space, passage, door), "
+        "which only share a wall, where a room is (compass when known), and what is in a room (give the room)."
     )
     parameters = vol.Schema({vol.Optional("floor"): str, vol.Optional("room"): str})
 
