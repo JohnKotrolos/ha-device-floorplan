@@ -900,7 +900,7 @@ def turn_plan(plan: dict[str, Any], quarters: int) -> None:
         def ang(a: Any) -> float:
             return round((float(a) + 90.0) % 360.0, 2)
 
-        def turn_body(d: dict[str, Any]) -> None:
+        def turn_body(d: dict[str, Any], k: float = k) -> None:
             """A spot's picture (width in % of the plan's width, turned with the floor) and touch area."""
             pic = d.get("pic")
             if isinstance(pic, dict):
