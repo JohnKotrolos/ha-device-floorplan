@@ -220,10 +220,14 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         download(`device-floorplan-${slug}.json`, new Blob([JSON.stringify(out, null, 1)], { type: "application/json" }));
       } else if (fmt === "png") {
         download(`device-floorplan-${slug}.png`, await this._renderPng());
+      } else if (fmt === "md") {
+        await this._flushSave();
+        const r = await this._ws("ai_text", { plan_id: plan.id });
+        download(`device-floorplan-${slug}-ai.md`, new Blob([r.text], { type: "text/markdown" }));
       }
       this.s.dialog = null;
       this._render();
-      this._toast(`Exported ${fmt.toUpperCase()}`, false);
+      this._toast(`Exported ${fmt === "md" ? "AI description" : fmt.toUpperCase()}`, false);
     } catch (err) {
       this.s.dialog.err = `Export failed: ${errText(err)}`;
       this._render();

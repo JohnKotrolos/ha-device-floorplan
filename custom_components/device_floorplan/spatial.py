@@ -161,6 +161,10 @@ class Home:
         # The drawn copy of a room (and things placed in a drawn room) answer first; a plan with only pins knows less.
         for aid, rooms in self.rooms.items():
             rooms.sort(key=lambda r: r["poly"] is None)
+            # 0.13.9.10: a room drawn on one plan is that room; its shape-less copies elsewhere (pins on another
+            # plan) only confuse an assistant ("a second Living Room on the 2nd floor"). Their devices stay listed.
+            if rooms[0]["poly"] is not None:
+                self.rooms[aid] = [r for r in rooms if r["poly"] is not None]
         self.spots.sort(key=lambda sp: not (sp["room"] and sp["plan"]["rooms"][sp["room"]]["poly"]))
 
     # -------------------------------------------------------------- one plan
@@ -262,6 +266,19 @@ class Home:
             "entities": eids,
         }
         spot["room"] = self._room_at(P, at) or (P["rooms"].get(area_id) and area_id)
+        # 0.13.9.10: every name the thing goes by (plan label, Home Assistant device name, entity names and ids),
+        # so "Air conditioner", "Haier AC" or "Living Room Haier AC indoor temperature" find the same marker.
+        ids = {key, key[7:] if key.startswith("entity:") else None, device_id, spot["main"], *eids}
+        names = {spot["name"]}
+        if device_id:
+            if dev := self.dev_reg.async_get(device_id):
+                names |= {dev.name_by_user, dev.name}
+            ids |= {e.entity_id for e in er.async_entries_for_device(self.ent_reg, device_id)}
+        for e in ids:
+            if e and "." in e and (st := self.hass.states.get(e)):
+                names.add(st.name)
+        spot["ids"] = {i for i in ids if i}
+        spot["names"] = {_norm(x) for x in names if x}
         self.spots.append(spot)
         if door:
             P["doors"].append({"at": mark, "entity": door})
@@ -550,6 +567,17 @@ class Home:
                 for s in self.spots
                 if s["plan"] is P and s["room"] == room["area_id"] and self.visible(s)
             ]
+            listed = {d["name"] for d in out["devices"]}
+            for s in self.spots:  # placed on a plan where this room has no shape: listed once, with that plan
+                if (
+                    s["plan"] is not P
+                    and s["room"] == room["area_id"]
+                    and s["name"] not in listed
+                    and self.visible(s)
+                    and not s["plan"]["rooms"].get(room["area_id"], {}).get("poly")
+                ):
+                    out["devices"].append({"name": s["name"], "where": f"in {room['name']}, shown on the {s['plan']['name']} plan"})
+                    listed.add(s["name"])
         return out
 
     def layout(self, floor: str | None = None, room: str | None = None) -> dict[str, Any]:
@@ -578,12 +606,16 @@ class Home:
                     "measured": P["measured"],
                     "compass": P["north"] is not None,
                     "summary": self._floor_summary(P),
-                    "rooms": [self.room_facts(r) for r in sorted(P["rooms"].values(), key=lambda r: r["name"])],
+                    "rooms": [self.room_facts(r) for r in self._rooms_of(P)],
                 }
                 for P in plans
-                if P["rooms"]
+                if self._rooms_of(P)
             ]
         }
+
+    def _rooms_of(self, P: dict[str, Any]) -> list[dict[str, Any]]:
+        """A plan's rooms, without shape-less copies of rooms drawn on another plan."""
+        return sorted((r for r in P["rooms"].values() if any(r is x for x in self.rooms.get(r["area_id"], []))), key=lambda r: r["name"])
 
     def _floor_summary(self, P: dict[str, Any]) -> str:
         """One plain line of a floor's connections, easy for small models to repeat."""
@@ -631,22 +663,41 @@ class Home:
         t = text.strip()
         n = _norm(t)
         for s in self.spots:
-            if t in (s["key"], s["device_id"], s["main"]) or t in s["entities"] or s["key"] == f"entity:{t}":
+            if t in s["ids"]:
                 return self._spot_target(s)
-        exact = [s for s in self.spots if _norm(s["name"]) == n]
-        if exact:
+        exact = [s for s in self.spots if n in s["names"]]
+        if len({s["key"] for s in exact}) == 1:  # the same thing on several plans: the drawn one comes first
             return self._spot_target(exact[0])
         rooms = self.find_rooms(t)
         if rooms and any(_norm(r["name"]) == n for r in rooms):
             return self._room_target(rooms[0])
-        part = [s for s in self.spots if n in _norm(s["name"])]
-        if len(part) == 1:
+        part = exact or [s for s in self.spots if self._matches(s, n)]
+        part = [s for s in part if self.visible(s)] or part
+        keys: dict[str, dict[str, Any]] = {}
+        for s in part:
+            keys.setdefault(s["key"], s)
+        if len(keys) == 1:
             return self._spot_target(part[0])
         if rooms:
             return self._room_target(rooms[0])
-        if part:
-            return {"kind": "many", "names": sorted({s["name"] for s in part})[:10]}
+        if keys:
+            return {"kind": "many", "spots": list(keys.values())}
         return None
+
+    def _matches(self, s: dict[str, Any], n: str) -> bool:
+        """Part of a name, or every word said found in its names or its room ("thermometer living room")."""
+        if any(n in x for x in s["names"]):
+            return True
+        words = n.split()
+        if not words:
+            return False
+        hay = " ".join(s["names"]) + " " + _norm(self.room_name(s["room"]) or "")
+        hay += " " + hay.replace(" ", "")
+        return all(w in hay for w in words)
+
+    def _label(self, s: dict[str, Any]) -> str:
+        room = self.room_name(s["room"])
+        return f"{s['name']} ({room}, {s['plan']['floor']})" if room else f"{s['name']} ({s['plan']['floor']})"
 
     @staticmethod
     def _spot_target(s: dict[str, Any]) -> dict[str, Any]:
@@ -665,18 +716,27 @@ class Home:
                 }
             return {"error": f"“{text}” is not on the floorplan."}
         if hit["kind"] == "many":
-            return {"error": f"“{text}” matches several things.", "candidates": hit["names"]}
+            return {
+                "error": f"“{text}” matches several things. Ask which one, or call again with the full name.",
+                "candidates": [self._label(s) for s in hit["spots"][:10]],
+            }
         if hit["kind"] == "spot" and not self.visible(hit["spot"]):
             return {"error": f"“{text}” is not shared with this assistant."}
         return None
 
     def locate(self, text: str, device_id: str | None = None) -> dict[str, Any]:
         hit = self.resolve(text, device_id)
+        if hit and hit["kind"] == "many":  # 0.13.9.10: several match: say where each is, no second call needed
+            shown = [s for s in hit["spots"] if self.visible(s)][:5]
+            if shown:
+                return {"note": f"Several things match “{text}”; here is where each is.", "matches": [self._where(s) for s in shown]}
         if (miss := self._miss(text, hit)) is not None:
             return miss
         if hit["kind"] == "room":
             return self.room_facts(self.rooms[hit["room"]][0], with_devices=True)
-        s = hit["spot"]
+        return self._where(hit["spot"])
+
+    def _where(self, s: dict[str, Any]) -> dict[str, Any]:
         P = s["plan"]
         out: dict[str, Any] = {"name": s["name"], "floor": P["floor"], "room": self.room_name(s["room"]), "where": self.spot_words(s)}
         if s["approx"]:
@@ -835,3 +895,59 @@ def summary(hass: HomeAssistant, data: FloorplanData) -> str:
         if names:
             parts.append(f"{plan['name']}: {', '.join(names)}")
     return "; ".join(parts)
+
+
+def markdown(home: Home, plan_id: str, version: str, when: str) -> str | None:
+    """0.13.9.10: one plan as plain text for an AI chat or another agent's prompt: the same facts as the tools."""
+    P = next((x for x in home.plans if x["id"] == plan_id), None)
+    if P is None:
+        return None
+    rooms = home._rooms_of(P)
+    head = f"# {P['name']}" + (f" ({P['floor']})" if P["floor"] and P["floor"] != P["name"] else "")
+    out = [
+        head,
+        "",
+        f"The floorplan of a home, from Device Floorplan {version} ({when}). "
+        + ("Distances are in metres. " if P["measured"] else "The plan is not measured, so there are no metres. ")
+        + ("Directions are compass directions on this floor." if P["north"] is not None else "No north is set, so there are no compass directions."),
+        "\"On your left / on your right\" at an opening means: standing in the room, facing the other one.",
+        "",
+    ]
+    if rooms:
+        out += ["## How the rooms connect", "", home._floor_summary(P), "", "## Rooms", ""]
+    for r in rooms:
+        f = home.room_facts(r, with_devices=True)
+        out.append(f"### {f['room']}")
+        bits = []
+        if "size_m2" in f:
+            bits.append(f"{f['size_m2']} m²")
+        if f.get("position"):
+            bits.append(f["position"])
+        if f.get("has_outside_wall"):
+            bits.append("has an outside wall")
+        if f.get("note"):
+            bits.append(f["note"])
+        if bits:
+            out.append("- " + ", ".join(bits))
+        for c in f.get("connects_to", []):
+            line = f"- Connects to {c['room']}" + (f" ({c['direction']})" if c.get("direction") else "") + f": {c['connection']}"
+            if "opening_m" in c:
+                line += f", {c['opening_m']} m wide"
+            at = c.get("at_the_opening") or {}
+            if at:
+                line += f". Facing it from {f['room']}: on your left {at.get('on_your_left')}, on your right {at.get('on_your_right')}"
+            out.append(line)
+        if f.get("shares_a_wall_with"):
+            out.append("- Shares only a wall (no way through) with: " + ", ".join(
+                w["room"] + (f" ({w['direction']})" if w.get("direction") else "") for w in f["shares_a_wall_with"]
+            ))
+        if f.get("devices"):
+            out.append("- Devices:")
+            out += [f"  - {d['name']}: {d['where']}" + (" (approximate)" if d.get("approximate") else "") for d in f["devices"]]
+        out.append("")
+    loose = [s for s in home.spots if s["plan"] is P and not (s["room"] and any(s["room"] == r["area_id"] for r in rooms))]
+    if loose:
+        out += ["## Other devices on this plan", ""]
+        out += [f"- {s['name']}: {home.spot_words(s)}" for s in loose]
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"

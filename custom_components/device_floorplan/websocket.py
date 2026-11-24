@@ -68,6 +68,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_card_state_get,
         ws_card_state_set,
         ws_ai_share,
+        ws_ai_text,
     ):
         websocket_api.async_register_command(hass, handler)
 
@@ -438,3 +439,22 @@ def ws_ai_share(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     data.ai_share = bool(msg["on"])
     data.touch()
     connection.send_result(msg["id"], {"ai_share": data.ai_share})
+
+
+# 0.13.9.10: Export → "AI description": one plan as plain text, the same facts the AI tools give.
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "device_floorplan/ai_text", vol.Required("plan_id"): cv.string})
+@callback
+def ws_ai_text(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    from homeassistant.util import dt as dt_util
+
+    from .spatial import Home, markdown
+
+    text = markdown(Home(hass, data), msg["plan_id"], VERSION, dt_util.now().strftime("%Y-%m-%d"))
+    if text is None:
+        connection.send_error(msg["id"], "not_found", f"Unknown plan {msg['plan_id']}")
+        return
+    connection.send_result(msg["id"], {"text": text})
+

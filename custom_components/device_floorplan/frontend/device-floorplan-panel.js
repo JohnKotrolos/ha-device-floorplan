@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.9";
+const VERSION = "0.13.9.10";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -4722,6 +4722,8 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         <button class="opt" data-act="doexport" data-fmt="csv" style="text-align:left;background:transparent"><span><b>CSV spreadsheet</b><span>One row per device: name, area, connection, position (% of the image, and metres if measured), status. For Excel, inventory or network planning.</span></span></button>
         <button class="opt" data-act="doexport" data-fmt="json" style="text-align:left;background:transparent"><span><b>Plan backup (JSON)</b><span>The whole plan: image, measurements, rooms and positions. Restore it with “Import a plan” when creating a new plan, also on another Home Assistant.</span></span></button>
         <button class="opt" data-act="doexport" data-fmt="png" style="text-align:left;background:transparent"><span><b>Picture (PNG)</b><span>The plan with the devices drawn on it and a legend. For printing or handing over to an installer.</span></span></button>
+        <button class="opt" data-act="doexport" data-fmt="md" style="text-align:left;background:transparent"><span><b>AI description (Markdown)</b><span>This floor in plain words: rooms, how they connect (open space, passage, door, wall), left and right at each opening, directions, and where each device is. Paste it into ChatGPT, Claude or another AI agent's instructions.</span></span></button>
+        <p style="margin:2px 0 0;opacity:.75;font-size:13px">For Home Assistant's own voice assistants, turn on ⋮ → AI assistants instead: they ask the plan live.</p>
         <div class="box">⚠ These files show your home's layout and where your devices, sensors and cameras are. Share them carefully.</div>
         <div class="err" id="formerr">${esc(dlg.err || "")}</div>
         <div class="acts"><button class="btn" data-act="closedlg">Close</button></div>`, 560);
@@ -8301,10 +8303,14 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         download(`device-floorplan-${slug}.json`, new Blob([JSON.stringify(out, null, 1)], { type: "application/json" }));
       } else if (fmt === "png") {
         download(`device-floorplan-${slug}.png`, await this._renderPng());
+      } else if (fmt === "md") {
+        await this._flushSave();
+        const r = await this._ws("ai_text", { plan_id: plan.id });
+        download(`device-floorplan-${slug}-ai.md`, new Blob([r.text], { type: "text/markdown" }));
       }
       this.s.dialog = null;
       this._render();
-      this._toast(`Exported ${fmt.toUpperCase()}`, false);
+      this._toast(`Exported ${fmt === "md" ? "AI description" : fmt.toUpperCase()}`, false);
     } catch (err) {
       this.s.dialog.err = `Export failed: ${errText(err)}`;
       this._render();
