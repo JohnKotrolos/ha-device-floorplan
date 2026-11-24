@@ -85,6 +85,8 @@ class FloorplanData:
         self.setup_done = False
         # 0.11: card state shared by every screen (appliance "done" / unloaded), never in the browser.
         self.card_state: dict[str, Any] = {}
+        # 0.13.9.5: "Share the floorplan with AI assistants" (Floorplan Editor), off by default.
+        self.ai_share = False
         self._closed = False
         self._image_locks: dict[str, asyncio.Lock] = {}
         self.images_path = Path(hass.config.path(IMAGES_DIR))
@@ -100,6 +102,7 @@ class FloorplanData:
         self.device_opts = data.get("device_opts", {})
         self.setup_done = bool(data.get("setup_done", False))
         self.card_state = data.get("card_state", {})
+        self.ai_share = bool(data.get("ai_share", False))
         await self.hass.async_add_executor_job(self.move_pics)
 
     @staticmethod
@@ -138,6 +141,7 @@ class FloorplanData:
             "device_opts": self.device_opts,
             "setup_done": self.setup_done,
             "card_state": self.card_state,
+            "ai_share": self.ai_share,
         }
 
     @callback
@@ -308,6 +312,7 @@ class FloorplanData:
             "phantoms": plan.get("phantoms", {}),
             "anchors_centered": bool(plan.get("anchors_centered")),
             "shapes": plan.get("shapes", {}),
+            "north": plan.get("north"),  # 0.13.9.5: where north points on the image, ° clockwise from up
             "robots": plan.get("robots", {}),
             "cleaned": plan.get("cleaned", {}),
             "clean_log": plan.get("clean_log", {}),
@@ -341,6 +346,7 @@ class FloorplanData:
             "main_entity": self.main_entity,
             "device_opts": self.device_opts,
             "setup_done": self.setup_done,
+            "ai_share": self.ai_share,
         }
 
     @staticmethod
@@ -463,6 +469,8 @@ class FloorplanData:
             plan["level"] = changes["level"]
         if changes.get("image_type") in IMAGE_KINDS:
             plan["image_type"] = changes["image_type"]
+        if "north" in changes:  # 0.13.9.5: compass words for AI assistants and actions
+            plan["north"] = None if changes["north"] is None else round(float(changes["north"]) % 360.0, 1)
         if "positions" in changes:
             plan["positions"] = {
                 key: _clean_pos(pos) for key, pos in changes["positions"].items()
@@ -873,6 +881,8 @@ def turn_plan(plan: dict[str, Any], quarters: int) -> None:
     and height swap, directions gain 90°. The floor's alignment goes back to centred.
     """
     for _ in range(quarters % 4):
+        if plan.get("north") is not None:  # 0.13.9.5: north turns with the picture
+            plan["north"] = round((float(plan["north"]) + 90.0) % 360.0, 1)
         w, h = plan.get("width") or 0, plan.get("height") or 0
         k = w / h if w and h else 1.0  # a length in % of the old width, in % of the new width
 

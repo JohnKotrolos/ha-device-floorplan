@@ -22,3 +22,53 @@ show_overlay:
       example: first_floor
       selector:
         text:
+get_layout:
+  fields:
+    floor:
+      required: false
+      example: Ground floor
+      selector:
+        text:
+    room:
+      required: false
+      example: Kitchen
+      selector:
+        text:
+locate:
+  fields:
+    target:
+      required: true
+      example: Kitchen Light
+      selector:
+        text:
+nearest:
+  fields:
+    target:
+      required: true
+      example: Living Room
+      selector:
+        text:
+    category:
+      required: false
+      example: lights
+      selector:
+        text:
+    limit:
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+between:
+  fields:
+    from:
+      required: true
+      example: Bedroom
+      selector:
+        text:
+    to:
+      required: true
+      example: Kitchen
+      selector:
+        text:

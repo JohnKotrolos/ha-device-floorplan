@@ -43,6 +43,7 @@ from .devices import build_plan_payload
 from .http import FloorplanImageView, FloorplanUploadView
 from .new_devices import NewDeviceWatcher
 from .robots import RobotWatcher
+from .spatial import Home
 from .store import FloorplanData
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,6 +73,40 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=vol.Schema({vol.Required("plan"): cv.string}),
         supports_response=SupportsResponse.ONLY,
     )
+
+    # 0.13.9.5: the floorplan as facts (rooms, connections, where things are), for automations; the AI tools
+    # in llm.py answer from the same code.
+    def _home() -> Home:
+        data: FloorplanData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise ServiceValidationError(f"{NAME} is not set up")
+        return Home(hass, data)
+
+    spatial_services = {
+        "get_layout": (
+            lambda call: _home().layout(call.data.get("floor"), call.data.get("room")),
+            {vol.Optional("floor"): cv.string, vol.Optional("room"): cv.string},
+        ),
+        "locate": (lambda call: _home().locate(call.data["target"]), {vol.Required("target"): cv.string}),
+        "nearest": (
+            lambda call: _home().nearest(call.data["target"], None, call.data.get("category"), call.data.get("limit", 5)),
+            {
+                vol.Required("target"): cv.string,
+                vol.Optional("category"): cv.string,
+                vol.Optional("limit", default=5): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),
+            },
+        ),
+        "between": (
+            lambda call: _home().between(call.data["from"], call.data["to"]),
+            {vol.Required("from"): cv.string, vol.Required("to"): cv.string},
+        ),
+    }
+    for service, (answer, schema) in spatial_services.items():
+
+        async def _spatial(call: ServiceCall, answer=answer) -> ServiceResponse:
+            return answer(call)
+
+        hass.services.async_register(DOMAIN, service, _spatial, schema=vol.Schema(schema), supports_response=SupportsResponse.ONLY)
 
     async def _show_overlay(call: ServiceCall) -> None:
         # Cards with this card_id (on every screen) switch to the overlay (#47).

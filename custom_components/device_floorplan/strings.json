@@ -62,6 +62,62 @@
           "description": "Optional: the plan id (or HA floor id) of the floor to show, for cards with several floors."
         }
       }
+    },
+    "get_layout": {
+      "name": "Get layout",
+      "description": "The floorplan as facts: floors, rooms, which rooms connect (open space, passage, door) or only share a wall, outside walls, compass position when the plan has a north. With a room: also what is in it.",
+      "fields": {
+        "floor": {
+          "name": "Floor",
+          "description": "Optional: a plan or HA floor name."
+        },
+        "room": {
+          "name": "Room",
+          "description": "Optional: a room (area) name; also lists its devices."
+        }
+      }
+    },
+    "locate": {
+      "name": "Locate",
+      "description": "Where a device, entity or room is: floor, room and its spot in the room.",
+      "fields": {
+        "target": {
+          "name": "Target",
+          "description": "A device name, entity id, device id or room."
+        }
+      }
+    },
+    "nearest": {
+      "name": "Nearest",
+      "description": "Devices nearest to a device or room on the same floor, with metres when the floor is measured.",
+      "fields": {
+        "target": {
+          "name": "Target",
+          "description": "A device name, entity id or room."
+        },
+        "category": {
+          "name": "Category",
+          "description": "Optional, e.g. lights, climate, sensors."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many (1–20)."
+        }
+      }
+    },
+    "between": {
+      "name": "Between",
+      "description": "Between two devices or rooms: the way through the rooms, the distance and the walls or openings a straight line crosses.",
+      "fields": {
+        "from": {
+          "name": "From",
+          "description": "A device name, entity id or room."
+        },
+        "to": {
+          "name": "To",
+          "description": "A device name, entity id or room."
+        }
+      }
     }
   }
 }

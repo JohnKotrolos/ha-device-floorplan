@@ -66,6 +66,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_overlay_subscribe,
         ws_card_state_get,
         ws_card_state_set,
+        ws_ai_share,
     ):
         websocket_api.async_register_command(hass, handler)
 
@@ -167,6 +168,7 @@ def ws_plan_create(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Inclusive("width", "size"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100000)),
         vol.Inclusive("height", "size"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100000)),
         vol.Optional("reset_size"): cv.boolean,
+        vol.Optional("north"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=360))),
     }
 )
 @callback
@@ -423,3 +425,15 @@ def ws_card_state_set(hass: HomeAssistant, connection, msg: dict[str, Any]) -> N
         return
     data.set_card_state(msg["key"], msg["value"])
     connection.send_result(msg["id"], {"ok": True})
+
+
+# 0.13.9.5: "Share the floorplan with AI assistants" (off by default).
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "device_floorplan/ai_share", vol.Required("on"): cv.boolean})
+@callback
+def ws_ai_share(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    data.ai_share = bool(msg["on"])
+    data.touch()
+    connection.send_result(msg["id"], {"ai_share": data.ai_share})

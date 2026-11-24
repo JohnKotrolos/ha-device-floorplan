@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.4";
+const VERSION = "0.13.9.5";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -1154,6 +1154,7 @@ class DeviceFloorplanPanel extends HTMLElement {
     this.mainEntity = st.main_entity || {};
     this.deviceOpts = st.device_opts || {};
     this.setupDone = !!st.setup_done;
+    this.aiShare = !!st.ai_share; // 0.13.9.5
   }
 
   _planOrder(p) {
@@ -1953,6 +1954,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         <button data-act="showintro" role="menuitem">${SVG.info}Show intro</button>
         ${this.plans.length ? `<button data-act="guide" role="menuitem">${SVG.eye}${this.s.guide ? "Hide" : "Show"} step-by-step guide</button>` : ""}
         ${this.plans.length && this.setupDone ? `<button data-act="resetsetup" role="menuitem">${SVG.skip}Choose devices again…</button>` : ""}
+        ${this.plans.length ? `<button data-act="aidlg" role="menuitem">${SVG.info}AI assistants: ${this.aiShare ? "on" : "off"}…</button>` : ""}
         <hr><button disabled role="menuitem" style="font-size:12px">Device Floorplan v${VERSION}</button></div>`;
     }
     const p = this.plans.find((x) => x.id === m.id);
@@ -4653,6 +4655,15 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     const wrap = (inner, width = 560) => `<div class="modal" data-act="modalbg"><div class="dialog" role="dialog" aria-modal="true" style="max-width:${width}px">${inner}</div></div>`;
     if (dlg.type === "create" || dlg.type === "settings") return `<div class="modal" data-act="modalbg">${this._planFormHtml(dlg.type, false)}</div>`;
     const p = this._plan();
+    if (dlg.type === "ai") {
+      // 0.13.9.5: share the floorplan (rooms, connections, where devices are) with AI assistants. Off by default.
+      return wrap(`<h2>Share the floorplan with AI assistants</h2>
+        <p>When on, an AI conversation agent in Home Assistant (Assist with OpenAI, Anthropic, Google, Ollama…) and AI apps connected through Home Assistant's MCP Server can ask the floorplan: which rooms connect (open space, passage, door) or only share a wall, where a device stands in its room, what is near, and the way between rooms. They only see devices you expose to Assist.</p>
+        <p><b>With a cloud AI, your home's layout is sent to that service.</b> With a local AI (Ollama) it stays at home.</p>
+        <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="aishare" ${this.aiShare ? "checked" : ""}> Share the floorplan with AI assistants</label>
+        <p style="font-size:13px;color:var(--df-sec)">Connections come from your room shapes: glue the Rooms, overlap them only where you can walk through, and leave a gap where there is a wall. Set where north is in each floor's settings to also get compass words. Automations can always use the actions device_floorplan.get_layout, locate, nearest and between.</p>
+        <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="aisave">Save</button></div>`);
+    }
     if (dlg.type === "delete") {
       const n = p ? Object.keys(p.positions || {}).length : 0;
       const what = p && p.kind === "floor" ? "floor" : "plan";
@@ -4795,6 +4806,10 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         ${opt("top", "Top-down plan", "A plan seen from above. Measuring and distances are available.")}
         ${opt("angled", "Angled view", "A 3D-style or perspective picture. Place devices where they appear; measuring is turned off.")}</div>`
       : "";
+    // 0.13.9.5: where north is on the picture, for compass words (AI assistants, actions). Optional.
+    const nv = p ? (f.north !== undefined ? f.north : p.north) : null;
+    const dirs = [["0", "↑ Up"], ["45", "↗ Up right"], ["90", "→ Right"], ["135", "↘ Down right"], ["180", "↓ Down"], ["225", "↙ Down left"], ["270", "← Left"], ["315", "↖ Up left"]];
+    const northBlock = p ? `<label class="f">North on this plan (optional: adds compass words such as “north side” to AI answers)<select id="fnorth"><option value="" ${nv == null ? "selected" : ""}>Not set</option>${dirs.map(([v, t]) => `<option value="${v}" ${nv != null && Math.round(nv) % 360 === Number(v) ? "selected" : ""}>${t}</option>`).join("")}</select></label>` : "";
     const extra = p ? `<label style="font-size:13px;display:flex;gap:8px;align-items:center"><input type="checkbox" data-act="guidebox" ${this.s.guide ? "checked" : ""}> Show the step-by-step guide</label>` : "";
     const importLink = !p ? `<div style="font-size:13px;color:var(--df-sec)">Have a backup? <button class="link" data-act="importplan">Import a plan from a file (.json)</button><input type="file" id="importfile" accept="application/json,.json" hidden></div>` : "";
     return `<div class="dialog stickyacts" role="dialog" aria-modal="${inline ? "false" : "true"}" data-form="${mode}" style="${inline ? "max-width:640px" : "max-width:620px"}">${f.fromIntro ? `<button class="link backlink" data-act="backintro">← Back to the intro</button>` : ""}<h2>${title}</h2>${intro}
@@ -4803,7 +4818,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       ${where === "level" ? `<label class="f">Level (0 = ground floor, 1 = first floor, −1 = basement)<input type="number" id="flevel" value="${esc(level)}" step="1"></label>` : ""}
       <div style="display:flex;flex-direction:column;gap:8px"><span class="secttl">Floorplan image</span>${imageBlock}
       <div class="imgtip ${f.opaque ? "warn" : ""}">${f.opaque ? "<b>This image has a solid background.</b> " : "<b>Tip:</b> "}A plan with a <b>transparent background</b> (PNG or WebP, nothing around the house) looks much better on the dashboard: the card's background shows around the house instead of a box.</div></div>
-      ${typeBlock}${extra}${importLink}<div class="err" id="formerr">${esc(f.err || "")}</div>
+      ${typeBlock}${northBlock}${extra}${importLink}<div class="err" id="formerr">${esc(f.err || "")}</div>
       <div class="acts">${inline ? "" : `<button class="btn" data-act="closedlg">Cancel</button>`}<button class="btn primary" data-act="saveform" ${f.busy ? "disabled" : ""}>${f.busy ? "Saving…" : p ? "Save" : "Create plan"}</button></div></div>`;
   },
 
@@ -5045,6 +5060,10 @@ Object.assign(DeviceFloorplanPanel.prototype, {
   _onChange(e) {
     const t = e.target;
     const act = t.dataset.act;
+    if (t.id === "fnorth") {
+      this.s.form = { ...(this.s.form || {}), north: t.value === "" ? null : Number(t.value) }; // kept across redraws
+      return;
+    }
     if (t.id === "fwhere") {
       this.s.form = { ...(this.s.form || {}), where: t.value, name: this.shadowRoot.getElementById("fname").value };
       const fl = t.value.startsWith("floor:") && this.floors.find((x) => `floor:${x.floor_id}` === t.value);
@@ -5721,6 +5740,23 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       case "saveform":
         await this._saveForm(el.closest("[data-form]").dataset.form);
         break;
+      case "aidlg":
+        s.dialog = { type: "ai" };
+        this._render();
+        break;
+      case "aisave": {
+        const on = !!(this.shadowRoot.getElementById("aishare") || {}).checked;
+        try {
+          const res = await this._ws("ai_share", { on });
+          this.aiShare = !!res.ai_share;
+          s.dialog = null;
+          this._toast(this.aiShare ? "AI assistants can now ask the floorplan" : "The floorplan is no longer shared with AI assistants", false);
+        } catch (err) {
+          this._saveError(err);
+        }
+        this._render();
+        break;
+      }
       case "askdelete":
         s.dialog = { type: "delete" };
         this._render();
@@ -7721,6 +7757,8 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     f.name = name;
     if (!name) return fail("Please give the plan a name.");
     const body = { name, image_type: img };
+    const northEl = root.getElementById("fnorth");
+    if (northEl && mode === "settings") body.north = northEl.value === "" ? null : Number(northEl.value);
     if (where === "view") Object.assign(body, { kind: "view", floor_id: null, level: null });
     else if (where === "level") {
       const lv = parseInt(levelEl ? levelEl.value : "0", 10);
