@@ -189,7 +189,16 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (!ar) return "";
     const sh = Array.isArray(ar.shape) && ar.shape.length >= 3 ? ar.shape : null;
     const hole = sh ? `M${sh.map((p) => `${p[0]} ${p[1]}`).join("L")}Z` : `M${ar.x - 6} ${ar.y}a6 6 0 1 0 12 0a6 6 0 1 0 -12 0Z`;
-    return `<svg class="focus" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path fill-rule="evenodd" d="M-200 -200H300V300H-200Z${hole}"/></svg>`;
+    // 0.13.9.16: light just outside the room, stronger towards the edges (a radial fade from the room's centre).
+    const xs = sh ? sh.map((p) => p[0]) : [ar.x - 6, ar.x + 6];
+    const ys = sh ? sh.map((p) => p[1]) : [ar.y - 6, ar.y + 6];
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const rr = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2;
+    const R = Math.max(rr * 2.6, 30);
+    const k = Math.min(0.9, rr / R);
+    const stop = (o, op) => `<stop offset="${o}" style="stop-color:var(--dfc-focus-dim, var(--primary-background-color, #f2f2f2));stop-opacity:${op}"/>`;
+    return `<svg class="focus" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><radialGradient id="dfcfg" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${R}">${stop(0, 0.3)}${stop(k, 0.35)}${stop(Math.min(1, k + 0.25), 0.75)}${stop(1, 0.97)}</radialGradient></defs><path fill-rule="evenodd" fill="url(#dfcfg)" style="fill-opacity:1" d="M-200 -200H300V300H-200Z${hole}"/></svg>`;
   },
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */

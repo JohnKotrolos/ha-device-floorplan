@@ -46,6 +46,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const initials = name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
       const r = st.state === "home" || p.room || p.room2 ? this._personRoom(p, a) : null;
       const who = { eid: p.entity, name, pic, initials };
+      if (r && this._config.focus_area && r.id !== this._config.focus_area) continue; // 0.13.9.16: a room cut-out: its own people
       if (r && st.state !== "not_home") {
         const rg = pd && p.distance ? this._pdRings(p, proxies) : [];
         rings.push(...rg);
@@ -72,7 +73,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const { placed, home, rings } = this._peopleData(a);
     const av = (x) => (x.pic ? `<img src="${cesc(x.pic)}" alt="">` : cesc(x.initials));
     const plan = this._pdRingsSvg(rings, a) + placed.map((x) => `<button class="m person ${edgeCls(x.x, x.y, this._em)} ${x.low ? "low" : ""} ${x.pd ? "pd" : ""}" style="left:${x.x}%;top:${x.y}%" data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${x.roomName}${x.low ? ` (${dfT("people.not_sure")})` : ""}`)}"><span class="ic">${av(x)}</span><span class="tip">${cesc(x.name)} · ${cesc(x.roomName)}</span></button>`).join("");
-    const row = this._overlay === "live" && home.length ? `<div class="prow"><span>${dfT("people.home")}</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${dfT("people.home_unknown")}`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
+    const row = this._overlay === "live" && home.length && this._config.people_row !== false ? `<div class="prow"><span>${dfT("people.home")}</span>${home.map((x) => `<button data-person="${cesc(x.eid)}" aria-label="${cesc(`${x.name}: ${dfT("people.home_unknown")}`)}"><span class="av">${av(x)}</span>${cesc(x.name)}</button>`).join("")}</div>` : "";
     return { plan, row };
   },
 

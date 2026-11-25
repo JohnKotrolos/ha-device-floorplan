@@ -279,13 +279,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
     for (const item of this._items(a)) {
       const id = this._roomOf(item, a) || item.area_id;
       if (!id) continue;
-      const r = (acc[id] = acc[id] || { t: [], h: [], seen: new Set() });
+      const r = (acc[id] = acc[id] || { t: [], h: [], air: [], seen: new Set() });
       for (const e of this._allowed(item)) {
         const s = S[e];
         if (r.seen.has(e)) continue;
         r.seen.add(e);
         if (!live(s)) continue;
         const k = kindOf(e, s);
+        const aq = typeof dfmAir === "function" ? dfmAir(e, s) : null; // 0.13.9.16: air quality (mobile)
+        if (aq) r.air.push(aq.r);
         if (k === "temperature" && num(s.state)) r.t.push(Number(s.state));
         if (k === "humidity" && num(s.state)) r.h.push(Number(s.state));
         if (k === "climate") {
@@ -300,6 +302,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const p = [];
       if (r.t.length) p.push(`${Math.round(avg(r.t) * 10) / 10}°`);
       if (r.h.length) p.push(`${Math.round(avg(r.h))}%`);
+      if (r.air.length) p.push(dfT(["mob.air_good", "mob.air_mod", "mob.air_poor"][Math.max(...r.air)]));
       if (p.length) out[id] = p.join(" · ");
     }
     return out;

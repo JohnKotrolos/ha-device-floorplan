@@ -9,7 +9,28 @@ const DFM_GICON = { lights: "mdi:lightbulb-group-outline", comfort: "mdi:thermom
 const DFM_GOV = { lights: "lights", comfort: "comfort", security: "security", media: "live", other: "live" };
 const DFM_TOGGLE = new Set(["light", "switch", "fan", "input_boolean", "humidifier", "media_player", "cover", "siren"]);
 // Settings of a Floorplan card that the mobile card takes over (how things look and who the people are), never its layout.
-const DFM_COPY = ["plans", "plan", "card_id", "people", "people_in", "rooms", "look", "live", "lights", "comfort", "security", "network", "health", "energy", "cleaning", "night", "custom_overlays", "overlays", "overlay_names", "devices", "markers"];
+const DFM_COPY = ["plans", "plan", "card_id", "people", "people_in", "rooms", "look", "live", "lights", "comfort", "security", "network", "health", "energy", "cleaning", "night", "custom_overlays", "overlays", "overlay_names", "devices", "markers", "overlay_actions"];
+// The overlays' colours on the mobile card (tiles, badges).
+const DFM_OVC = { security: "#e5534b", lights: "#e8b923", comfort: "#3b9ad9", energy: "#f0a030", network: "#7e8ea3", health: "#d08a2c", cleaning: "#26a69a", people: "#8e7cc3", live: "#5c9ded" };
+// #51: air quality: one rating per reading (good / moderate / poor), the worst wins.
+const DFM_AIR = [
+  [/pm25/, "PM2.5", [15, 35]], [/pm10/, "PM10", [45, 100]], [/carbon_dioxide/, "CO₂", [800, 1200]],
+  [/volatile_organic_compounds|voc/, "VOC", [150, 250]], [/^aqi$/, "AQI", [50, 100]], [/nitrogen_dioxide/, "NO₂", [25, 50]],
+];
+/** An air reading of an entity: { k, label, v, unit, r: 0 good | 1 moderate | 2 poor } or null. */
+function dfmAir(eid, st) {
+  if (!st || !num(st.state) || !eid.startsWith("sensor.")) return null;
+  const dc = String(st.attributes.device_class || "");
+  const key = dc || (/voc/i.test(eid) || /voc/i.test(st.attributes.friendly_name || "") ? "voc" : "");
+  const hit = key && DFM_AIR.find(([re]) => re.test(key));
+  if (!hit) return null;
+  let v = Number(st.state);
+  // ppb VOC (volatile_organic_compounds_parts) is not the 1–500 index: no rating from it.
+  const idx = hit[1] === "VOC" && dc === "volatile_organic_compounds_parts" ? null : hit[2];
+  const r = idx ? (v <= idx[0] ? 0 : v <= idx[1] ? 1 : 2) : 0;
+  v = Math.round(v * 10) / 10;
+  return { k: hit[1], label: hit[1], v, unit: st.attributes.unit_of_measurement || "", r };
+}
 const dfmGroupLabel = (g) => dfT(`mob.g_${g}`);
 
 // Device categories (Floorplan Editor) → the room page's groups; "sensors" go by what they measure.
@@ -107,12 +128,14 @@ function dfmInfo(hass, item) {
       if (num(s.attributes.current_humidity)) hums.push(Number(s.attributes.current_humidity));
     }
   }
+  const air = ents.map((e) => dfmAir(e, S[e])).filter(Boolean);
   const bat = kinds.find(([e, k]) => k === "battery" && num(S[e].state));
   const sig = kinds.find(([, k]) => k === "signal");
   const pw = ents.map((e) => powerW(S[e])).filter((v) => v != null);
   const attention = open.length + alarm.length; // #31: offline is a small amber badge, not red
   return {
-    item, g, cat, lead, st, lk, on, open, doorOpen, alarm, warn, presence, offline, temps, hums, ents, attention,
+    item, g, cat, lead, st, lk, on, open, doorOpen, alarm, warn, presence, offline, temps, hums, ents, attention, air,
+    airR: air.length ? Math.max(...air.map((x) => x.r)) : null,
     battery: bat ? Number(S[bat[0]].state) : null, batEnt: bat ? bat[0] : null, sigEnt: sig ? sig[0] : null,
     power: pw.length ? pw.reduce((x, y) => x + y, 0) : null,
     conns: item.conns || [], name: item.name || (st && st.attributes.friendly_name) || item.id,
@@ -232,6 +255,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     window.removeEventListener("resize", this._onRot);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
     this._hideHdr(true);
+    if (this._lay) this._lay.remove();
     clearTimeout(this._t);
     clearTimeout(this._hdrT);
   }
@@ -338,6 +362,8 @@ class DeviceFloorplanMobile extends HTMLElement {
           on: list.filter((x) => x.on).length, attention: list.reduce((n, x) => n + x.attention, 0), presence: list.some((x) => x.presence),
           lightsOn: list.filter((x) => x.g === "lights" && x.on).length,
           temp: dfmAvg(list.flatMap((x) => x.temps)), hum: dfmAvg(list.flatMap((x) => x.hums)),
+          airR: list.some((x) => x.airR != null) ? Math.max(...list.filter((x) => x.airR != null).map((x) => x.airR)) : null,
+          power: list.reduce((t, x) => t + (x.power || 0), 0),
         };
         r.people = [];
         rooms.push(r);
@@ -483,6 +509,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._wasLand = land;
       this._hdrHidden = false;
     }
+    this._layerHtml = "";
     const html = land ? this._landHtml(m) : this._portHtml(m);
     if (html !== this._html) {
       this._html = html;
@@ -495,6 +522,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       el.stateObj = this._hass.states[el.dataset.ent];
     }
     for (const slot of root.querySelectorAll("[data-slot]")) this._mount(slot);
+    this._renderLayer(!land && this._useLayer() ? this._layerHtml : "");
     const top = this._hdrOn ? 0 : Math.max(0, Math.round(this.getBoundingClientRect().top + (window.scrollY || 0)));
     if (top !== this._top) {
       this._top = top;
@@ -579,7 +607,8 @@ class DeviceFloorplanMobile extends HTMLElement {
     const full = mode === "full";
     const cfg = {
       ...b, plans: undefined, card_id: undefined, type: "custom:device-floorplan-card", plan, buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full ? undefined : false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || mode === "land" || mode === "landroom" ? undefined : false, replay_button: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
       ...(["mini", "floor", "room"].includes(mode) ? { room_values: true } : {}),
@@ -796,13 +825,39 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._freeze = false;
       return this._go({ page: "room", floor: f, room: r });
     }
-    if (a === "ov") return this._go({ page: "plan", ov: v, floor: t.dataset.f || s.floor });
+    if (a === "gohome") return this._go({ page: "home", room: null, floor: v });
+    if (a === "ovs") {
+      this._sheet = { step: "ov", ov: v };
+      return this._kick(true);
+    }
+    if (a === "issues") {
+      this._sheet = { step: "issues" };
+      return this._kick(true);
+    }
+    if (a === "grid") {
+      const g = lsGet("dfm_grid") || {};
+      g[v] = !g[v];
+      lsSet("dfm_grid", g);
+      return this._kick(true);
+    }
+    if (a === "scene") return this._scene(v);
+    if (a === "oact") {
+      const x = ((this._base || {}).overlay_actions || [])[Number(v)];
+      const h = this._helper(this._m.floors.find((q) => q.id === s.floor) || this._m.floors[0]);
+      const ent = x && h ? h._ovActEnt(x) : null;
+      if (x && x.tap_action && h) h._barRun.call(Object.assign(Object.create(h), { dispatchEvent: (ev) => this.dispatchEvent(ev) }), x.tap_action, ent);
+      else if (ent) this._more(ent);
+      return;
+    }
+    if (a === "rmaster") {
+      const ents = v.split(",");
+      const on = t.dataset.on === "1";
+      this._hass.callService("homeassistant", on ? "turn_off" : "turn_on", { entity_id: ents });
+      return;
+    }
     if (a === "rp") {
-      this._go({ page: "plan", ov: s.ov || this._config.default_overlay });
-      setTimeout(() => {
-        const el = [...(this._plans || new Map()).values()].find((x) => x._dfmMode === "full" && x.isConnected);
-        if (el && el._rpOpen) el._rpOpen(true);
-      }, 300);
+      const el = [...(this._plans || new Map()).values()].find((x) => x.isConnected && (x._dfmMode === "land" || x._dfmMode === "landroom"));
+      if (el && el._rpOpen) el._rpOpen(true);
       return;
     }
     if (a === "ltab") {
@@ -834,6 +889,15 @@ class DeviceFloorplanMobile extends HTMLElement {
       return this._kick(true);
     }
     if (a === "search") return;
+  }
+
+  /** #49: the main card's light scenes (All on / All off for the lights shown here). */
+  _scene(id) {
+    const ents = this._members("lights", this._m.items).map((x) => x.lead).filter((e) => e && TOGGLE_DOMAINS.has(domainOf(e)) && domainOf(e) !== "cover");
+    if (id === "all_off") return ents.length && this._hass.callService("homeassistant", "turn_off", { entity_id: ents });
+    if (id === "all_on") return ents.length && this._hass.callService("homeassistant", "turn_on", { entity_id: ents });
+    const h = this._helper(this._m.floors[0]);
+    if (h) DeviceFloorplanCard.prototype._runScene.call(h, id);
   }
 
   /** #41: a quick action shows on the plan above: the device's marker lights up for a few seconds. */
@@ -910,10 +974,17 @@ class DeviceFloorplanMobile extends HTMLElement {
     const room = `${x.doorOpen ? ` · ${dfT("mob.door_open")}` : ""}${opts.room ? ` · ${cesc(opts.room)}` : ""}`;
     return `<div class="row ${x.on ? "on" : ""} ${x.attention ? "att" : ""}" data-a="more" data-v="${cesc(eid || "")}">
       <span class="tile g-${x.g}">${st ? `<ha-state-icon data-ent="${cesc(eid)}"></ha-state-icon>` : `<ha-icon icon="${DFM_GICON[x.g]}"></ha-icon>`}</span>
-      <span class="txt"><span class="nm"><span class="t">${cesc(x.name)}</span>${badges.join("")}</span><span class="sub">${cesc(this._stateTxt(x))}${room}</span>
+      <span class="txt"><span class="nm"><span class="t">${cesc(x.name)}</span>${badges.join("")}</span><span class="sub">${this._rowVals(x)}${room}</span>
       ${dim ? `<input type="range" class="bri" min="1" max="100" value="${Math.round((st.attributes.brightness || 255) / 2.55)}" data-a="bri" data-v="${cesc(eid)}" aria-label="${dfT("mob.brightness")}">` : ""}</span>
       ${extra}${tog ? `<button class="sw ${x.on || (st && st.state === "on") ? "on" : ""}" role="switch" aria-checked="${x.on}" data-a="tog" data-v="${cesc(eid)}" aria-label="${cesc(x.name)}"><i></i></button>` : ""}
     </div>`;
+  }
+
+  /** #51: an air / climate sensor shows all its readings in one line ("20.6° · 63% · PM2.5 6 · VOC 178" + its air dot). */
+  _rowVals(x) {
+    if (!x.air.length) return cesc(this._stateTxt(x));
+    const p = [x.temps.length ? `${x.temps[0]}°` : "", x.hums.length ? `${Math.round(x.hums[0])}%` : "", ...x.air.map((q) => `${q.label} ${q.v}`)].filter(Boolean).join(" · ");
+    return `${this._airDot(x.airR)}${cesc(p)}`;
   }
 
   _vals(r) {
@@ -1036,7 +1107,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const shape = ar && Array.isArray(ar.shape) && ar.shape.length >= 3 ? ar.shape : null;
     const ratio = f.a.image_width && f.a.image_height ? f.a.image_width / f.a.image_height : 1.6;
     const img = this._img(f);
-    return `<span class="thumb" style="aspect-ratio:${ratio}" data-a="ov" data-v="${cesc(this._config.default_overlay)}" data-f="${cesc(f.id)}">${img ? `<img src="${cesc(img)}" alt="">` : ""}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${shape ? `<polygon points="${shape.map((p) => p.join(",")).join(" ")}"/>` : ar ? `<ellipse cx="${ar.x}" cy="${ar.y}" rx="6" ry="6"/>` : ""}</svg></span>`;
+    return `<span class="thumb" style="aspect-ratio:${ratio}" data-a="gohome" data-v="${cesc(f.id)}">${img ? `<img src="${cesc(img)}" alt="">` : ""}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${shape ? `<polygon points="${shape.map((p) => p.join(",")).join(" ")}"/>` : ar ? `<ellipse cx="${ar.x}" cy="${ar.y}" rx="6" ry="6"/>` : ""}</svg></span>`;
   }
 
   /** The plan picture (signed once a day). */
@@ -1062,17 +1133,90 @@ class DeviceFloorplanMobile extends HTMLElement {
     let body = "";
     if (s.page === "room") body = this._roomPage(m);
     else if (s.page === "rooms") body = this._roomsPage(m);
-    else if (s.page === "overlays") body = this._ovPage(m);
     else if (s.page === "devices") body = this._devPage(m);
     else if (s.page === "people") body = this._pplPage(m);
-    else if (s.page === "plan") body = this._planPage(m);
     else body = this._homePage(m);
     const homeOn = ["home", "house", "rooms", "room"].includes(s.page);
-    const listOn = ["overlays", "devices", "people", "plan"].includes(s.page);
-    // #20: ☰ (Home Assistant's menu) when its top bar is hidden · Home · the other pages behind one round button.
-    // #31 / #34: ☰ on its own + one pill (Home ^ | ≡), on a layer fixed to the bottom of the screen.
+    const listOn = ["devices", "people"].includes(s.page);
+    // #31 / #34: ☰ on its own + one pill (Home ^ | ≡).
     const bar = `<div class="barwrap"><nav class="bar">${this._hdrOn ? `<button class="tb" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : ""}<span class="pill2"><button class="ph ${homeOn ? "on" : ""}" data-a="home"><ha-icon icon="mdi:home-outline"></ha-icon>${dfT("mob.home")}<ha-icon class="up" icon="mdi:chevron-up"></ha-icon></button><i class="sep"></i><button class="pl ${listOn ? "on" : ""}" data-a="list" aria-label="${dfT("mob.more")}"><ha-icon icon="mdi:format-list-bulleted"></ha-icon></button></span></nav></div>`;
-    return `<div class="port"><div class="bgfix"></div><div class="pg" data-scroll="pg">${body}<div class="pad"></div></div>${bar}${this._sheet ? this._sheetHtml(m) : ""}</div>`;
+    // #54: the bar, the sheets and their backdrop live in a layer of their own on the page (fixed = the screen).
+    this._layerHtml = `${bar}${this._sheet ? this._sheetHtml(m) : ""}`;
+    const inline = !this._useLayer();
+    return `<div class="port"><div class="bgfix"></div><div class="pg" data-scroll="pg">${body}<div class="pad"></div></div>${inline ? this._layerHtml : ""}</div>`;
+  }
+
+  /** The page layer is used on a dashboard (not in the card editor's preview). */
+  _useLayer() {
+    return !!this._huiRoot() && !this._config.inline_bar;
+  }
+
+  _layerEl() {
+    if (!this._lay) {
+      const el = document.createElement("div");
+      el.setAttribute("data-dfm-layer", "");
+      const sr = el.attachShadow({ mode: "open" });
+      sr.innerHTML = `<style>${DFM_CSS}</style><div class="dfm lay"></div>`;
+      sr.addEventListener("click", (e) => this._click(e));
+      sr.addEventListener("change", (e) => this._change(e));
+      sr.addEventListener("input", (e) => this._input(e));
+      this._lay = el;
+    }
+    if (!this._lay.isConnected) document.body.appendChild(this._lay);
+    return this._lay;
+  }
+
+  _renderLayer(html) {
+    if (!html) {
+      if (this._lay) this._lay.remove();
+      return;
+    }
+    const el = this._layerEl();
+    el.toggleAttribute("dark", this.hasAttribute("dark"));
+    const host = el.shadowRoot.querySelector("div.lay");
+    if (html !== this._layHtml) {
+      this._layHtml = html;
+      const tpl = document.createElement("div");
+      tpl.innerHTML = html;
+      dfmMorph(host, tpl);
+    }
+    for (const x of el.shadowRoot.querySelectorAll("[data-ent]")) {
+      x.hass = this._hass;
+      x.stateObj = this._hass.states[x.dataset.ent];
+    }
+  }
+
+  /** #58: a section's title with its grid / row switch. */
+  _secHead(key, icon, title, extra = "") {
+    const grid = !!(lsGet("dfm_grid") || {})[key];
+    return `<h2><ha-icon icon="${icon}"></ha-icon>${title}${extra}<button class="gt" data-a="grid" data-v="${key}" aria-label="${dfT(grid ? "mob.as_row" : "mob.as_grid")}"><ha-icon icon="${grid ? "mdi:view-carousel-outline" : "mdi:view-grid-outline"}"></ha-icon></button></h2>`;
+  }
+
+  _secBody(key, html) {
+    const grid = !!(lsGet("dfm_grid") || {})[key];
+    return `<div class="${grid ? "gridw" : "hs"}" data-scroll="h${key}">${html}</div>`;
+  }
+
+  /** #51: "Air good / moderate / poor" with its dot. */
+  _airTxt(r) {
+    return r == null ? "" : dfT(["mob.air_good", "mob.air_mod", "mob.air_poor"][r]);
+  }
+
+  _airDot(r) {
+    return r == null ? "" : `<i class="adot a${r}"></i>`;
+  }
+
+  /** The real issues (open doors / windows, alarms, poor air), one entry each. */
+  _issues(m) {
+    const out = [];
+    for (const x of m.items) {
+      for (const e of [...x.alarm, ...x.open]) out.push({ x, e, txt: x.name, st: this._fmtE(e) });
+    }
+    for (const r of m.rooms) if (r.airR === 2) {
+      const worst = r.items.flatMap((x) => x.air).filter((q) => q.r === 2)[0];
+      out.push({ room: r, e: null, txt: dfT("mob.air_poor"), st: worst ? `${worst.label} ${worst.v}` : "" });
+    }
+    return out;
   }
 
   _homePage(m) {
@@ -1084,49 +1228,113 @@ class DeviceFloorplanMobile extends HTMLElement {
     const me = m.people.find((p) => p.st && p.st.attributes.user_id && p.st.attributes.user_id === user.id);
     const greet = dfT(hr < 12 ? "mob.morning" : hr < 18 ? "mob.afternoon" : "mob.evening") + (first ? `, ${first}` : "");
     const home = m.people.filter((p) => p.home).length;
-    const att = m.items.filter((x) => x.attention);
-    const sumLine = [m.people.length ? dfT("mob.k_of_n_home", { k: home, n: m.people.length }) : "", att.length ? dfT("mob.n_attention", { n: att.length }) : dfT("mob.all_good")].filter(Boolean).join(" · ");
-    // #31: one chip per real issue first (what · where), then the weather, then overlay chips that say what they count.
-    const issues = att.slice(0, 4).map((x) => {
-      const e = x.alarm[0] || x.open[0] || x.lead;
-      const where = this._roomName(x);
-      return `<button class="chip att" data-a="${x.room ? "room" : "more"}" data-v="${cesc(x.room ? `${x.floor}|${x.room}` : e)}"><ha-state-icon data-ent="${cesc(e)}"></ha-state-icon>${cesc(`${x.name} · ${this._fmtE(e)}`)}${where ? ` · ${cesc(where)}` : ""}</button>`;
-    }).join("") + (att.length > 4 ? `<span class="chip att">+${att.length - 4}</span>` : "");
+    const iss = this._issues(m);
+    const sumLine = [m.people.length ? dfT("mob.k_of_n_home", { k: home, n: m.people.length }) : "", iss.length ? dfT("mob.n_attention", { n: iss.length }) : dfT("mob.all_good")].filter(Boolean).join(" · ");
+    // #53: what is on (small pills above the plan, wrapping) …
     const out = this._outside();
     const lightsOn = this._members("lights", m.items).filter((x) => x.on).length;
     const tin = dfmAvg(m.items.flatMap((x) => x.temps));
+    const hin = dfmAvg(m.items.flatMap((x) => x.hums));
+    const airR = m.rooms.some((r) => r.airR != null) ? Math.max(...m.rooms.filter((r) => r.airR != null).map((r) => r.airR)) : null;
     const off = m.items.filter((x) => x.offline).length;
     const low = m.items.filter((x) => x.battery != null && x.battery <= 15).length;
     const wn = m.items.filter((x) => x.warn.length).length;
-    const ch = (ov, icon, t, cls = "") => `<button class="chip ${cls}" data-a="ov" data-v="${ov}"><ha-icon icon="${icon}"></ha-icon>${cesc(t)}</button>`;
-    const chips = [
-      lightsOn ? ch("lights", "mdi:lightbulb-group", dfT("mob.lights_on", { n: lightsOn })) : "",
-      tin != null ? ch("comfort", "mdi:home-thermometer-outline", dfT("mob.inside", { t: tin })) : "",
-      off ? ch("network", "mdi:lan-disconnect", dfT("mob.n_offline", { n: off }), "warn") : "",
-      low ? ch("health", "mdi:battery-alert-variant-outline", dfT("mob.n_low", { n: low }), "warn") : "",
-      wn ? ch("health", "mdi:alert-outline", dfT("mob.n_warn", { n: wn }), "warn") : "",
+    const pill = (ov, icon, t, cls = "") => `<button class="pi ${cls}" ${ov ? `data-a="ovs" data-v="${ov}"` : ""}><ha-icon icon="${icon}"></ha-icon>${t}</button>`;
+    const info = [
+      out ? pill("", "mdi:weather-partly-cloudy", cesc(`${out} ${dfT("mob.outside")}`), "wx") : "",
+      tin != null ? pill("comfort", "mdi:home-thermometer-outline", cesc([`${tin}°`, hin != null ? `${Math.round(hin)}%` : ""].filter(Boolean).join(" · "))) : "",
+      airR != null ? pill("comfort", "mdi:air-filter", `${this._airDot(airR)}${cesc(this._airTxt(airR))}`) : "",
+      lightsOn ? pill("lights", "mdi:lightbulb-group", cesc(dfT("mob.lights_on", { n: lightsOn }))) : "",
+      off ? pill("network", "mdi:lan-disconnect", cesc(dfT("mob.n_offline", { n: off })), "warn") : "",
+      low ? pill("health", "mdi:battery-alert-variant-outline", cesc(dfT("mob.n_low", { n: low })), "warn") : "",
+      wn ? pill("health", "mdi:alert-outline", cesc(dfT("mob.n_warn", { n: wn })), "warn") : "",
     ].join("");
-    const rooms = this._sortRooms(m.rooms).slice(0, 8);
-    const cams = m.items.filter((x) => x.lk === "camera");
-    const fl = this._fsw(m, f);
+    // … and what needs a look (small red pills under the plan, at most 6, then "+n").
+    const issHtml = iss.slice(0, 6).map((i) => {
+      const room = i.room || m.rooms.find((r) => r.id === i.x.room && r.floor === i.x.floor);
+      const where = room ? room.name : "";
+      return `<button class="pi att" data-a="${room ? "room" : "more"}" data-v="${cesc(room ? `${room.floor}|${room.id}` : i.e)}">${i.e ? `<ha-state-icon data-ent="${cesc(i.e)}"></ha-state-icon>` : `<ha-icon icon="mdi:air-filter"></ha-icon>`}<span class="t">${cesc(i.txt)}</span>${cesc([i.st, where].filter(Boolean).map((q) => ` · ${q}`).join(""))}</button>`;
+    }).join("") + (iss.length > 6 ? `<button class="pi att" data-a="issues">+${iss.length - 6}</button>` : "");
+    const rooms = this._sortRooms(m.rooms);
+    const cams = this._cams(m);
     const avatar = me && me.pic ? `<span class="me"><img src="${cesc(me.pic)}" alt=""></span>` : "";
-    const tile = (r) => {
-      const bd = [r.offline ? `<b class="bd amber">${dfT("mob.n_offline", { n: r.offline })}</b>` : "", r.low ? `<b class="bd amber">${dfT("mob.n_low", { n: r.low })}</b>` : "", r.warns ? `<b class="bd amber">${dfT("mob.n_warn", { n: r.warns })}</b>` : ""].join("");
-      const sub = [r.on ? dfT("mob.n_on", { n: r.on }) : "", r.temp != null ? `${r.temp}°` : "", r.people.map((pp) => this._pname(pp)).join(", ")].filter(Boolean).join(" · ");
-      return `<button class="rt ${r.attention ? "att" : r.on ? "on" : ""}" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><b>${cesc(r.name)}</b><small>${cesc(sub || dfT("mob.quiet"))}</small>${bd ? `<span class="bds">${bd}</span>` : ""}</button>`;
-    };
-    const cam = (c) => {
-      const pic = c.st && c.st.state !== "unavailable" && c.st.attributes.entity_picture;
-      const nm = (c.st && c.st.attributes.friendly_name) || c.name;
-      return `<button class="cam" data-a="more" data-v="${cesc(c.lead)}">${pic ? `<img src="${cesc(pic)}" alt="">` : `<span class="noimg"><ha-icon icon="mdi:cctv-off"></ha-icon></span>`}<b>${cesc(nm)}</b><small>${cesc([this._roomName(c), this._fmtE(c.lead)].filter(Boolean).join(" · "))}</small></button>`;
-    };
     return `<header class="hd top">${avatar}<div class="grow"><div class="h1">${cesc(greet)}</div><div class="sub">${cesc(sumLine)}</div></div></header>
-      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "mini")}${fl}</div>
-      <div class="chips" data-scroll="chips">${issues}${out ? `<span class="chip wx"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>${cesc(`${out} ${dfT("mob.outside")}`)}</span>` : ""}${chips}</div>
-      <section><h2><ha-icon icon="mdi:floor-plan"></ha-icon>${dfT("mob.rooms")}<button class="all" data-a="home">${dfT("mob.see_all")} ›</button></h2>
-        <div class="hs" data-scroll="hrooms">${rooms.map(tile).join("")}</div></section>
-      ${cams.length ? `<section><h2><ha-icon icon="mdi:cctv"></ha-icon>${dfT("mob.cameras")}</h2><div class="hs" data-scroll="hcams">${cams.map(cam).join("")}</div></section>` : ""}
-      ${m.people.length ? `<section><h2><ha-icon icon="mdi:account-group-outline"></ha-icon>${dfT("mob.people")}<button class="all" data-a="tab" data-v="people">${dfT("mob.see_all")} ›</button></h2><div class="hs" data-scroll="hppl">${m.people.map((p) => `<button class="pt" data-a="${p.room ? "room" : "more"}" data-v="${cesc(p.room ? `${p.room.floor}|${p.room.id}` : p.entity)}"><span class="av ${p.home ? "home" : ""}">${p.pic ? `<img src="${cesc(p.pic)}" alt="">` : cesc(p.name.slice(0, 1))}</span><b>${cesc(p.name.split(" ")[0])}</b><small>${cesc(p.room ? p.room.name : p.st ? this._fmtE(p.entity) : "")}</small></button>`).join("")}</div></section>` : ""}`;
+      ${info ? `<div class="pills">${info}</div>` : ""}
+      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "mini")}${this._planNav(m, f)}</div>
+      ${issHtml ? `<div class="pills iss">${issHtml}</div>` : ""}
+      <section>${this._secHead("rooms", "mdi:floor-plan", dfT("mob.rooms"))}${this._secBody("rooms", rooms.map((r) => this._tile(m, r)).join(""))}</section>
+      <section>${this._secHead("ctl", "mdi:view-dashboard-outline", dfT("mob.home_control"))}${this._secBody("ctl", this._ovTiles(m))}</section>
+      ${cams.length ? `<section>${this._secHead("cams", "mdi:cctv", dfT("mob.cameras"))}${this._secBody("cams", cams.map((c) => this._camTile(m, c)).join(""))}</section>` : ""}`;
+  }
+
+  /** #48: the floor's name and ‹ › on the plan itself (no row); swipe does the same. */
+  _planNav(m, f) {
+    const multi = m.floors.length > 1;
+    return `<span class="flabel">${cesc(f.name)}</span>${multi ? `<button class="nav l" data-a="fstep" data-v="1" aria-label="${dfT("mob.floor_up")}"><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="nav r" data-a="fstep" data-v="-1" aria-label="${dfT("mob.floor_down")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button>` : ""}`;
+  }
+
+  /** #50: every placed device with a camera (its camera entity), robots' maps excepted. */
+  _cams(m) {
+    const out = [];
+    for (const x of m.items) {
+      if (x.ents.some((e) => domainOf(e) === "vacuum" || domainOf(e) === "lawn_mower")) continue;
+      const cam = x.ents.find((e) => domainOf(e) === "camera");
+      if (cam) out.push({ x, cam });
+    }
+    return out;
+  }
+
+  _camTile(m, c) {
+    const st = this._hass.states[c.cam];
+    const pic = st && st.state !== "unavailable" && st.attributes.entity_picture;
+    const nm = c.x.name || (st && st.attributes.friendly_name) || c.cam;
+    return `<button class="cam" data-a="more" data-v="${cesc(c.cam)}">${pic ? `<img src="${cesc(pic)}" alt="">` : `<span class="noimg"><ha-icon icon="mdi:cctv-off"></ha-icon></span>`}<b>${cesc(nm)}</b><small>${cesc([this._roomName(c.x), this._fmtE(c.cam)].filter(Boolean).join(" · "))}</small></button>`;
+  }
+
+  /** #56 / #57: a room tile: its icon, one badge per overlay with something to say (max 4 + "+n"), its name and values. */
+  _tile(m, r) {
+    const f = m.floors.find((q) => q.id === r.floor);
+    const bd = [];
+    for (const o of this._overlayList(f)) {
+      const mem = this._members(o, r.items);
+      let v = null;
+      if (o === "security") v = r.items.reduce((t, x) => t + x.open.length + x.alarm.length, 0) || null;
+      else if (o === "lights") v = mem.filter((x) => x.on).length || null;
+      else if (o === "comfort") v = mem.filter((x) => x.lk === "climate" && x.on).length || null;
+      else if (o === "energy") v = r.power >= 1 ? fmtW(r.power) : null;
+      else if (o === "network") v = r.offline || null;
+      else if (o === "health") v = r.low + r.warns || null;
+      else if (o === "cleaning") v = mem.filter((x) => x.on).length || null;
+      else if (o === "people") v = r.people.length || null;
+      else if (o !== "live" && o !== "plan") v = mem.filter((x) => x.now.has(o)).length || null;
+      if (v) bd.push(`<b class="tb2" style="--c:${DFM_OVC[o] || "#8a8f98"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon>${cesc(String(v))}</b>`);
+    }
+    if (!bd.length && r.people.length) bd.push(`<b class="tb2" style="--c:${DFM_OVC.people}"><ha-icon icon="mdi:account"></ha-icon>${r.people.length}</b>`);
+    const more = bd.length > 4 ? `<b class="tb2 more">+${bd.length - 3}</b>` : "";
+    const badges = bd.length > 4 ? bd.slice(0, 3).join("") + more : bd.join("");
+    const line = [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · ");
+    return `<button class="rt" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="bds">${badges}</span><b>${cesc(r.name)}</b><small>${r.airR != null ? this._airDot(r.airR) : ""}${cesc(line || dfT("mob.n_devices", { n: r.items.length }))}</small></button>`;
+  }
+
+  /** #60: "Home control": one big tile per overlay; a tap opens its sheet. */
+  _ovTiles(m) {
+    const f = m.floors.find((q) => q.id === this._s.floor);
+    const ovs = this._overlayList(f).filter((o) => o !== "live" && o !== "plan");
+    if (m.people.length && !ovs.includes("people")) ovs.unshift("people");
+    const tiles = ovs.map((o) => {
+      const t = o === "people" ? dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }) : this._sum(o, m.items, true);
+      let body = "";
+      if (o === "people") body = `<span class="pchips">${m.people.slice(0, 4).map((p) => `<span class="pc ${p.home ? "home" : ""}"><span class="av">${p.pic ? `<img src="${cesc(p.pic)}" alt="">` : cesc(p.name.slice(0, 1))}</span>${cesc(p.name.split(" ")[0])}</span>`).join("")}${m.people.length > 4 ? `<span class="pc">+${m.people.length - 4}</span>` : ""}</span>`;
+      if (o === "energy") {
+        const rs = m.rooms.filter((r) => r.power >= 1).sort((a, b) => b.power - a.power).slice(0, 3);
+        const max = rs.length ? rs[0].power : 1;
+        body = `<span class="bars">${rs.map((r) => `<span class="bar1"><span>${cesc(r.name)}</span><small>${cesc(fmtW(r.power))}</small><i style="width:${Math.max(4, (r.power / max) * 100).toFixed(0)}%"></i></span>`).join("")}</span>`;
+      }
+      const quiet = !t || [dfT("mob.all_off"), dfT("mob.all_closed"), dfT("mob.all_online"), dfT("mob.all_fine"), dfT("mob.quiet")].includes(t);
+      const att = o === "security" && /\d/.test(t);
+      return `<button class="ot ${quiet ? "quiet" : ""} ${att ? "att" : ""}" data-a="ovs" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "#8a8f98"}"><span class="oti"><ha-icon icon="${cesc(o === "people" ? OVERLAYS.people.icon : this._ovIcon(o, f))}"></ha-icon></span><b>${cesc(o === "people" ? OVERLAYS.people.label : this._ovLabel(o, f))}</b><small>${cesc(t || "")}</small>${body}</button>`;
+    });
+    return tiles.sort((a, b) => Number(a.includes(" quiet ")) - Number(b.includes(" quiet "))).join("");
   }
 
   _sheetHtml(m) {
@@ -1134,7 +1342,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     let body = "";
     const item = (p, icon, label, sub) => `<button class="srow" data-a="tab" data-v="${p}"><span class="rtile"><ha-icon icon="${icon}"></ha-icon></span><span class="txt"><span class="nm"><span class="t">${label}</span></span><span class="sub">${cesc(sub)}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
     if (sh.step === "list") {
-      body = `${item("overlays", "mdi:layers-outline", dfT("mob.overlays"), dfT("mob.overlays_sub"))}${item("devices", "mdi:devices", dfT("mob.devices"), dfT("mob.n_devices", { n: m.items.length }))}${item("people", "mdi:account-group-outline", dfT("mob.people"), dfT("mob.n_home", { n: m.people.filter((p) => p.home).length }))}`;
+      body = `${item("devices", "mdi:devices", dfT("mob.devices"), dfT("mob.n_devices", { n: m.items.length }))}${item("people", "mdi:account-group-outline", dfT("mob.people"), dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }))}`;
     } else if (sh.step === "floors") {
       body = `<h3>${dfT("mob.floors")}</h3>${m.floors.map((f) => {
         const rs = m.rooms.filter((r) => r.floor === f.id);
@@ -1142,8 +1350,12 @@ class DeviceFloorplanMobile extends HTMLElement {
         const att = rs.reduce((n, r) => n + r.attention, 0);
         const sub = [dfT("mob.n_rooms", { n: rs.length }), att ? dfT("mob.n_attention", { n: att }) : "", on ? dfT("mob.n_on", { n: on }) : ""].filter(Boolean).join(" · ");
         const img = this._img(f);
-        return `<button class="srow" data-a="sheet-floor" data-v="${cesc(f.id)}"><span class="fthumb">${img ? `<img src="${cesc(img)}" alt="">` : `<ha-icon icon="mdi:floor-plan"></ha-icon>`}</span><span class="txt"><span class="nm">${cesc(f.name)}</span><span class="sub">${cesc(sub)}</span></span>${att ? `<b class="bd red">${att}</b>` : ""}<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
+        return `<button class="srow" data-a="sheet-floor" data-v="${cesc(f.id)}"><span class="fthumb">${img ? `<img src="${cesc(img)}" alt="">` : `<ha-icon icon="mdi:floor-plan"></ha-icon>`}</span><span class="txt"><span class="nm">${cesc(f.name)}</span><span class="sub">${cesc(sub)}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
       }).join("")}`;
+    } else if (sh.step === "issues") {
+      body = `<h3>${dfT("mob.needs_look")}</h3>${this._issues(m).map((i) => i.x ? this._row(i.x, { room: this._roomName(i.x) }) : `<button class="srow" data-a="room" data-v="${cesc(`${i.room.floor}|${i.room.id}`)}"><span class="rtile"><ha-icon icon="mdi:air-filter"></ha-icon></span><span class="txt"><span class="nm">${cesc(`${i.txt} · ${i.room.name}`)}</span><span class="sub">${cesc(i.st)}</span></span></button>`).join("")}`;
+    } else if (sh.step === "ov") {
+      body = this._ovSheet(m, sh.ov);
     } else {
       const f = m.floors.find((q) => q.id === sh.floor) || m.floors[0];
       const rs = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
@@ -1152,8 +1364,54 @@ class DeviceFloorplanMobile extends HTMLElement {
     return `<div class="scrim" data-a="close"></div><div class="sheet" data-scroll="sheet"><i class="grab"></i>${body}</div>`;
   }
 
+  /** #49 / #60: an overlay as controls (no plan): its scenes and actions from the main card, then its devices by room. */
+  _ovSheet(m, o) {
+    const f = m.floors.find((q) => q.id === this._s.floor) || m.floors[0];
+    const b = this._base || {};
+    const title = o === "people" ? OVERLAYS.people.label : this._ovLabel(o, f);
+    const icon = o === "people" ? OVERLAYS.people.icon : this._ovIcon(o, f);
+    let top = "";
+    if (o === "lights") {
+      const L = { all_off: true, all_on: false, scenes: [], ...(b.lights || {}) };
+      const pids = m.floors.map((q) => q.id);
+      const btn = (v, ic, t) => `<button class="scb" data-a="scene" data-v="${v}"><ha-icon icon="${ic}"></ha-icon>${cesc(t)}</button>`;
+      top = [L.all_on ? btn("all_on", "mdi:lightbulb-on-outline", dfT("scene.all_on")) : "", L.all_off ? btn("all_off", "mdi:lightbulb-off-outline", dfT("scene.all_off")) : "",
+        ...(L.scenes || []).map((sc, i) => (Array.isArray(sc.plans) && sc.plans.length && !sc.plans.some((x) => pids.includes(x)) ? "" : btn(i, sc.icon || "mdi:palette-outline", sc.name || dfT("scene.n", { n: i + 1 }))))].join("");
+    }
+    const acts = (Array.isArray(b.overlay_actions) ? b.overlay_actions : []).map((x, i) => [x, i]).filter(([x]) => (x.overlay || "cleaning") === o)
+      .map(([x, i]) => `<button class="scb" data-a="oact" data-v="${i}"><ha-icon icon="${cesc(x.icon || "mdi:gesture-tap")}"></ha-icon>${cesc(x.name || dfT("action"))}</button>`).join("");
+    let list = "";
+    if (o === "people") list = this._peopleHtml(m.people);
+    else if (o === "energy") {
+      const rs = m.rooms.filter((r) => r.power >= 1).sort((a, c) => c.power - a.power);
+      const total = m.items.reduce((t, x) => t + (x.power || 0), 0);
+      list = `<div class="big">${cesc(fmtW(total))}<small>${dfT("mob.measured")}</small></div>${rs.map((r) => {
+        const top1 = r.items.filter((x) => x.power).sort((a, c) => c.power - a.power)[0];
+        return `<button class="srow" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rtile"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="txt"><span class="nm"><span class="t">${cesc(r.name)}</span></span><span class="sub">${cesc(top1 ? `${top1.name} · ${fmtW(top1.power)}` : "")}</span></span><span class="val">${cesc(fmtW(r.power))}</span></button>`;
+      }).join("")}`;
+    } else {
+      const mem = this._list(o, m.items);
+      const byRoom = new Map();
+      for (const x of mem) {
+        const k = `${x.floor}|${x.room || ""}`;
+        if (!byRoom.has(k)) byRoom.set(k, []);
+        byRoom.get(k).push(x);
+      }
+      list = [...byRoom.entries()].map(([k, xs]) => {
+        const [fid, rid] = k.split("|");
+        const r = rid && m.rooms.find((q) => q.id === rid && q.floor === fid);
+        const tg = xs.filter((x) => x.st && DFM_TOGGLE.has(domainOf(x.lead)) && !x.offline);
+        const onN = tg.filter((x) => x.on).length;
+        const master = o === "lights" && tg.length > 1 ? `<button class="rmaster ${onN ? "on" : ""}" data-a="rmaster" data-v="${cesc(tg.map((x) => x.lead).join(","))}" data-on="${onN ? 1 : 0}">${onN}/${tg.length}<i></i></button>` : "";
+        return `<div class="rcard"><div class="rch"><span class="rtile"><ha-icon icon="${cesc(r ? r.icon : "mdi:help-circle-outline")}"></ha-icon></span><b>${cesc(r ? r.name : dfT("mob.no_room"))}</b>${master}</div>${xs.map((x) => this._row(x)).join("")}</div>`;
+      }).join("") || `<div class="none">${dfT("mob.nothing")}</div>`;
+    }
+    return `<h3 class="sh"><span class="rtile" style="color:${DFM_OVC[o] || "inherit"}"><ha-icon icon="${cesc(icon)}"></ha-icon></span>${cesc(title)}<button class="x" data-a="close" aria-label="${dfT("close")}"><ha-icon icon="mdi:close"></ha-icon></button></h3>${top || acts ? `<div class="scenes">${top}${acts}</div>` : ""}${list}`;
+  }
+
   _roomRow(r) {
-    return `<button class="srow" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rtile ${r.attention ? "att" : r.on ? "on" : ""}"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="txt"><span class="nm">${cesc(r.name)}</span><span class="sub">${cesc(this._roomSub(r))}</span></span>${r.attention ? `<b class="bd red">${r.attention}</b>` : ""}<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
+    const m = this._m;
+    return `<button class="srow" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rtile"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="txt"><span class="nm"><span class="t">${cesc(r.name)}</span></span><span class="sub">${cesc(this._roomSub(r))}</span></span><span class="bds row">${this._tile(m, r).match(/<span class="bds">(.*?)<\/span><b>/)[1]}</span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
   }
 
   _roomsPage(m) {
@@ -1161,7 +1419,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const f = m.floors.find((q) => q.id === s.floor);
     const rs = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
     return `<header class="hd"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div><div class="h1">${cesc(f.name)}</div><div class="sub">${dfT("mob.n_rooms", { n: rs.length })}</div></div></header>
-      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "floor")}${this._fsw(m, f)}</div><div class="list">${rs.map((r) => this._roomRow(r)).join("")}</div>`;
+      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "floor")}${this._planNav(m, f)}</div><div class="list">${rs.map((r) => this._roomRow(r)).join("")}</div>`;
   }
 
   _roomPage(m) {
@@ -1179,27 +1437,13 @@ class DeviceFloorplanMobile extends HTMLElement {
       return `<section class="${fo ? "folded" : ""}"><h2 class="gh" data-a="gfold" data-v="${g}"><span class="gi g-${g}"><ha-icon icon="${DFM_GICON[g]}"></ha-icon></span>${dfmGroupLabel(g)}<span class="gs">${cesc(sum)}</span><span class="go"><ha-icon icon="mdi:chevron-${fo ? "right" : "down"}"></ha-icon></span></h2>${fo ? "" : list.map((x) => this._row(x)).join("")}</section>`;
     }).join("");
     // #33 / #42: one plan band (a third of the screen), the room centred, controls floating on it.
+    const foldBtn = `<button class="fold ${folded ? "off" : ""}" data-a="fold" aria-label="${folded ? dfT("mob.show_plan") : dfT("mob.hide")}"><ha-icon icon="mdi:chevron-${folded ? "down" : "up"}"></ha-icon></button>`;
     const band = folded ? "" : `<div class="cut" data-swipe="room">${this._slot(f.id, "live", r.id, "room")}
         <button class="nav l" data-a="step" data-z="room" data-v="-1" aria-label="${dfT("mob.prev_room")}"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <button class="nav r" data-a="step" data-z="room" data-v="1" aria-label="${dfT("mob.next_room")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button></div>`;
-    return `<header class="hd room"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${cesc(r.name)}</div><div class="sub">${cesc(this._vals(r))}</div></div>${this._thumb(f, r.id)}
-        <button class="fold ${folded ? "off" : ""}" data-a="fold" aria-label="${folded ? dfT("mob.show_plan") : dfT("mob.hide")}"><ha-icon icon="mdi:chevron-${folded ? "down" : "up"}"></ha-icon></button></header>
+        <button class="nav r" data-a="step" data-z="room" data-v="1" aria-label="${dfT("mob.next_room")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button>${foldBtn}</div>`;
+    return `<header class="hd room"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${cesc(r.name)}</div><div class="sub">${r.airR != null ? this._airDot(r.airR) : ""}${cesc([this._vals(r), r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · "))}</div></div>${this._thumb(f, r.id)}${folded ? foldBtn : ""}</header>
       ${band}
       ${groups || `<div class="none">${dfT("mob.nothing")}</div>`}`;
-  }
-
-  /** The floor's name on its plan ("‹ 1st Floor ›"), so a plan is always seen as one floor (#27). */
-  _fsw(m, f) {
-    const multi = m.floors.length > 1;
-    return `<div class="fsw">${multi ? `<button data-a="fstep" data-v="1" aria-label="${dfT("mob.floor_up")}">‹</button>` : ""}<span>${cesc(f.name)}</span>${multi ? `<button data-a="fstep" data-v="-1" aria-label="${dfT("mob.floor_down")}">›</button>` : ""}</div>`;
-  }
-
-  _ovPage(m) {
-    const f = m.floors.find((q) => q.id === this._s.floor);
-    const ovs = this._overlayList(f);
-    return `<header class="hd"><div><div class="h1">${dfT("mob.overlays")}</div><div class="sub">${cesc(f.name)}</div></div></header>
-      <div class="list">${ovs.map((o) => `<button class="srow" data-a="ov" data-v="${cesc(o)}"><span class="rtile"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon></span><span class="txt"><span class="nm">${cesc(this._ovLabel(o, f))}</span><span class="sub">${cesc(this._sum(o, m.items, true))}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`).join("")}
-      ${(this._base || {}).replay === false ? "" : `<button class="srow" data-a="rp"><span class="rtile"><ha-icon icon="mdi:history"></ha-icon></span><span class="txt"><span class="nm">${dfT("rp.name")}</span><span class="sub">${dfT("mob.replay_sub")}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`}</div>`;
   }
 
   _devPage(m) {
@@ -1224,18 +1468,6 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   _pplPage(m) {
     return `<header class="hd"><div><div class="h1">${dfT("mob.people")}</div><div class="sub">${dfT("mob.n_home", { n: m.people.filter((p) => p.home).length })}</div></div></header><div class="list">${this._peopleHtml(m.people)}</div>`;
-  }
-
-  _planPage(m) {
-    const s = this._s;
-    const f = m.floors.find((q) => q.id === s.floor);
-    const ov = s.ov || this._config.default_overlay;
-    const fl = this._fsw(m, f);
-    const ovs = this._overlayList(f);
-    return `<header class="hd"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div><div class="h1">${cesc(this._ovLabel(ov, f))}</div><div class="sub">${cesc(f.name)}</div></div></header>
-      <div class="chips" data-scroll="pchips">${ovs.map((o) => `<button class="chip ${o === ov ? "sel" : ""}" data-a="ov" data-v="${cesc(o)}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon>${cesc(this._ovLabel(o, f))}</button>`).join("")}</div>
-      <div class="full" data-swipe="floor">${this._slot(f.id, ov, "", "full")}${fl}</div>
-      <section><h2>${cesc(this._ovLabel(ov, f))}<span class="gs">${cesc(this._sum(ov, m.items.filter((x) => x.floor === f.id), true))}</span></h2>${ov === "people" ? this._peopleHtml(m.people) : this._listHtml(ov, m.items.filter((x) => x.floor === f.id), true)}</section>`;
   }
 
   // ------------------------------------------------------------- landscape: the house explorer
@@ -1278,7 +1510,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const main = tab === "people" ? this._peopleHtml(ppl) : this._listHtml(tab, items, scope !== "room");
     const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
     const right = `<div class="tabs" data-scroll="ltabs">${menu}${tabs.map((o) => `<button class="lt ${o === tab ? "on" : ""}" data-a="ltab" data-v="${cesc(o)}">${cesc(o === "people" ? OVERLAYS.people.label : this._ovLabel(o, f))}</button>`).join("")}</div>
-      <div class="rbody" data-scroll="rbody"><div class="rsum">${cesc(this._sum(tab, items, true))}</div>${main}${others ? `<div class="others">${others}</div>` : ""}</div>`;
+      <div class="rbody" data-scroll="rbody"><div class="rsum">${cesc(this._sum(tab, items, true))}</div>${main}<div class="others">${others}<button class="one" data-a="rp"><ha-icon icon="mdi:history"></ha-icon><span>${dfT("rp.name")}</span><small></small>›</button></div></div>`;
     const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
     return `<div class="land"><div class="left" ${zone ? `data-swipe="${zone}"` : ""}>${left}</div><aside class="right">${right}</aside></div>`;
   }
@@ -1338,14 +1570,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .pad { height: 110px; }
 .hd { display:flex; align-items:center; gap:12px; padding: 6px 2px 10px; }
 .hd .grow { flex:1; min-width:0; }
-.h1 { font-size: 20px; font-weight: 700; line-height:1.2; letter-spacing:-.01em; }
-.hd.room .h1 { font-size: 22px; }
-.sub { font-size: 13px; color: var(--dfm-sub); }
+.h1 { font-size: 18px; font-weight: 700; line-height:1.2; letter-spacing:-.01em; }
+.hd.room .h1 { font-size: 20px; }
+.sub { font-size: 12.5px; color: var(--dfm-sub); }
 .hd.top .me { width: 44px; height: 44px; flex: none; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px var(--dfm-card); }
 .hd.top .me img { width: 100%; height: 100%; object-fit: cover; }
 .hd.room { position: relative; }
-.fold { position: absolute; right: 2px; bottom: -16px; z-index: 3; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 70%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 1px 4px rgba(0,0,0,.15); color: var(--dfm-fg); }
+.fold { position: absolute; right: 2px; bottom: -14px; z-index: 3; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 70%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 1px 4px rgba(0,0,0,.15); color: var(--dfm-fg); }
 .fold ha-icon { --mdc-icon-size: 20px; }
+.cut .fold { right: 22px; bottom: 14px; }
 .bk { width:40px; height:40px; border-radius:50%; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.08); display:flex; align-items:center; justify-content:center; font-size: 22px; flex: none; }
 .thumb { position:relative; width: 96px; flex:none; border-radius:10px; overflow:hidden; background: var(--dfm-card); }
 .thumb img { width:100%; height:100%; object-fit: fill; opacity:.35; filter: grayscale(.6); display:block; }
@@ -1354,8 +1587,25 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .plan { position: relative; --ha-card-background: transparent; --ha-card-box-shadow: none; --ha-card-border-width: 0; --ha-card-border-radius: 0; }
 .mini .plan, .cut .plan, .full .plan { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 7%, #000 90%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to bottom, transparent, #000 7%, #000 90%, transparent), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent); mask-composite: intersect; margin: 0 -14px; }
 .mini .plan { --dfc-fit-h: 34vh; }
+.mini { position: relative; margin-top: 2px; }
+.flabel { position: absolute; left: 8px; top: 4px; z-index: 3; font-size: 11.5px; font-weight: 600; color: var(--dfm-sub); padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 60%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); pointer-events: none; }
+.mini .nav { opacity: .55; width: 34px; height: 34px; }
+.mini .nav.l { left: -4px; } .mini .nav.r { right: -4px; }
+/* #53: small pills that wrap: what is on above the plan, what needs a look under it */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.pills.iss { margin: 4px 0 8px; max-height: 60px; overflow: hidden; }
+.pi { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 999px; background: var(--dfm-card); font-size: 12px; white-space: nowrap; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+.pi ha-icon, .pi ha-state-icon { --mdc-icon-size: 14px; color: var(--dfm-acc); flex: none; }
+.pi .t { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.pi.wx { background: color-mix(in srgb, var(--dfm-acc) 16%, var(--dfm-card)); }
+.pi.warn { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dfm-amber) 75%, transparent); }
+.pi.warn ha-icon { color: var(--dfm-amber); }
+.pi.att { box-shadow: inset 0 0 0 1px var(--dfm-red); color: var(--dfm-red); }
+.pi.att ha-icon, .pi.att ha-state-icon { color: var(--dfm-red); }
+.adot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.adot.a0 { background: #4caf50; } .adot.a1 { background: var(--dfm-amber); } .adot.a2 { background: var(--dfm-red); }
 .cut { position: relative; margin: 6px -14px 0; }
-.cut .plan { --dfc-fit-h: 33vh; margin: 0; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); }
+.cut .plan { --dfc-fit-h: 33vh; margin: 0; --dfc-focus-dim: var(--dfm-g2); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 45%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--dfm-fg); opacity: .7; }
 .nav.l { left: 8px; } .nav.r { right: 8px; }
 .nav ha-icon { --mdc-icon-size: 24px; }
@@ -1377,7 +1627,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .chip.sel { background: var(--dfm-acc); color: #fff; }
 .chip.sel ha-icon { color:#fff; }
 section { margin: 14px 0 4px; }
-h2 { display:flex; align-items:center; gap:8px; font-size: 17px; font-weight: 650; margin: 0 0 8px; }
+h2 { display:flex; align-items:center; gap:8px; font-size: 15px; font-weight: 650; margin: 0 0 8px; }
+h2 .gt { margin-left: auto; width: 30px; height: 30px; border-radius: 50%; display:flex; align-items:center; justify-content:center; background: var(--dfm-card); color: var(--dfm-sub); }
+h2 .gt ha-icon { --mdc-icon-size: 18px; color: inherit; }
+.gridw { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gridw > * { width: auto !important; }
 h2 > ha-icon { --mdc-icon-size: 20px; color: var(--dfm-sub); }
 h2 .all, h3 .all { margin-left:auto; font-size: 13px; color: var(--dfm-acc); font-weight:500; }
 .gs { margin-left:auto; font-size: 13px; color: var(--dfm-sub); font-weight: 500; }
@@ -1393,15 +1647,51 @@ section.folded { margin-bottom: 0; }
 .g-media { color: #7e57c2; background: color-mix(in srgb, #7e57c2 15%, transparent) !important; }
 .g-other { color: var(--dfm-sub); background: color-mix(in srgb, var(--dfm-sub) 12%, transparent) !important; }
 .hs { display:flex; gap:10px; overflow-x:auto; padding: 2px 2px 6px; scrollbar-width:none; }
-.rt, .pt, .cam { flex:none; width: 132px; padding: 12px; border-radius: 16px; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.07); display:flex; flex-direction:column; gap:4px; }
+.rt, .pt, .cam, .ot { flex:none; width: 132px; padding: 12px; border-radius: 16px; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.07); display:flex; flex-direction:column; gap:4px; box-sizing: border-box; }
+/* #56 / #57: room tiles: icon, overlay badges (top right), name, values */
+.rt { position: relative; width: 150px; min-height: 150px; justify-content: flex-end; }
+.rt .rti { position: absolute; left: 12px; top: 12px; }
+.rt .bds { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bds.row { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+.tb2 { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+.tb2 ha-icon { --mdc-icon-size: 13px !important; color: inherit !important; }
+.tb2.more { --c: var(--dfm-sub); }
+/* #60: Home control tiles */
+.ot { width: 170px; min-height: 130px; color: inherit; }
+.ot .oti { width: 38px; height: 38px; border-radius: 12px; display:flex; align-items:center; justify-content:center; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); margin-bottom: 4px; }
+.ot b { font-size: 14px; }
+.ot small { font-size: 12px; color: var(--dfm-sub); }
+.ot.quiet { opacity: .55; }
+.ot.att small { color: var(--dfm-red); font-weight: 600; }
+.pchips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pc { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 6px 2px 2px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-sub) 12%, transparent); }
+.pc .av { width: 18px; height: 18px; font-size: 10px; box-shadow: none; }
+.pc.home .av { box-shadow: 0 0 0 1.5px #4caf50; }
+.bars { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.bar1 { display: grid; grid-template-columns: 1fr auto; font-size: 11px; gap: 2px 6px; }
+.bar1 i { grid-column: 1 / 3; height: 4px; border-radius: 2px; background: var(--c); }
+/* sheets: overlay controls */
+.sheet h3.sh .x { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; display:flex; align-items:center; justify-content:center; background: var(--dfm-card); }
+.scenes { display: flex; flex-wrap: wrap; gap: 8px; }
+.scb { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--dfm-card); font-size: 13px; font-weight: 600; }
+.scb ha-icon { --mdc-icon-size: 18px; color: var(--dfm-amber); }
+.rcard { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 18px; background: color-mix(in srgb, var(--dfm-card) 60%, transparent); }
+.rch { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.rmaster { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--dfm-card); font-size: 12px; font-weight: 700; }
+.rmaster i { width: 34px; height: 20px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-sub) 30%, transparent); position: relative; }
+.rmaster i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; }
+.rmaster.on i { background: #e8b923; } .rmaster.on i::after { left: 16px; }
+.big { font-size: 30px; font-weight: 700; padding: 4px 4px 8px; }
+.big small { display: block; font-size: 12px; font-weight: 500; color: var(--dfm-sub); }
 .rti { width: 38px; height: 38px; border-radius: 12px; display:flex; align-items:center; justify-content:center; background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); margin-bottom: 4px; }
 .rt ha-icon { --mdc-icon-size: 22px; }
 .rt .bds { display:flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .rt.on .rti { color: #c99a00; background: color-mix(in srgb, #f6c445 22%, transparent); }
 .rt.att { box-shadow: inset 0 0 0 1.5px var(--dfm-red); }
 .rt.att .rti { color: var(--dfm-red); background: color-mix(in srgb, var(--dfm-red) 14%, transparent); }
-.rt b, .pt b, .cam b { font-size: 14.5px; font-weight:600; }
-.rt small, .pt small { font-size: 12px; color: var(--dfm-sub); line-height:1.3; }
+.rt b { font-size: 16px; font-weight: 700; }
+.pt b, .cam b { font-size: 13.5px; font-weight:600; }
+.rt small, .pt small { font-size: 11.5px; color: var(--dfm-sub); line-height:1.3; }
 .pt { align-items:center; text-align:center; width: 96px; }
 .cam { width: 180px; padding: 0 0 10px; overflow:hidden; }
 .cam img { width:100%; aspect-ratio: 16/9; object-fit: cover; display:block; background:#000; }
@@ -1419,8 +1709,8 @@ section.folded { margin-bottom: 0; }
 .rtile.on { color:#c99a00; background: color-mix(in srgb, #f6c445 22%, transparent); }
 .rtile.att { color: var(--dfm-red); background: color-mix(in srgb, var(--dfm-red) 14%, transparent); }
 .txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
-.nm { font-size: 15px; font-weight: 600; display:flex; align-items:center; gap:6px; flex-wrap: wrap; }
-.txt .sub { font-size: 13px; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nm { font-size: 14px; font-weight: 600; display:flex; align-items:center; gap:6px; flex-wrap: wrap; }
+.txt .sub { font-size: 12px; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd { font-size: 11px; font-weight:700; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-sub) 14%, transparent); color: var(--dfm-sub); }
 .bd.red { background: color-mix(in srgb, var(--dfm-red) 15%, transparent); color: var(--dfm-red); }
 .bd.amber { background: color-mix(in srgb, var(--dfm-amber) 22%, transparent); color: #9a6b00; }
@@ -1453,7 +1743,7 @@ button.sw.on i { left: 21px; }
 .scrim { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.25); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; max-height: 78vh; overflow-y: auto; background: var(--dfm-bg); border-radius: 22px 22px 0 0; padding: 8px 14px calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:8px; box-shadow: 0 -6px 30px rgba(0,0,0,.18); }
 .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--dfm-sub) 40%, transparent); margin: 2px auto 6px; }
-.sheet h3 { display:flex; align-items:center; gap: 10px; margin: 4px 2px; font-size: 19px; }
+.sheet h3 { display:flex; align-items:center; gap: 10px; margin: 4px 2px; font-size: 17px; }
 .sheet h3 .bk { width:34px; height:34px; font-size: 19px; }
 .fthumb { width: 56px; height: 40px; flex:none; border-radius: 8px; overflow:hidden; background: color-mix(in srgb, var(--dfm-sub) 12%, transparent); display:flex; align-items:center; justify-content:center; }
 .fthumb img { width:100%; height:100%; object-fit: contain; }

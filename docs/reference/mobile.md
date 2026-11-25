@@ -3,7 +3,7 @@
 **Device Floorplan (mobile)** is a whole dashboard for your phone, made only from what you placed in the Floorplan: plans are floors, plan rooms are rooms, and your placed devices, bonds and entities are the devices. Nothing to set up.
 
 ::: warning Test build
-New in 0.13.9.13 (dev builds), reworked in 0.13.9.14 and 0.13.9.15. The look and the details may still change.
+New in 0.13.9.13 (dev builds), reworked in 0.13.9.14–0.13.9.16. The look and the details may still change.
 :::
 
 ## Add it
@@ -26,9 +26,12 @@ It takes its people settings, room names, look and **overlay settings** from the
 | **Home** | What is happening now (Home is never a plan; the plan on it shows its floor's name): a small live plan, one chip per overlay with something to say (lights on, open doors, low batteries…) and the outside temperature, your rooms (most active first), cameras and people. |
 | **Bottom bar** | **☰** opens Home Assistant's menu (when its top bar is hidden), **Home** goes to a place (the floors, then that floor's rooms), the round button on the right opens **Overlays**, **Devices** and **People**. |
 | **Room page** | The room's name, its temperature and humidity (the average of all its readings, air conditioners included) and a small floor picture with the room marked. Under it the room cut out of the real plan, with only its own devices; **Hide** folds it away. Then the room's devices by what they are: **Lights**, **Comfort**, **Security**, **Appliances & media**, **Other**, with switches and brightness sliders. **›** on a group opens the plan in that overlay. |
-| **Overlays** | Every overlay with its one-line status, and **Home Replay**. A tap opens the floor's plan in that overlay (the full plan with Layers), with its list underneath. |
 | **Devices** | Every device, by room, with a search. |
 | **People** | Who is home and in which room (tap: that room). |
+
+**Home** (portrait): small pills above the plan say what is on (outside / inside, air, lights, offline, batteries); the plan shows the main floor (‹ › or swipe for the others; tap a room to open it); red pills under it are what needs a look; then **Rooms** (each tile with one badge per overlay: open, lights on, climate running, power, offline…), **Home control** (one tile per overlay; a tap opens its controls: e.g. Lights with your scenes from the Floorplan card and a switch per room) and **Cameras**. Each section has a small button to show its tiles as a row or a grid.
+
+**Air quality**: PM2.5, PM10, CO₂, VOC index, AQI and NO₂ sensors give each room an "Air good / moderate / poor" (PM2.5 ≤ 15 / ≤ 35 µg/m³, CO₂ < 800 / < 1200 ppm, VOC index < 150 / < 250, AQI ≤ 50 / ≤ 100).
 
 **Portrait is for quick actions**: its plans always show Live, with each room's temperature · humidity. A room page shows the room centred in a band a third of the screen high, the rest of the floor dimmed around it; ‹ › on the band go to the previous / next room, the small arrow under the header folds the band away, and each group (Lights, Comfort…) folds with a tap on its header. Switching something in the list makes it light up on the plan for a moment. Details (every overlay in full) are in landscape.
 
