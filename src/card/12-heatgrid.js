@@ -245,7 +245,9 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // 0.10: how long ago each room was cleaned belongs to the Last cleaned layer (alone when names are off).
     const ages = this._overlay === "cleaning" && this._layerOn("cleaning", "fresh", true);
     const ew = this._overlay === "energy" ? this._eRooms(2) : null; // 0.11: energy per room
-    if (!names && !ages && !ew) return "";
+    const rv = this._config.room_values && this._overlay === "live" ? this._roomVals(a) : null; // 0.13.9.15 (mobile)
+    const fa = this._config.focus_area;
+    if (!names && !ages && !ew && !rv) return "";
     const size = { s: 11, m: 13, l: 16 }[r.size] || 13;
     // A marker (or a robot's dock) right on a room name: the name steps aside, up or down, away from it.
     const pts = [...(this._specs ? this._specs.values() : [])].map((sp) => ({ x: +sp.x, y: +sp.y }));
@@ -258,15 +260,49 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const nw = ages && (a.now || {})[id];
       const c = ages && ((a.cleaned || {})[id] || {}).t;
       const pw = ew && ew[id] > 0 ? `<small class="rage epw">${cesc(this._eFmt(ew[id]))}</small>` : "";
-      if (!names && !c && !nw && !pw) return "";
+      const vv = rv && rv[id] && (!fa || fa === id) ? `<small class="rage rv">${cesc(rv[id])}</small>` : "";
+      if (!names && !c && !nw && !pw && !vv) return "";
       const name = (r.names && r.names[id]) || room.name;
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
       const cls = r.style === "label" ? "label" : "pill";
       // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
       const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `${dfT("clean.cleaning_l")} · ${nw.pct}%` : dfT("clean.cleaning_l"))}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}</div>`;
+      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}${vv}</div>`;
     }).join("");
+  },
+
+  /** 0.13.9.15: each room's temperature · humidity (the average of all its readings, climate devices included). */
+  _roomVals(a) {
+    const S = this._hass.states;
+    const acc = {};
+    for (const item of this._items(a)) {
+      const id = this._roomOf(item, a) || item.area_id;
+      if (!id) continue;
+      const r = (acc[id] = acc[id] || { t: [], h: [], seen: new Set() });
+      for (const e of this._allowed(item)) {
+        const s = S[e];
+        if (r.seen.has(e)) continue;
+        r.seen.add(e);
+        if (!live(s)) continue;
+        const k = kindOf(e, s);
+        if (k === "temperature" && num(s.state)) r.t.push(Number(s.state));
+        if (k === "humidity" && num(s.state)) r.h.push(Number(s.state));
+        if (k === "climate") {
+          if (num(s.attributes.current_temperature)) r.t.push(Number(s.attributes.current_temperature));
+          if (num(s.attributes.current_humidity)) r.h.push(Number(s.attributes.current_humidity));
+        }
+      }
+    }
+    const avg = (v) => v.reduce((x, y) => x + y, 0) / v.length;
+    const out = {};
+    for (const [id, r] of Object.entries(acc)) {
+      const p = [];
+      if (r.t.length) p.push(`${Math.round(avg(r.t) * 10) / 10}°`);
+      if (r.h.length) p.push(`${Math.round(avg(r.h))}%`);
+      if (p.length) out[id] = p.join(" · ");
+    }
+    return out;
   },
 
   /** test11: the Matter mark = Home Assistant's own brand image (2026.3+: its local brands API, else the brands

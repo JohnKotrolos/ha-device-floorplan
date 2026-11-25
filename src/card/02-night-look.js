@@ -750,7 +750,9 @@ ha-card.dock-right { flex-direction: row; }
 .obar.alert i { background:#ff5722; }
 @keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
-.box svg.focus { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; fill: color-mix(in srgb, var(--primary-background-color, #f2f2f2) 62%, #8a8a8a); fill-opacity:.62; }
+.box svg.focus { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; fill: var(--dfc-focus-dim, var(--primary-background-color, #f2f2f2)); fill-opacity:.6; }
+.box .m, .box .chip, .box .room, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
+.room .rv { font-weight: 600; }
 .box svg.pulse { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .box svg.taps { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .box svg.taps .ptap, .box svg.taps .atap { pointer-events: all; cursor:pointer; }

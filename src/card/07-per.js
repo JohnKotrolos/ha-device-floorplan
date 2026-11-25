@@ -96,6 +96,25 @@ Object.assign(DeviceFloorplanCard.prototype, {
     };
     const mx = marg(x1 - x0, a.metres_per_px_x, a.image_width);
     const my = marg(y1 - y0, a.metres_per_px_y || a.metres_per_px_x, a.image_height);
+    // 0.13.9.15: `focus_aspect` (width / height of the space the cut-out fills): the view keeps the room fitted
+    // and centred, and fills the rest with the plan around it (shifted to stay on the picture).
+    const asp = Number(this._config.focus_aspect);
+    const W = Number(a.image_width) || 1000;
+    const H = Number(a.image_height) || 1000;
+    if (asp > 0) {
+      let bw = ((x1 - x0 + 2 * mx) * W) / 100;
+      let bh = ((y1 - y0 + 2 * my) * H) / 100;
+      if (bw / bh < asp) bw = bh * asp;
+      else bh = bw / asp;
+      const span = (c, len, full) => {
+        const l = Math.min(full, len);
+        const s = Math.max(0, Math.min(full - l, c - l / 2));
+        return [s, full - s - l];
+      };
+      const [l0, r0] = span(((x0 + x1) / 2 / 100) * W, bw, W);
+      const [t0, b0] = span(((y0 + y1) / 2 / 100) * H, bh, H);
+      return { mode: "custom", focus: true, t: -(t0 / H) * 100, b: -(b0 / H) * 100, l: -(l0 / W) * 100, r: -(r0 / W) * 100 };
+    }
     const cut = (v) => -Math.max(0, Math.min(99, v));
     return { mode: "custom", focus: true, t: cut(y0 - my), b: cut(100 - y1 - my), l: cut(x0 - mx), r: cut(100 - x1 - mx) };
   },

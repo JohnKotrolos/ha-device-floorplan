@@ -3,7 +3,7 @@
 **Device Floorplan (mobile)** is a whole dashboard for your phone, made only from what you placed in the Floorplan: plans are floors, plan rooms are rooms, and your placed devices, bonds and entities are the devices. Nothing to set up.
 
 ::: warning Test build
-New in 0.13.9.13 (dev builds), reworked in 0.13.9.14. The look and the details may still change.
+New in 0.13.9.13 (dev builds), reworked in 0.13.9.14 and 0.13.9.15. The look and the details may still change.
 :::
 
 ## Add it
@@ -15,7 +15,9 @@ New in 0.13.9.13 (dev builds), reworked in 0.13.9.14. The look and the details m
   ```
 - **Or as a card** (best in a *Panel* view): **Add card** → **Device Floorplan (mobile)**.
 
-It takes its floors, people, room names, look and **overlay settings** from the first Floorplan card on your dashboards, so it shows exactly what your main card shows: a device you hid from an overlay there is hidden here too, and the room groups follow the categories you gave your devices in the Floorplan Editor. The mobile card has no overlay settings of its own: change them once in the main card. Turn **Use the settings of my Floorplan card** off to use the defaults.
+**Floors**: the plans you gave a **level** in the Floorplan Editor (plans without a level are views and stay out); to choose others, list them in `plans`. **People**: everyone in Home Assistant; where they are comes from your Floorplan card's people settings.
+
+It takes its people settings, room names, look and **overlay settings** from the first Floorplan card on your dashboards, so it shows exactly what your main card shows: a device you hid from an overlay there is hidden here too, and the room groups follow the categories you gave your devices in the Floorplan Editor. The mobile card has no overlay settings of its own: change them once in the main card. Turn **Use the settings of my Floorplan card** off to use the defaults.
 
 ## Portrait
 
@@ -27,6 +29,8 @@ It takes its floors, people, room names, look and **overlay settings** from the 
 | **Overlays** | Every overlay with its one-line status, and **Home Replay**. A tap opens the floor's plan in that overlay (the full plan with Layers), with its list underneath. |
 | **Devices** | Every device, by room, with a search. |
 | **People** | Who is home and in which room (tap: that room). |
+
+**Portrait is for quick actions**: its plans always show Live, with each room's temperature · humidity. A room page shows the room centred in a band a third of the screen high, the rest of the floor dimmed around it; ‹ › on the band go to the previous / next room, the small arrow under the header folds the band away, and each group (Lights, Comfort…) folds with a tap on its header. Switching something in the list makes it light up on the plan for a moment. Details (every overlay in full) are in landscape.
 
 On a whole floor (Home, a floor's rooms, an overlay's plan) a tap opens the room you tap, and a swipe left or right goes to the next floor; devices are not tapped there. On a room's plan, a swipe goes to the next room (in the same order as the Rooms list) and a tap on a device opens its details.
 
@@ -52,8 +56,8 @@ Turning the phone keeps what you see: Home becomes the floor it shows (Back: the
 | `layout` | `auto` (sideways on a phone = house explorer), `portrait`, `landscape` | `auto` |
 | `hide_header` | `true` / `false` | `true` |
 | `copy_settings` | `true` / `false` | `true` |
-| `plans` | a list of plan ids to show | all plans |
-| `people` | as in the Floorplan card | the Floorplan card's, else every person |
+| `plans` | a list of plan ids to show | the plans with a level |
+| `people` | a list of person entities to show | every person |
 
 ## Full screen
 
