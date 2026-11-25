@@ -150,11 +150,14 @@
   "mob.cfg_copy_help": "Personen, Raumnamen, Aussehen und Ebenen-Einstellungen der ersten Floorplan-Karte auf deinen Dashboards.",
   "mob.cfg_copy_settings": "Einstellungen meiner Floorplan-Karte verwenden",
   "mob.cfg_default_overlay": "Plan zeigt",
+  "mob.cfg_hide_header": "Obere Leiste von Home Assistant auf Handys ausblenden",
+  "mob.cfg_hide_help": "Nur auf diesem Dashboard und solange es offen ist; ☰ unten öffnet das Menü. Zum Bearbeiten ?edit=1 an die Adresse anhängen.",
   "mob.cfg_layout": "Layout",
   "mob.cfg_layout_help": "Automatisch: der Haus-Explorer, wenn das Handy quer gehalten wird.",
   "mob.cfg_room_order": "Reihenfolge der Räume",
   "mob.climate_to": "{s} auf {t}°",
   "mob.devices": "Geräte",
+  "mob.door_open": "Tür offen",
   "mob.evening": "Guten Abend",
   "mob.floor_down": "Etage darunter",
   "mob.floor_up": "Etage darüber",
@@ -172,6 +175,8 @@
   "mob.layout_auto": "Automatisch",
   "mob.layout_landscape": "Immer quer",
   "mob.layout_portrait": "Immer hochkant",
+  "mob.menu": "Home-Assistant-Menü",
+  "mob.more": "Ebenen, Geräte, Personen",
   "mob.morning": "Guten Morgen",
   "mob.n_attention": {
     "one": "{n} braucht Aufmerksamkeit",
@@ -205,6 +210,14 @@
     "one": "{n} Raum",
     "other": "{n} Räume"
   },
+  "mob.n_shown": {
+    "one": "{n} angezeigt",
+    "other": "{n} angezeigt"
+  },
+  "mob.n_warn": {
+    "one": "{n} Warnung",
+    "other": "{n} Warnungen"
+  },
   "mob.next_room": "Nächster Raum",
   "mob.no_people": "Keine Personen",
   "mob.no_plans": "Noch keine Pläne: zeichne einen im Floorplan Editor.",
@@ -216,6 +229,7 @@
   },
   "mob.offline": "Offline",
   "mob.on_plan": "Im Plan zeigen",
+  "mob.open": "Offen",
   "mob.open_n": {
     "one": "{n} offen",
     "other": "{n} offen"
@@ -225,6 +239,7 @@
   "mob.order_plan": "Reihenfolge im Plan",
   "mob.outside": "draußen",
   "mob.overlays": "Ebenen",
+  "mob.overlays_sub": "Alle Ebenen und Home Replay",
   "mob.people": "Personen",
   "mob.prev_room": "Vorheriger Raum",
   "mob.quiet": "Ruhig",

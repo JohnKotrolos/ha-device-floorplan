@@ -3,7 +3,7 @@
 **Device Floorplan (mobile)** is a whole dashboard for your phone, made only from what you placed in the Floorplan: plans are floors, plan rooms are rooms, and your placed devices, bonds and entities are the devices. Nothing to set up.
 
 ::: warning Test build
-New in 0.13.9.13 (dev builds). The look and the details may still change.
+New in 0.13.9.13 (dev builds), reworked in 0.13.9.14. The look and the details may still change.
 :::
 
 ## Add it
@@ -15,33 +15,33 @@ New in 0.13.9.13 (dev builds). The look and the details may still change.
   ```
 - **Or as a card** (best in a *Panel* view): **Add card** → **Device Floorplan (mobile)**.
 
-It takes the people, room names, look and overlay settings of the first Floorplan card on your dashboards, so it looks like your main plan. Turn **Use the settings of my Floorplan card** off to use the defaults.
+It takes its floors, people, room names, look and **overlay settings** from the first Floorplan card on your dashboards, so it shows exactly what your main card shows: a device you hid from an overlay there is hidden here too, and the room groups follow the categories you gave your devices in the Floorplan Editor. The mobile card has no overlay settings of its own: change them once in the main card. Turn **Use the settings of my Floorplan card** off to use the defaults.
 
 ## Portrait
 
 | Where | What |
 |---|---|
-| **Home** | What is happening now: a small live plan, one chip per overlay with something to say (lights on, open doors, low batteries…) and the outside temperature, your rooms (most active first), cameras and people. |
-| **Home button** (bottom bar) | Go to a place: the floors (when there are several), then that floor's rooms. |
+| **Home** | What is happening now (Home is never a plan; the plan on it shows its floor's name): a small live plan, one chip per overlay with something to say (lights on, open doors, low batteries…) and the outside temperature, your rooms (most active first), cameras and people. |
+| **Bottom bar** | **☰** opens Home Assistant's menu (when its top bar is hidden), **Home** goes to a place (the floors, then that floor's rooms), the round button on the right opens **Overlays**, **Devices** and **People**. |
 | **Room page** | The room's name, its temperature and humidity (the average of all its readings, air conditioners included) and a small floor picture with the room marked. Under it the room cut out of the real plan, with only its own devices; **Hide** folds it away. Then the room's devices by what they are: **Lights**, **Comfort**, **Security**, **Appliances & media**, **Other**, with switches and brightness sliders. **›** on a group opens the plan in that overlay. |
 | **Overlays** | Every overlay with its one-line status, and **Home Replay**. A tap opens the floor's plan in that overlay (the full plan with Layers), with its list underneath. |
 | **Devices** | Every device, by room, with a search. |
 | **People** | Who is home and in which room (tap: that room). |
 
-Swipe left or right on a room's plan for the next room (in the same order as the Rooms list); tap a device on it for its details.
+On a whole floor (Home, a floor's rooms, an overlay's plan) a tap opens the room you tap, and a swipe left or right goes to the next floor; devices are not tapped there. On a room's plan, a swipe goes to the next room (in the same order as the Rooms list) and a tap on a device opens its details.
 
 ## Landscape: the house explorer
 
 Turn the phone sideways. The plan takes the left two thirds of the screen, edge to edge; on the right are the overlays for what you are looking at.
 
-- **House** (when there are several floors): all floors as tilted plans, lit rooms in colour, people where they are. Tap a floor.
+- **House** (when there are several levels): the building, all levels stacked, lit rooms in colour, people where they are. Tap a floor. Plans on the same level sit side by side; plans without a level are not part of the house.
 - **Floor**: the floor's plan. Tap a room. Swipe for the next floor.
 - **Room**: the room cut out of the plan; tap devices. Swipe for the next room.
 - **Back** goes one level out: room → floor → house.
 - **Right side**: the overlay tabs (they also set what the plan shows); the chosen overlay in full, the others as one line each.
 - The title and the switcher fade after a few seconds and come back on any touch.
 
-Turning the phone keeps the place: a room stays that room, a floor becomes its Rooms list, the house becomes Home.
+Turning the phone keeps what you see: Home becomes the floor it shows (Back: the House), a room stays that room, a floor becomes its Rooms list, the House becomes Home.
 
 ## Options
 
@@ -50,13 +50,16 @@ Turning the phone keeps the place: a room stays that room, a floor becomes its R
 | `room_order` | `active` (most active first), `alpha`, `plan` | `active` |
 | `default_overlay` | the overlay the plans open in | `live` |
 | `layout` | `auto` (sideways on a phone = house explorer), `portrait`, `landscape` | `auto` |
+| `hide_header` | `true` / `false` | `true` |
 | `copy_settings` | `true` / `false` | `true` |
 | `plans` | a list of plan ids to show | all plans |
 | `people` | as in the Floorplan card | the Floorplan card's, else every person |
 
 ## Full screen
 
-A card cannot hide Home Assistant's own top bar. For a full screen phone dashboard:
+On phones the mobile card hides Home Assistant's top bar on its own dashboard while it is open (option **Hide Home Assistant's top bar on phones**, on by default); **☰** in the bottom bar opens Home Assistant's menu. To edit the dashboard, add `?edit=1` to its address (or turn the option off on a computer: the bar is only hidden on phone-sized screens). If a Home Assistant update changes its page, the bar simply shows again.
+
+Other ways to a full screen:
 
 - **iPhone / iPad**: the Companion app has its own **kiosk mode** (Companion app settings).
 - **Any device**: the HACS frontend plugin **kiosk-mode**, set on this dashboard only:

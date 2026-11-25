@@ -150,11 +150,14 @@
   "mob.cfg_copy_help": "Άτομα, ονόματα δωματίων, εμφάνιση και ρυθμίσεις επικαλύψεων από την πρώτη κάρτα Floorplan στους πίνακές σας.",
   "mob.cfg_copy_settings": "Χρήση των ρυθμίσεων της κάρτας Floorplan",
   "mob.cfg_default_overlay": "Ο χάρτης δείχνει",
+  "mob.cfg_hide_header": "Απόκρυψη της πάνω μπάρας του Home Assistant στα κινητά",
+  "mob.cfg_hide_help": "Μόνο σε αυτόν τον πίνακα και όσο είναι ανοιχτός· το ☰ κάτω ανοίγει το μενού. Για επεξεργασία, προσθέστε ?edit=1 στη διεύθυνση.",
   "mob.cfg_layout": "Διάταξη",
   "mob.cfg_layout_help": "Αυτόματα: η εξερεύνηση του σπιτιού όταν γυρίζετε το κινητό οριζόντια.",
   "mob.cfg_room_order": "Σειρά δωματίων",
   "mob.climate_to": "{s} στους {t}°",
   "mob.devices": "Συσκευές",
+  "mob.door_open": "Πόρτα ανοιχτή",
   "mob.evening": "Καλησπέρα",
   "mob.floor_down": "Όροφος από κάτω",
   "mob.floor_up": "Όροφος από πάνω",
@@ -165,13 +168,15 @@
   "mob.g_other": "Άλλα",
   "mob.g_security": "Ασφάλεια",
   "mob.hide": "Απόκρυψη",
-  "mob.home": "Σπίτι",
+  "mob.home": "Αρχική",
   "mob.house": "Σπίτι",
   "mob.house_hint": "Πατήστε έναν όροφο για να τον ανοίξετε",
   "mob.k_of_n_on": "{k} από {n} αναμμένα",
   "mob.layout_auto": "Αυτόματα",
   "mob.layout_landscape": "Πάντα οριζόντια",
   "mob.layout_portrait": "Πάντα κάθετα",
+  "mob.menu": "Μενού Home Assistant",
+  "mob.more": "Επικαλύψεις, συσκευές, άτομα",
   "mob.morning": "Καλημέρα",
   "mob.n_attention": {
     "one": "{n} θέλει προσοχή",
@@ -205,6 +210,14 @@
     "one": "{n} δωμάτιο",
     "other": "{n} δωμάτια"
   },
+  "mob.n_shown": {
+    "one": "{n} εμφανίζεται",
+    "other": "{n} εμφανίζονται"
+  },
+  "mob.n_warn": {
+    "one": "{n} προειδοποίηση",
+    "other": "{n} προειδοποιήσεις"
+  },
   "mob.next_room": "Επόμενο δωμάτιο",
   "mob.no_people": "Κανένα άτομο",
   "mob.no_plans": "Δεν υπάρχουν χάρτες ακόμη: σχεδιάστε έναν στον Floorplan Editor.",
@@ -216,6 +229,7 @@
   },
   "mob.offline": "Εκτός σύνδεσης",
   "mob.on_plan": "Εμφάνιση στον χάρτη",
+  "mob.open": "Ανοιχτό",
   "mob.open_n": {
     "one": "{n} ανοιχτό",
     "other": "{n} ανοιχτά"
@@ -225,6 +239,7 @@
   "mob.order_plan": "Σειρά του χάρτη",
   "mob.outside": "έξω",
   "mob.overlays": "Επικαλύψεις",
+  "mob.overlays_sub": "Όλες οι επικαλύψεις και το Home Replay",
   "mob.people": "Άτομα",
   "mob.prev_room": "Προηγούμενο δωμάτιο",
   "mob.quiet": "Ήσυχα",

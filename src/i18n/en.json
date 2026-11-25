@@ -150,11 +150,14 @@
   "mob.cfg_copy_help": "People, room names, look and overlay settings from the first Floorplan card on your dashboards.",
   "mob.cfg_copy_settings": "Use the settings of my Floorplan card",
   "mob.cfg_default_overlay": "Plan shows",
+  "mob.cfg_hide_header": "Hide Home Assistant's top bar on phones",
+  "mob.cfg_hide_help": "Only on this dashboard and while it is open; ☰ at the bottom opens the menu. To edit the dashboard, add ?edit=1 to its address.",
   "mob.cfg_layout": "Layout",
   "mob.cfg_layout_help": "Automatic: the house explorer when a phone is turned sideways.",
   "mob.cfg_room_order": "Room order",
   "mob.climate_to": "{s} to {t}°",
   "mob.devices": "Devices",
+  "mob.door_open": "Door open",
   "mob.evening": "Good evening",
   "mob.floor_down": "Floor below",
   "mob.floor_up": "Floor above",
@@ -172,6 +175,8 @@
   "mob.layout_auto": "Automatic",
   "mob.layout_landscape": "Always landscape",
   "mob.layout_portrait": "Always portrait",
+  "mob.menu": "Home Assistant menu",
+  "mob.more": "Overlays, devices, people",
   "mob.morning": "Good morning",
   "mob.n_attention": {
     "one": "{n} needs a look",
@@ -205,6 +210,14 @@
     "one": "{n} room",
     "other": "{n} rooms"
   },
+  "mob.n_shown": {
+    "one": "{n} shown",
+    "other": "{n} shown"
+  },
+  "mob.n_warn": {
+    "one": "{n} warning",
+    "other": "{n} warnings"
+  },
   "mob.next_room": "Next room",
   "mob.no_people": "No people",
   "mob.no_plans": "No Floorplan plans yet: draw one in the Floorplan Editor.",
@@ -216,6 +229,7 @@
   },
   "mob.offline": "Offline",
   "mob.on_plan": "Show on the plan",
+  "mob.open": "Open",
   "mob.open_n": {
     "one": "{n} open",
     "other": "{n} open"
@@ -225,6 +239,7 @@
   "mob.order_plan": "Plan order",
   "mob.outside": "outside",
   "mob.overlays": "Overlays",
+  "mob.overlays_sub": "Every overlay and Home Replay",
   "mob.people": "People",
   "mob.prev_room": "Previous room",
   "mob.quiet": "Quiet",
