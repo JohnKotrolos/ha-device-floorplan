@@ -69,6 +69,7 @@ export default defineConfig({
         items: [
           { text: "Dashboard card", link: "/reference/card" },
           { text: "Chip card", link: "/reference/chip" },
+          { text: "Mobile card", link: "/reference/mobile" },
           { text: "Entities and attributes", link: "/reference/entities" },
           { text: "Actions, events and blueprint", link: "/reference/automations" },
           { text: "Keyboard shortcuts", link: "/reference/keyboard" },

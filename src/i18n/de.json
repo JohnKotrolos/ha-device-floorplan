@@ -135,6 +135,105 @@
   "lay.rooms": "Raumnamen",
   "layers": "Ebenen",
   "leg.colour_strength": "Farbstärke",
+  "mob.afternoon": "Guten Tag",
+  "mob.alert": "Alarm",
+  "mob.all_closed": "Alles zu",
+  "mob.all_fine": "Alles in Ordnung",
+  "mob.all_off": "Alles aus",
+  "mob.all_online": "Alles online",
+  "mob.back": "Zurück",
+  "mob.battery": "Batterie {n}%",
+  "mob.brightness": "Helligkeit",
+  "mob.cameras": "Kameras",
+  "mob.card_desc": "Dein Zuhause auf dem Handy: Räume, Geräte und Ebenen aus dem Floorplan.",
+  "mob.card_name": "Device Floorplan (Handy)",
+  "mob.cfg_copy_help": "Personen, Raumnamen, Aussehen und Ebenen-Einstellungen der ersten Floorplan-Karte auf deinen Dashboards.",
+  "mob.cfg_copy_settings": "Einstellungen meiner Floorplan-Karte verwenden",
+  "mob.cfg_default_overlay": "Plan zeigt",
+  "mob.cfg_layout": "Layout",
+  "mob.cfg_layout_help": "Automatisch: der Haus-Explorer, wenn das Handy quer gehalten wird.",
+  "mob.cfg_room_order": "Reihenfolge der Räume",
+  "mob.climate_to": "{s} auf {t}°",
+  "mob.devices": "Geräte",
+  "mob.evening": "Guten Abend",
+  "mob.floor_down": "Etage darunter",
+  "mob.floor_up": "Etage darüber",
+  "mob.floors": "Etagen",
+  "mob.g_comfort": "Komfort",
+  "mob.g_lights": "Licht",
+  "mob.g_media": "Geräte & Medien",
+  "mob.g_other": "Sonstiges",
+  "mob.g_security": "Sicherheit",
+  "mob.hide": "Ausblenden",
+  "mob.home": "Zuhause",
+  "mob.house": "Haus",
+  "mob.house_hint": "Tippe auf eine Etage, um sie zu öffnen",
+  "mob.k_of_n_on": "{k} von {n} an",
+  "mob.layout_auto": "Automatisch",
+  "mob.layout_landscape": "Immer quer",
+  "mob.layout_portrait": "Immer hochkant",
+  "mob.morning": "Guten Morgen",
+  "mob.n_attention": {
+    "one": "{n} braucht Aufmerksamkeit",
+    "other": "{n} brauchen Aufmerksamkeit"
+  },
+  "mob.n_devices": {
+    "one": "{n} Gerät",
+    "other": "{n} Geräte"
+  },
+  "mob.n_floors": {
+    "one": "{n} Etage",
+    "other": "{n} Etagen"
+  },
+  "mob.n_home": {
+    "one": "{n} Person zu Hause",
+    "other": "{n} Personen zu Hause"
+  },
+  "mob.n_low": {
+    "one": "{n} Batterie schwach",
+    "other": "{n} Batterien schwach"
+  },
+  "mob.n_offline": {
+    "one": "{n} offline",
+    "other": "{n} offline"
+  },
+  "mob.n_on": {
+    "one": "{n} an",
+    "other": "{n} an"
+  },
+  "mob.n_rooms": {
+    "one": "{n} Raum",
+    "other": "{n} Räume"
+  },
+  "mob.next_room": "Nächster Raum",
+  "mob.no_people": "Keine Personen",
+  "mob.no_plans": "Noch keine Pläne: zeichne einen im Floorplan Editor.",
+  "mob.no_room": "Kein Raum",
+  "mob.nothing": "Nichts hier",
+  "mob.now_n": {
+    "one": "{n} Sache läuft",
+    "other": "{n} Sachen laufen"
+  },
+  "mob.offline": "Offline",
+  "mob.on_plan": "Im Plan zeigen",
+  "mob.open_n": {
+    "one": "{n} offen",
+    "other": "{n} offen"
+  },
+  "mob.order_active": "Aktivste zuerst",
+  "mob.order_alpha": "Alphabetisch",
+  "mob.order_plan": "Reihenfolge im Plan",
+  "mob.outside": "draußen",
+  "mob.overlays": "Ebenen",
+  "mob.people": "Personen",
+  "mob.prev_room": "Vorheriger Raum",
+  "mob.quiet": "Ruhig",
+  "mob.replay_sub": "Sieh, wie es vorhin zu Hause aussah",
+  "mob.rooms": "Räume",
+  "mob.search": "Geräte oder Räume suchen",
+  "mob.see_all": "Alle",
+  "mob.show_plan": "Plan zeigen",
+  "mob.whole_floor": "Ganze Etage",
   "motion.clear": "Keine Bewegung",
   "motion.detected": "Bewegung",
   "n_devices": {

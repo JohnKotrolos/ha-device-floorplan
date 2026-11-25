@@ -183,6 +183,24 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   // ------------------------------------------------------------- render
+  /** 0.13.9.13: a room cut-out: everything around the room dimmed and greyed. */
+  _focusHtml(a) {
+    const ar = this._config.focus_area && (a.areas || {})[this._config.focus_area];
+    if (!ar) return "";
+    const sh = Array.isArray(ar.shape) && ar.shape.length >= 3 ? ar.shape : null;
+    const hole = sh ? `M${sh.map((p) => `${p[0]} ${p[1]}`).join("L")}Z` : `M${ar.x - 6} ${ar.y}a6 6 0 1 0 12 0a6 6 0 1 0 -12 0Z`;
+    return `<svg class="focus" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path fill-rule="evenodd" d="M-200 -200H300V300H-200Z${hole}"/></svg>`;
+  },
+
+  /** 0.13.9.13: show an overlay (the mobile card's tabs). */
+  dfSetOverlay(ov) {
+    if (!ov || ov === this._overlay || !this._config || !this._overlays().includes(ov)) return;
+    this._overlay = ov;
+    this._popup = null;
+    this._menu = false;
+    this._update(true);
+  },
+
   _update(force = false) {
     if (!this._hass || !this._config || !this.shadowRoot) return;
     // Nothing to do while nobody can see it: catch up when visible again (#72).
@@ -404,7 +422,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
-          ${this._tapLayer(pulseH, airH)}${this._picHtml(a)}${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${pulseH}${this._xmasHtml(a)}${this._picHtml(a, "hl")}${this._touchHtml(a)}${this._tvHtml(a)}${airH}${this._barsHtml(a)}${this._applHtml(a)}
+          ${this._focusHtml(a)}${this._tapLayer(pulseH, airH)}${this._picHtml(a)}${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${pulseH}${this._xmasHtml(a)}${this._picHtml(a, "hl")}${this._touchHtml(a)}${this._tvHtml(a)}${airH}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}

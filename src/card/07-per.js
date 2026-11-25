@@ -62,10 +62,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.8.2: space around the plan (+) or trimmed margin (-), % of the image per side: the card's own frame
    *  ("custom"), else the plan's default from the Floorplan Editor. Positions stay relative to the image. */
   _frame(a, ratio) {
-    const cf = this._config.frame || {};
+    const cf = this._focusFrame(a) || this._config.frame || {};
     const f = cf.mode === "custom" ? cf : (a && a.frame) || {};
     // House frames (several floors) can be larger than 60 %: a big ground floor around a small upper floor.
-    const v = (k) => Math.max(-45, Math.min(500, Number(f[k]) || 0));
+    const v = (k) => Math.max(cf.focus ? -99 : -45, Math.min(500, Number(f[k]) || 0));
     const [t, r, b, l] = ["t", "r", "b", "l"].map(v);
     const W = 100 + l + r;
     const H = 100 + t + b;
@@ -77,6 +77,27 @@ Object.assign(DeviceFloorplanCard.prototype, {
       crop: t < 0 || r < 0 || b < 0 || l < 0,
       style: `position:absolute;width:${(10000 / W).toFixed(3)}%;height:${(10000 / H).toFixed(3)}%;left:${((l * 100) / W).toFixed(3)}%;top:${((t * 100) / H).toFixed(3)}%;aspect-ratio:auto`,
     };
+  },
+
+  /** 0.13.9.13 (mobile card): `focus_area`: the plan cut to one room, its box + about 10 % per side
+   *  (0.6–1.5 m on a measured plan), never padded beyond the picture. A room without a shape: around its pin. */
+  _focusFrame(a) {
+    const id = this._config.focus_area;
+    const ar = id && a && (a.areas || {})[id];
+    if (!ar) return null;
+    const sh = Array.isArray(ar.shape) && ar.shape.length >= 3 ? ar.shape : null;
+    const xs = sh ? sh.map((p) => p[0]) : [ar.x - 8, ar.x + 8];
+    const ys = sh ? sh.map((p) => p[1]) : [ar.y - 8, ar.y + 8];
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const marg = (size, mpp, px) => {
+      const m = size * 0.1;
+      const perPct = Number(mpp) > 0 && Number(px) > 0 ? (Number(mpp) * Number(px)) / 100 : 0; // metres per 1 %
+      return perPct ? Math.min(Math.max(m, 0.6 / perPct), 1.5 / perPct) : Math.max(m, 2);
+    };
+    const mx = marg(x1 - x0, a.metres_per_px_x, a.image_width);
+    const my = marg(y1 - y0, a.metres_per_px_y || a.metres_per_px_x, a.image_height);
+    const cut = (v) => -Math.max(0, Math.min(99, v));
+    return { mode: "custom", focus: true, t: cut(y0 - my), b: cut(100 - y1 - my), l: cut(x0 - mx), r: cut(100 - x1 - mx) };
   },
 
   /** 0.8.1: the readings a marker shows when nothing is picked under "Also show": its lines on the plan, else

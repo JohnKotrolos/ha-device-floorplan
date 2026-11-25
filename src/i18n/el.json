@@ -135,6 +135,105 @@
   "lay.rooms": "Ονόματα δωματίων",
   "layers": "Στρώσεις",
   "leg.colour_strength": "Ένταση χρώματος",
+  "mob.afternoon": "Καλό απόγευμα",
+  "mob.alert": "Συναγερμός",
+  "mob.all_closed": "Όλα κλειστά",
+  "mob.all_fine": "Όλα εντάξει",
+  "mob.all_off": "Όλα σβηστά",
+  "mob.all_online": "Όλα συνδεδεμένα",
+  "mob.back": "Πίσω",
+  "mob.battery": "Μπαταρία {n}%",
+  "mob.brightness": "Φωτεινότητα",
+  "mob.cameras": "Κάμερες",
+  "mob.card_desc": "Το σπίτι σας στο κινητό: δωμάτια, συσκευές και επικαλύψεις από το Floorplan.",
+  "mob.card_name": "Device Floorplan (κινητό)",
+  "mob.cfg_copy_help": "Άτομα, ονόματα δωματίων, εμφάνιση και ρυθμίσεις επικαλύψεων από την πρώτη κάρτα Floorplan στους πίνακές σας.",
+  "mob.cfg_copy_settings": "Χρήση των ρυθμίσεων της κάρτας Floorplan",
+  "mob.cfg_default_overlay": "Ο χάρτης δείχνει",
+  "mob.cfg_layout": "Διάταξη",
+  "mob.cfg_layout_help": "Αυτόματα: η εξερεύνηση του σπιτιού όταν γυρίζετε το κινητό οριζόντια.",
+  "mob.cfg_room_order": "Σειρά δωματίων",
+  "mob.climate_to": "{s} στους {t}°",
+  "mob.devices": "Συσκευές",
+  "mob.evening": "Καλησπέρα",
+  "mob.floor_down": "Όροφος από κάτω",
+  "mob.floor_up": "Όροφος από πάνω",
+  "mob.floors": "Όροφοι",
+  "mob.g_comfort": "Άνεση",
+  "mob.g_lights": "Φώτα",
+  "mob.g_media": "Συσκευές & πολυμέσα",
+  "mob.g_other": "Άλλα",
+  "mob.g_security": "Ασφάλεια",
+  "mob.hide": "Απόκρυψη",
+  "mob.home": "Σπίτι",
+  "mob.house": "Σπίτι",
+  "mob.house_hint": "Πατήστε έναν όροφο για να τον ανοίξετε",
+  "mob.k_of_n_on": "{k} από {n} αναμμένα",
+  "mob.layout_auto": "Αυτόματα",
+  "mob.layout_landscape": "Πάντα οριζόντια",
+  "mob.layout_portrait": "Πάντα κάθετα",
+  "mob.morning": "Καλημέρα",
+  "mob.n_attention": {
+    "one": "{n} θέλει προσοχή",
+    "other": "{n} θέλουν προσοχή"
+  },
+  "mob.n_devices": {
+    "one": "{n} συσκευή",
+    "other": "{n} συσκευές"
+  },
+  "mob.n_floors": {
+    "one": "{n} όροφος",
+    "other": "{n} όροφοι"
+  },
+  "mob.n_home": {
+    "one": "{n} άτομο στο σπίτι",
+    "other": "{n} άτομα στο σπίτι"
+  },
+  "mob.n_low": {
+    "one": "{n} χαμηλή μπαταρία",
+    "other": "{n} χαμηλές μπαταρίες"
+  },
+  "mob.n_offline": {
+    "one": "{n} εκτός σύνδεσης",
+    "other": "{n} εκτός σύνδεσης"
+  },
+  "mob.n_on": {
+    "one": "{n} ενεργό",
+    "other": "{n} ενεργά"
+  },
+  "mob.n_rooms": {
+    "one": "{n} δωμάτιο",
+    "other": "{n} δωμάτια"
+  },
+  "mob.next_room": "Επόμενο δωμάτιο",
+  "mob.no_people": "Κανένα άτομο",
+  "mob.no_plans": "Δεν υπάρχουν χάρτες ακόμη: σχεδιάστε έναν στον Floorplan Editor.",
+  "mob.no_room": "Χωρίς δωμάτιο",
+  "mob.nothing": "Τίποτα εδώ",
+  "mob.now_n": {
+    "one": "{n} πράγμα σε εξέλιξη",
+    "other": "{n} πράγματα σε εξέλιξη"
+  },
+  "mob.offline": "Εκτός σύνδεσης",
+  "mob.on_plan": "Εμφάνιση στον χάρτη",
+  "mob.open_n": {
+    "one": "{n} ανοιχτό",
+    "other": "{n} ανοιχτά"
+  },
+  "mob.order_active": "Πιο ενεργά πρώτα",
+  "mob.order_alpha": "Αλφαβητικά",
+  "mob.order_plan": "Σειρά του χάρτη",
+  "mob.outside": "έξω",
+  "mob.overlays": "Επικαλύψεις",
+  "mob.people": "Άτομα",
+  "mob.prev_room": "Προηγούμενο δωμάτιο",
+  "mob.quiet": "Ήσυχα",
+  "mob.replay_sub": "Δείτε πώς ήταν το σπίτι νωρίτερα",
+  "mob.rooms": "Δωμάτια",
+  "mob.search": "Αναζήτηση συσκευών ή δωματίων",
+  "mob.see_all": "Όλα",
+  "mob.show_plan": "Εμφάνιση χάρτη",
+  "mob.whole_floor": "Όλος ο όροφος",
   "motion.clear": "Καμία κίνηση",
   "motion.detected": "Κίνηση",
   "n_devices": {

@@ -135,6 +135,105 @@
   "lay.rooms": "Room names",
   "layers": "Layers",
   "leg.colour_strength": "Colour strength",
+  "mob.afternoon": "Good afternoon",
+  "mob.alert": "Alert",
+  "mob.all_closed": "All closed",
+  "mob.all_fine": "All fine",
+  "mob.all_off": "All off",
+  "mob.all_online": "All online",
+  "mob.back": "Back",
+  "mob.battery": "Battery {n}%",
+  "mob.brightness": "Brightness",
+  "mob.cameras": "Cameras",
+  "mob.card_desc": "Your home on the phone: rooms, devices and overlays from the Floorplan.",
+  "mob.card_name": "Device Floorplan (mobile)",
+  "mob.cfg_copy_help": "People, room names, look and overlay settings from the first Floorplan card on your dashboards.",
+  "mob.cfg_copy_settings": "Use the settings of my Floorplan card",
+  "mob.cfg_default_overlay": "Plan shows",
+  "mob.cfg_layout": "Layout",
+  "mob.cfg_layout_help": "Automatic: the house explorer when a phone is turned sideways.",
+  "mob.cfg_room_order": "Room order",
+  "mob.climate_to": "{s} to {t}°",
+  "mob.devices": "Devices",
+  "mob.evening": "Good evening",
+  "mob.floor_down": "Floor below",
+  "mob.floor_up": "Floor above",
+  "mob.floors": "Floors",
+  "mob.g_comfort": "Comfort",
+  "mob.g_lights": "Lights",
+  "mob.g_media": "Appliances & media",
+  "mob.g_other": "Other",
+  "mob.g_security": "Security",
+  "mob.hide": "Hide",
+  "mob.home": "Home",
+  "mob.house": "House",
+  "mob.house_hint": "Tap a floor to open it",
+  "mob.k_of_n_on": "{k} of {n} on",
+  "mob.layout_auto": "Automatic",
+  "mob.layout_landscape": "Always landscape",
+  "mob.layout_portrait": "Always portrait",
+  "mob.morning": "Good morning",
+  "mob.n_attention": {
+    "one": "{n} needs a look",
+    "other": "{n} need a look"
+  },
+  "mob.n_devices": {
+    "one": "{n} device",
+    "other": "{n} devices"
+  },
+  "mob.n_floors": {
+    "one": "{n} floor",
+    "other": "{n} floors"
+  },
+  "mob.n_home": {
+    "one": "{n} person home",
+    "other": "{n} people home"
+  },
+  "mob.n_low": {
+    "one": "{n} low battery",
+    "other": "{n} low batteries"
+  },
+  "mob.n_offline": {
+    "one": "{n} offline",
+    "other": "{n} offline"
+  },
+  "mob.n_on": {
+    "one": "{n} on",
+    "other": "{n} on"
+  },
+  "mob.n_rooms": {
+    "one": "{n} room",
+    "other": "{n} rooms"
+  },
+  "mob.next_room": "Next room",
+  "mob.no_people": "No people",
+  "mob.no_plans": "No Floorplan plans yet: draw one in the Floorplan Editor.",
+  "mob.no_room": "No room",
+  "mob.nothing": "Nothing here",
+  "mob.now_n": {
+    "one": "{n} thing going on",
+    "other": "{n} things going on"
+  },
+  "mob.offline": "Offline",
+  "mob.on_plan": "Show on the plan",
+  "mob.open_n": {
+    "one": "{n} open",
+    "other": "{n} open"
+  },
+  "mob.order_active": "Most active first",
+  "mob.order_alpha": "Alphabetical",
+  "mob.order_plan": "Plan order",
+  "mob.outside": "outside",
+  "mob.overlays": "Overlays",
+  "mob.people": "People",
+  "mob.prev_room": "Previous room",
+  "mob.quiet": "Quiet",
+  "mob.replay_sub": "See how the home looked earlier",
+  "mob.rooms": "Rooms",
+  "mob.search": "Search devices or rooms",
+  "mob.see_all": "See all",
+  "mob.show_plan": "Show the plan",
+  "mob.whole_floor": "Whole floor",
   "motion.clear": "Clear",
   "motion.detected": "Detected",
   "n_devices": {

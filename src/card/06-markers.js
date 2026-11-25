@@ -8,7 +8,9 @@ Object.assign(DeviceFloorplanCard.prototype, {
     this._cx = this._ctx(a);
     this._skippedUnknown = 0;
     const name0 = (item) => this._dev(item.id).name || item.name;
+    const fa = this._config.focus_area; // 0.13.9.13: a room cut-out shows only that room's devices
     for (const item of this._items(a)) {
+      if (fa && this._roomOf(item, a) !== fa && !(item.area_id === fa && !this._roomOf(item, a))) continue;
       const isSel = this._pick && this._selId === item.id;
       if (this._hidden(item, ov)) {
         // 0.7.5: Edit markers: a selected marker hidden here is drawn faded, so changes can be seen.
