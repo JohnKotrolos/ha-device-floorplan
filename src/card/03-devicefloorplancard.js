@@ -58,6 +58,7 @@ class DeviceFloorplanCard extends HTMLElement {
 
   set hass(hass) {
     dfLangOf(hass); // 0.14 L1: texts in this user's language
+    if (hass && hass.entities) dfcReg = hass.entities;
     const first = !this._hass;
     this._live = hass;
     // 0.11.1 Home Replay: while replaying, the card sees Home Assistant as it was at the replay time.

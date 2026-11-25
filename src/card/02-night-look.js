@@ -708,10 +708,23 @@ function tapKind(kind) {
   return "other";
 }
 
+// 0.13.9.17 #70: Home Assistant's entity registry (hass.entities), kept by every card: entity categories
+// are there, never in a state's attributes.
+let dfcReg = null;
+const dfcCat = (eid) => (dfcReg && dfcReg[eid] && dfcReg[eid].entity_category) || null;
+const dfcHidden = (eid) => !!(dfcReg && dfcReg[eid] && dfcReg[eid].hidden);
+
+/** 0.13.9.17 #70: a reading no real room has: humidity 0 %, CO₂ / particles / VOC / NO₂ exactly 0 ("no such sensor"). */
+function impossibleReading(eid, st) {
+  if (!st || !num(st.state) || Number(st.state) !== 0) return false;
+  const dc = String(st.attributes.device_class || "");
+  return /^(humidity|carbon_dioxide|pm1|pm25|pm10|volatile_organic_compounds(_parts)?|nitrogen_dioxide|aqi)$/.test(dc) || /voc|co2/i.test(eid);
+}
+
 /** Room temperature, not the chip temperature of a switch or contact sensor. */
 function ambientTemp(eid, st, item) {
   if (/(device_temperature|internal_temperature|cpu_temperature|processor_temperature|chip_temperature|_temperature_internal)/i.test(eid)) return false;
-  if (st && st.attributes && st.attributes.entity_category === "diagnostic") return false;
+  if (dfcCat(eid) === "diagnostic" || (st && st.attributes && st.attributes.entity_category === "diagnostic")) return false;
   if (item.standalone) return true;
   // 0.12.9: no computers (a NAS's or printer's temperature is its own); "Use its temperature in Comfort" adds one.
   return ["sensors", "climate", "motion"].includes(item.group);

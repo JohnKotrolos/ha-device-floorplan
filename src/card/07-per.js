@@ -150,7 +150,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const hass = this._hass;
     const ks = (e) => kindOf(e, hass.states[e]);
     if (key === "temperature") return allowed.find((e) => ks(e) === "temperature" && (ambientTemp(e, hass.states[e], item) || this._dev(item.id).comfort === true)) || allowed.find((e) => domainOf(e) === "climate" && hass.states[e] && hass.states[e].attributes.current_temperature != null) || null;
-    if (key === "humidity") return allowed.find((e) => ks(e) === "humidity") || allowed.find((e) => domainOf(e) === "climate" && hass.states[e] && Number(hass.states[e].attributes.current_humidity) > 0) || null;
+    if (key === "humidity") return allowed.find((e) => ks(e) === "humidity" && !impossibleReading(e, hass.states[e])) || allowed.find((e) => domainOf(e) === "climate" && hass.states[e] && Number(hass.states[e].attributes.current_humidity) > 0) || null;
     if (key === "battery") return (item.roles && item.roles.battery && allowed.includes(item.roles.battery) && item.roles.battery) || allowed.find((e) => ks(e) === "battery") || null;
     const pick = allowed.filter((e) => LIVE_KEY[ks(e)] === key && !this._aux(e)); // 0.12.6: no setting switches
     if (item.main_entity && pick.includes(item.main_entity)) return item.main_entity;
@@ -329,11 +329,11 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const st = hass.states[eid];
       const k = kindOf(eid, st);
       if (k === "temperature" && (ambientTemp(eid, st, item) || this._dev(item.id).comfort === true)) temps.push(eid);
-      if (k === "humidity" && opts.humidity !== false) hums.push(eid);
+      if (k === "humidity" && opts.humidity !== false && !impossibleReading(eid, st) && dfcCat(eid) !== "diagnostic") hums.push(eid);
     }
     const clim = allowed.find((eid) => domainOf(eid) === "climate");
     if (clim && opts.climate !== false && !item.bond) {
-      const spec = this._climateChip(item, name, clim, temps[0], hums[0] || allowed.find((e) => kindOf(e, hass.states[e]) === "humidity"));
+      const spec = this._climateChip(item, name, clim, temps[0], hums[0] || allowed.find((e) => kindOf(e, hass.states[e]) === "humidity" && !impossibleReading(e, hass.states[e])));
       if (spec) return [spec];
     }
     if (!temps.length && !hums.length) return [];
@@ -402,7 +402,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       // #98: ACs and thermostats count with the temperature / humidity they report themselves.
       const clim = ents.filter((e) => domainOf(e) === "climate" && hass.states[e]);
       const temps = [...amb, ...clim.filter((e) => hass.states[e].attributes.current_temperature != null)];
-      const hums = [...kindsOf(ents, ["humidity"]), ...clim.filter((e) => Number(hass.states[e].attributes.current_humidity) > 0).map((e) => `${e}#h`)];
+      const hums = [...kindsOf(ents, ["humidity"]).filter((e) => !impossibleReading(e, hass.states[e])), ...clim.filter((e) => Number(hass.states[e].attributes.current_humidity) > 0).map((e) => `${e}#h`)];
       if (!temps.length && !hums.length) return [];
       if (q) return [{ key: item.id }];
       const lines = [];

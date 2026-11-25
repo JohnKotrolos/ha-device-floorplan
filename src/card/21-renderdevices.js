@@ -595,14 +595,14 @@ Object.assign(DeviceFloorplanCardEditor.prototype, {
     } finally {
       eng._overlay = ov0;
     }
-    const W = { "switch all": "switches all its lamps", "switch on / off": "switches it on / off", details: "opens its details", "info card": "opens its info card", graphs: "opens its graphs", "readings with history": "opens its readings with history", "open a dashboard": "opens a dashboard", "a popup card": "opens a popup card", nothing: "nothing", "robot panel": "opens the robot panel", "network info": "shows its network info" };
+    const W = { "switch all": "switches all its lamps", "switch on / off": "switches it on / off", details: "opens its details", "info card": "opens its info card", graphs: "opens its graphs", "readings with history": "opens its readings with history", "open a dashboard": "opens a dashboard", "a popup card": "opens a popup card", "press a button": "presses a button", nothing: "nothing", "robot panel": "opens the robot panel", "network info": "shows its network info" };
     const say = (w) => W[w] || w;
     const mk = (key, pre, opts, cur, words, isHold) => {
       const box = document.createElement("div");
       const src = robot && !isHold ? dev() : { ...dev(), ...p0 };
       const save = (act, v = {}) => {
         const pick = (k, dflt) => (k in v ? v[k] : src[`${pre}${k}`] ?? dflt);
-        const extra = { [`${pre}nav`]: act === "navigate" ? pick("nav", "") : "", [`${pre}popup_title`]: act === "popup" ? pick("popup_title", "") : "", [`${pre}popup_card`]: act === "popup" ? pick("popup_card", null) : null };
+        const extra = { [`${pre}nav`]: act === "navigate" ? pick("nav", "") : "", [`${pre}popup_title`]: act === "popup" ? pick("popup_title", "") : "", [`${pre}popup_card`]: act === "popup" ? pick("popup_card", null) : null, [`${pre}press`]: act === "press" ? pick("press", "") : "", [`${pre}ask`]: act === "press" && pick("ask", true) === false ? false : null };
         if (robot && !isHold) this._saveDev(id, { [key]: act, ...extra });
         else this._savePer(id, ov, { [key]: act, ...extra });
       };
@@ -618,13 +618,18 @@ Object.assign(DeviceFloorplanCardEditor.prototype, {
         const schema = cur === "navigate" ? [{ name: "nav", selector: { navigation: {} } }] : [{ name: "popup_title", selector: { text: {} } }, { name: "popup_card", selector: { object: {} } }];
         box.appendChild(this._form(schema, { nav: src[`${pre}nav`] || "", popup_title: src[`${pre}popup_title`] || "", popup_card: src[`${pre}popup_card`] }, { nav: "Dashboard to open", popup_title: "Popup title", popup_card: "Card in the popup (YAML, like any card)" }, (v) => save(cur, v)));
       }
+      // 0.13.9.17 #63: which button, and ask first (on by default).
+      if (cur === "press") {
+        const ents = [...new Set([...(item.entities || []), ...(item.allEntities || [])])].filter((e) => ["button", "input_button"].includes(domainOf(e)));
+        box.appendChild(this._form([{ name: "press", selector: { entity: { domain: ["button", "input_button"] } } }, { name: "ask", selector: { boolean: {} } }], { press: src[`${pre}press`] || "", ask: src[`${pre}ask`] !== false }, { press: `Button (empty: ${ents.filter((e) => !/_identify$/.test(e))[0] || "the device's first button"})`, ask: "Ask first" }, (v) => save(cur, v)));
+      }
       sec.appendChild(row(isHold ? "Long press" : robot ? "Tap (all overlays)" : "Tap", "", !cur, box, true));
     };
     const tcur = (robot ? dev().tap : p0.tap || dev().tap) || "";
     const topts = robot ? [{ value: "default", label: "" }, ...TAP_OPTIONS.filter((o) => !["toggle", "readings"].includes(o.value))] : [{ value: "default", label: "" }, ...TAP_OPTIONS];
     mk("tap", "", topts, tcur, tapW, false);
     const hcur = p0.hold || dev().hold || "";
-    const hopts = [{ value: "default", label: "" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }];
+    const hopts = [{ value: "default", label: "" }, ...HOLD_OPTIONS.filter((o) => o.value !== "default"), { value: "navigate", label: "Open a dashboard" }, { value: "popup", label: "Popup with a card (browser_mod)" }, { value: "press", label: "Press a button" }];
     mk("hold", "hold_", hopts, hcur, holdW, true);
   },
 

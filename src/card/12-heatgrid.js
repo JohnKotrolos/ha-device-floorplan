@@ -286,13 +286,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
         r.seen.add(e);
         if (!live(s)) continue;
         const k = kindOf(e, s);
+        // 0.13.9.17 #70: the card's room-climate rule (no router / chip / diagnostic readings, no impossible zeros).
+        if (dfcCat(e) === "diagnostic" || impossibleReading(e, s)) continue;
         const aq = typeof dfmAir === "function" ? dfmAir(e, s) : null; // 0.13.9.16: air quality (mobile)
         if (aq) r.air.push(aq.r);
-        if (k === "temperature" && num(s.state)) r.t.push(Number(s.state));
+        if (k === "temperature" && num(s.state) && (ambientTemp(e, s, item) || this._dev(item.id).comfort === true)) r.t.push(Number(s.state));
         if (k === "humidity" && num(s.state)) r.h.push(Number(s.state));
         if (k === "climate") {
           if (num(s.attributes.current_temperature)) r.t.push(Number(s.attributes.current_temperature));
-          if (num(s.attributes.current_humidity)) r.h.push(Number(s.attributes.current_humidity));
+          if (Number(s.attributes.current_humidity) > 0) r.h.push(Number(s.attributes.current_humidity));
         }
       }
     }

@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.16";
+const VERSION = "0.13.9.17";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -4992,13 +4992,25 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         }
         return;
       }
-      if (!this._vp || !this._vp.contains(e.composedPath()[0])) return;
-      if (e.target.closest && e.target.closest(".mbox, .refpop, .stackpop, .ipop, .lmenu")) return;
+      // 0.13.9.17 #62: a pinch never zooms the page: it zooms the plan for the whole gesture (even when the
+      // pointer moves over a marker box or a popup), and does nothing elsewhere in the editor.
+      const pinch = e.ctrlKey || e.metaKey;
+      const now = Date.now();
+      const onVp = !!(this._vp && this._vp.contains(e.composedPath()[0]));
+      if (pinch) {
+        e.preventDefault();
+        if (!(this._pinchT && now - this._pinchT < 250)) this._pinchVp = onVp; // a new gesture: where it starts
+        this._pinchT = now;
+        if (!this._vp || !this._pinchVp) return;
+      } else {
+        this._pinchT = 0;
+        if (!onVp) return;
+        if (e.target.closest && e.target.closest(".mbox, .refpop, .stackpop, .ipop, .lmenu")) return;
+      }
       const s = this.s;
       const r = this._vp.getBoundingClientRect();
       const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
+      if (pinch) {
         const vx = ((e.clientX - r.left) / r.width) * 100;
         const vy = ((e.clientY - r.top) / r.height) * 100;
         this._zoomTo(this._zt() * Math.exp(-e.deltaY * k * 0.01), vx, vy);

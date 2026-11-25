@@ -20,6 +20,7 @@ const DFM_AIR = [
 /** An air reading of an entity: { k, label, v, unit, r: 0 good | 1 moderate | 2 poor } or null. */
 function dfmAir(eid, st) {
   if (!st || !num(st.state) || !eid.startsWith("sensor.")) return null;
+  if (impossibleReading(eid, st) || dfcCat(eid) === "diagnostic") return null; // 0.13.9.17 #70
   const dc = String(st.attributes.device_class || "");
   const key = dc || (/voc/i.test(eid) || /voc/i.test(st.attributes.friendly_name || "") ? "voc" : "");
   const hit = key && DFM_AIR.find(([re]) => re.test(key));
@@ -31,6 +32,8 @@ function dfmAir(eid, st) {
   v = Math.round(v * 10) / 10;
   return { k: hit[1], label: hit[1], v, unit: st.attributes.unit_of_measurement || "", r };
 }
+// #67: kinds whose rows say when they last changed (not readings: they change all the time).
+const DFM_AGO = new Set(["opening", "motion", "light", "switch", "fan", "cover", "lock", "media", "appliance", "safety", "binary", "alarm", "camera"]);
 const dfmGroupLabel = (g) => dfT(`mob.g_${g}`);
 
 // Device categories (Floorplan Editor) → the room page's groups; "sensors" go by what they measure.
@@ -40,10 +43,13 @@ const DFM_ALARM_DC = new Set(["smoke", "gas", "moisture", "carbon_monoxide", "he
 const DFM_NOT_HOUSE = new Set(["appliances", "media", "moving", "computers"]);
 
 /** What a placed device is and does right now, from its entities and its category. */
-function dfmInfo(hass, item) {
+function dfmInfo(hass, item, opts = {}) {
   const S = hass.states;
-  const ents = [...new Set([item.main_entity, ...(item.allEntities || item.entities || [])])].filter((e) => e && S[e]);
-  const kinds = ents.map((e) => [e, kindOf(e, S[e])]);
+  // 0.13.9.17 #61: an entity hidden in HA says nothing about the device (unless it is the one chosen as main).
+  const ents = [...new Set([item.main_entity, ...(item.allEntities || item.entities || [])])].filter((e) => e && S[e] && (e === item.main_entity || !dfcHidden(e)));
+  // 0.13.9.17 #70: the card's room-climate rule: no router / chip / diagnostic temperatures, no impossible readings.
+  const roomOk = (e, k) => (k === "temperature" ? ambientTemp(e, S[e], item) || opts.comfort === true : k === "humidity" ? !impossibleReading(e, S[e]) && dfcCat(e) !== "diagnostic" : true);
+  const kinds = ents.map((e) => [e, kindOf(e, S[e])]).filter(([e, k]) => roomOk(e, k));
   const find = (...ks) => kinds.find((x) => ks.includes(x[1]));
   const mk = item.main_entity && S[item.main_entity] ? kindOf(item.main_entity, S[item.main_entity]) : null;
   const pick = (k) => (mk === k ? [item.main_entity, k] : find(k));
@@ -111,6 +117,7 @@ function dfmInfo(hass, item) {
   const house = !DFM_NOT_HOUSE.has(cat) && g !== "media" && !thing;
   const opens = kinds.filter(([e, k]) => k === "opening" && S[e].state === "on").map(([e]) => e);
   const open = house ? opens : [];
+  const nOpen = house ? kinds.filter(([, k]) => k === "opening").length : 0; // #64: the house's doors / windows on this device
   const doorOpen = !house && opens.length > 0;
   const alarm = kinds.filter(([e, k]) => (k === "safety" && DFM_ALARM_DC.has(dcOf(e)) && S[e].state === "on") || (k === "alarm" && S[e].state === "triggered")).map(([e]) => e);
   const warn = kinds.filter(([e, k]) => S[e].state === "on" && ((k === "safety" && !DFM_ALARM_DC.has(dcOf(e))) || (k === "binary" && dcOf(e) === "problem"))).map(([e]) => e);
@@ -125,16 +132,18 @@ function dfmInfo(hass, item) {
     if (k === "humidity" && num(s.state)) hums.push(Number(s.state));
     if (k === "climate") {
       if (num(s.attributes.current_temperature)) temps.push(Number(s.attributes.current_temperature));
-      if (num(s.attributes.current_humidity)) hums.push(Number(s.attributes.current_humidity));
+      if (Number(s.attributes.current_humidity) > 0) hums.push(Number(s.attributes.current_humidity));
     }
   }
+  // #73: a camera with no sensor of its own lives in Cameras only, not in the Security lists.
+  const camOnly = ents.some((e) => domainOf(e) === "camera") && !kinds.some(([, k]) => ["opening", "lock", "alarm", "safety", "motion"].includes(k));
   const air = ents.map((e) => dfmAir(e, S[e])).filter(Boolean);
   const bat = kinds.find(([e, k]) => k === "battery" && num(S[e].state));
   const sig = kinds.find(([, k]) => k === "signal");
   const pw = ents.map((e) => powerW(S[e])).filter((v) => v != null);
   const attention = open.length + alarm.length; // #31: offline is a small amber badge, not red
   return {
-    item, g, cat, lead, st, lk, on, open, doorOpen, alarm, warn, presence, offline, temps, hums, ents, attention, air,
+    item, g, cat, lead, st, lk, on, camOnly, nOpen, open, doorOpen, alarm, warn, presence, offline, temps, hums, ents, attention, air,
     airR: air.length ? Math.max(...air.map((x) => x.r)) : null,
     battery: bat ? Number(S[bat[0]].state) : null, batEnt: bat ? bat[0] : null, sigEnt: sig ? sig[0] : null,
     power: pw.length ? pw.reduce((x, y) => x + y, 0) : null,
@@ -217,6 +226,7 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   set hass(hass) {
     dfLangOf(hass);
+    if (hass && hass.entities) dfcReg = hass.entities;
     this.toggleAttribute("dark", !!(hass.themes && hass.themes.darkMode));
     const first = !this._hass;
     this._hass = hass;
@@ -234,6 +244,8 @@ class DeviceFloorplanMobile extends HTMLElement {
   }
 
   connectedCallback() {
+    // #67: "… minutes ago" stays true: one quiet pass a minute (the usual guards: never while touching / scrolling).
+    if (!this._tick) this._tick = setInterval(() => this._kick(), 60000);
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this.shadowRoot.addEventListener("click", (e) => this._click(e));
@@ -252,6 +264,8 @@ class DeviceFloorplanMobile extends HTMLElement {
   }
 
   disconnectedCallback() {
+    clearInterval(this._tick);
+    this._tick = null;
     window.removeEventListener("resize", this._onRot);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
     this._hideHdr(true);
@@ -300,7 +314,6 @@ class DeviceFloorplanMobile extends HTMLElement {
   // ------------------------------------------------------------- the model (floors, rooms, items)
   _model() {
     const hass = this._hass;
-    const b = this._base || {};
     // #30: the plans that are floors (a level set in the Floorplan Editor), unless the card names its plans.
     const want = Array.isArray(this._config.plans) && this._config.plans.length ? this._config.plans : null;
     const all = planSensors(hass);
@@ -323,7 +336,7 @@ class DeviceFloorplanMobile extends HTMLElement {
         const key = item.id.startsWith("bond:") ? `${f.id}|${item.id}` : item.id;
         if (seen.has(key) && !item.x && !item.px) continue;
         seen.add(key);
-        const info = dfmInfo(hass, item);
+        const info = dfmInfo(hass, item, { comfort: h._dev(item.id).comfort === true });
         info.floor = f.id;
         // The overlays this device belongs to, by the Floorplan card's own rules and the user's settings (#25),
         // and the ones that show it right now.
@@ -498,10 +511,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       return;
     }
     // #22: Home starts on the main floor: the floor (a plan with a level) with the most devices; ties: the ground floor.
-    if (!s.floor || !m.floors.some((f) => f.id === s.floor)) {
-      const cand = m.floors.filter((f) => Number.isFinite(f.level));
-      s.floor = (cand.length ? cand : m.floors).map((f) => [f, m.items.filter((x) => x.floor === f.id).length]).sort((p, q) => q[1] - p[1] || (q[0].level === 0) - (p[0].level === 0))[0][0].id;
-    }
+    if (!s.floor || !m.floors.some((f) => f.id === s.floor)) s.floor = this._mainFloor(m);
     if (s.room && !m.rooms.some((r) => r.id === s.room && r.floor === s.floor)) s.room = null;
     if (s.page === "room" && !s.room) s.page = "home";
     const land = this._land();
@@ -662,11 +672,14 @@ class DeviceFloorplanMobile extends HTMLElement {
     const path = e.composedPath();
     const inBox = path.some((n) => n && n.classList && n.classList.contains("box"));
     if (!inBox) return; // the card's own buttons and menus
+    if (path.some((n) => n && n.classList && n.classList.contains("pop"))) return; // #63: the card's own popup (Press? · Cancel)
     if (mode === "room" || mode === "landroom") {
       const k = path.find((n) => n && n.dataset && n.dataset.k);
       this._stop(e);
       const sp = k && el._specs && el._specs.get(k.dataset.k);
       const eid = sp && (sp.eid || (sp.ents || [])[0] || (sp.item && sp.item.main_entity));
+      // #63: a marker set to "Press a button" presses it here too (asking first, in the card's own popup).
+      if (sp && sp.item && el._tapAction(sp) === "press") return el._runAction(sp, "press");
       if (eid) this._more(eid);
       return;
     }
@@ -730,6 +743,12 @@ class DeviceFloorplanMobile extends HTMLElement {
       s.floor = n.id;
       this._kick(true);
     }
+  }
+
+  /** #22: the main floor: the floor (a plan with a level) with the most devices; ties: the ground floor. */
+  _mainFloor(m) {
+    const cand = m.floors.filter((f) => Number.isFinite(f.level));
+    return (cand.length ? cand : m.floors).map((f) => [f, m.items.filter((x) => x.floor === f.id).length]).sort((p, q) => q[1] - p[1] || (q[0].level === 0) - (p[0].level === 0))[0][0].id;
   }
 
   // ------------------------------------------------------------- navigation
@@ -800,18 +819,21 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (a === "house") return this._go({ page: "house", room: null });
     if (a === "home") {
       if (s.page !== "home" && s.page !== "house") return this._go({ page: "home", room: null });
-      this._sheet = this._m.floors.length > 1 ? { step: "floors" } : { step: "rooms", floor: s.floor };
+      if (this._m.floors.length < 2) return; // #71: one floor: Home is already it
+      this._sheet = { step: "floors" };
       this._freeze = true;
       this._frozen = null;
       return this._kick(true);
     }
+    // #71: a floor picked in the sheet: Home shows that floor (its plan, rooms and values).
     if (a === "sheet-floor") {
-      this._sheet = { step: "rooms", floor: v };
-      this._frozen = null;
-      return this._kick(true);
+      this._freeze = false;
+      return this._go({ page: "home", floor: v, room: null });
     }
-    if (a === "sheet-back") {
-      this._sheet = { step: "floors" };
+    if (a === "items") {
+      this._sheet = { step: "items", floor: s.floor, kind: v, title: { open: dfT("mob.openings"), cover: dfT("mob.shutters"), alarm: dfT("mob.alert") }[v] || "" };
+      this._freeze = true;
+      this._frozen = null;
       return this._kick(true);
     }
     if (a === "close") {
@@ -819,7 +841,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._freeze = false;
       return this._kick(true);
     }
-    if (a === "floor") return this._go({ page: "rooms", floor: v, room: null });
+    if (a === "floor") return this._go({ page: this._land() ? "rooms" : "home", floor: v, room: null });
     if (a === "room") {
       const [f, r] = v.split("|");
       this._freeze = false;
@@ -954,7 +976,75 @@ class DeviceFloorplanMobile extends HTMLElement {
       const tg = st.attributes.temperature;
       if (num(tg)) s = dfT("mob.climate_to", { s, t: tg });
     }
+    // #66: an AC that is off still says the room's temperature.
+    if (x.lk === "climate" && st.state === "off" && num(st.attributes.current_temperature)) s += ` · ${Math.round(Number(st.attributes.current_temperature) * 10) / 10}°`;
     return s;
+  }
+
+  /** #67: "13 minutes ago" in Home Assistant's language. */
+  _ago(ts) {
+    const t = Date.parse(ts);
+    if (!Number.isFinite(t)) return "";
+    const lang = (this._hass.locale && this._hass.locale.language) || this._hass.language || "en";
+    if (!this._rtf || this._rtfL !== lang) {
+      try {
+        this._rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+      } catch (_e) {
+        this._rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+      }
+      this._rtfL = lang;
+    }
+    const sec = Math.max(0, (Date.now() - t) / 1000);
+    if (sec < 60) return this._rtf.format(0, "second");
+    const [u, d] = sec < 3600 ? ["minute", 60] : sec < 86400 ? ["hour", 3600] : ["day", 86400];
+    return this._rtf.format(-Math.floor(sec / d), u);
+  }
+
+  /** #67: the icon of a row: the device's own, the entity's own, else by what it is and its state (open / closed …). */
+  _iconOf(x) {
+    const own = ((this._base || {}).devices || {})[x.item.id];
+    if (own && own.icon) return own.icon;
+    const st = x.st;
+    if (!st) return null;
+    if (st.attributes.icon) return st.attributes.icon;
+    const on = ["on", "open", "opening", "unlocked", "unlocking"].includes(st.state);
+    const dc = String(st.attributes.device_class || "");
+    const nm = `${x.lead} ${x.name}`.toLowerCase();
+    switch (x.lk) {
+      case "opening":
+        if (dc === "garage_door" || /garage/.test(nm)) return on ? "mdi:garage-open-variant" : "mdi:garage-variant";
+        if (/slid|συρ/.test(nm)) return on ? "mdi:door-sliding-open" : "mdi:door-sliding";
+        if (dc === "window" || /window|παράθ/.test(nm)) return on ? "mdi:window-open-variant" : "mdi:window-closed-variant";
+        return on ? "mdi:door-open" : "mdi:door-closed";
+      case "motion":
+        return ["occupancy", "presence"].includes(dc) ? (on ? "mdi:account" : "mdi:account-outline") : on ? "mdi:motion-sensor" : "mdi:motion-sensor-off";
+      case "cover":
+        if (["curtain"].includes(dc)) return on ? "mdi:curtains" : "mdi:curtains-closed";
+        if (["blind", "shade"].includes(dc)) return on ? "mdi:blinds-open" : "mdi:blinds";
+        if (dc === "garage") return on ? "mdi:garage-open-variant" : "mdi:garage-variant";
+        return on ? "mdi:window-shutter-open" : "mdi:window-shutter";
+      case "lock":
+        return on ? "mdi:lock-open-variant" : "mdi:lock";
+      case "temperature":
+      case "humidity":
+        return x.temps.length ? "mdi:thermometer" : "mdi:water-percent";
+      case "safety":
+        return on ? "mdi:alert-circle" : "mdi:shield-check-outline";
+      default:
+        return x.air.length && !x.temps.length ? "mdi:air-filter" : null; // the rest: Home Assistant's own icon
+    }
+  }
+
+  /** #68: the colour of a row's icon says its state. */
+  _stCls(x) {
+    if (x.alarm.length) return "s-alarm";
+    if (x.open.length) return "s-open";
+    const st = x.st;
+    if (!st || x.offline) return "";
+    if (x.lk === "climate" && st.state !== "off") return st.state === "heat" ? "s-warm" : st.state === "cool" ? "s-cool" : "s-act";
+    if (x.on) return ["light", "switch"].includes(x.lk) ? "s-on" : "s-act";
+    if (["motion", "opening", "lock", "cover"].includes(x.lk) && ["on", "open", "opening", "unlocked"].includes(st.state)) return "s-act";
+    return "";
   }
 
   _row(x, opts = {}) {
@@ -973,7 +1063,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const extra = opts.value ? `<span class="val">${cesc(opts.value)}</span>` : "";
     const room = `${x.doorOpen ? ` · ${dfT("mob.door_open")}` : ""}${opts.room ? ` · ${cesc(opts.room)}` : ""}`;
     return `<div class="row ${x.on ? "on" : ""} ${x.attention ? "att" : ""}" data-a="more" data-v="${cesc(eid || "")}">
-      <span class="tile g-${x.g}">${st ? `<ha-state-icon data-ent="${cesc(eid)}"></ha-state-icon>` : `<ha-icon icon="${DFM_GICON[x.g]}"></ha-icon>`}</span>
+      <span class="tile ${this._stCls(x)}">${this._iconOf(x) ? `<ha-icon icon="${cesc(this._iconOf(x))}"></ha-icon>` : st ? `<ha-state-icon data-ent="${cesc(eid)}"></ha-state-icon>` : `<ha-icon icon="${DFM_GICON[x.g]}"></ha-icon>`}</span>
       <span class="txt"><span class="nm"><span class="t">${cesc(x.name)}</span>${badges.join("")}</span><span class="sub">${this._rowVals(x)}${room}</span>
       ${dim ? `<input type="range" class="bri" min="1" max="100" value="${Math.round((st.attributes.brightness || 255) / 2.55)}" data-a="bri" data-v="${cesc(eid)}" aria-label="${dfT("mob.brightness")}">` : ""}</span>
       ${extra}${tog ? `<button class="sw ${x.on || (st && st.state === "on") ? "on" : ""}" role="switch" aria-checked="${x.on}" data-a="tog" data-v="${cesc(eid)}" aria-label="${cesc(x.name)}"><i></i></button>` : ""}
@@ -981,10 +1071,15 @@ class DeviceFloorplanMobile extends HTMLElement {
   }
 
   /** #51: an air / climate sensor shows all its readings in one line ("20.6° · 63% · PM2.5 6 · VOC 178" + its air dot). */
+  // #66: a device that measures the room shows all its readings, temperature first; #67: on / off things say since when.
   _rowVals(x) {
-    if (!x.air.length) return cesc(this._stateTxt(x));
-    const p = [x.temps.length ? `${x.temps[0]}°` : "", x.hums.length ? `${Math.round(x.hums[0])}%` : "", ...x.air.map((q) => `${q.label} ${q.v}`)].filter(Boolean).join(" · ");
-    return `${this._airDot(x.airR)}${cesc(p)}`;
+    if (!x.offline && (x.air.length || ["temperature", "humidity"].includes(x.lk))) {
+      const p = [x.temps.length ? `${Math.round(x.temps[0] * 10) / 10}°` : "", x.hums.length ? `${Math.round(x.hums[0])}%` : "", ...x.air.map((q) => `${q.label} ${q.v}`)].filter(Boolean).join(" · ");
+      if (p) return `${x.air.length ? this._airDot(x.airR) : ""}${cesc(p)}`;
+    }
+    const t = cesc(this._stateTxt(x));
+    const ago = x.st && !x.offline && DFM_AGO.has(x.lk) ? this._ago(x.st.last_changed) : "";
+    return ago ? `${t} · <span class="ago">${cesc(ago)}</span>` : t;
   }
 
   _vals(r) {
@@ -1013,7 +1108,7 @@ class DeviceFloorplanMobile extends HTMLElement {
   /** The devices of an overlay: what the Floorplan card shows there, with the user's settings (#25). */
   _members(o, list) {
     if (o === "live") return list.filter((x) => x.now.has("live") || x.attention);
-    return list.filter((x) => x.ovs.has(o));
+    return list.filter((x) => x.ovs.has(o) && !(o === "security" && x.camOnly));
   }
 
   /** What an overlay has to say now for a set of devices (one line), or "" when there is nothing. */
@@ -1132,7 +1227,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const s = this._s;
     let body = "";
     if (s.page === "room") body = this._roomPage(m);
-    else if (s.page === "rooms") body = this._roomsPage(m);
+    else if (s.page === "rooms") body = this._homePage(m); // #71: portrait has no separate floor page
     else if (s.page === "devices") body = this._devPage(m);
     else if (s.page === "people") body = this._pplPage(m);
     else body = this._homePage(m);
@@ -1219,6 +1314,21 @@ class DeviceFloorplanMobile extends HTMLElement {
     return out;
   }
 
+  /** #64: a floor's devices for the bar under the plan: "open" = doors / windows, "cover" = shutters, "alarm" = alarms. */
+  _floorItems(m, floor, kind) {
+    const fi = m.items.filter((x) => x.floor === floor);
+    if (kind === "open") return fi.filter((x) => x.nOpen).sort((a, b) => b.open.length - a.open.length);
+    if (kind === "cover") return fi.filter((x) => x.ents.some((e) => domainOf(e) === "cover")).sort((a, b) => Number(b.on) - Number(a.on));
+    if (kind === "alarm") return fi.filter((x) => x.alarm.length);
+    return [];
+  }
+
+  /** #64: one full-width bar of equal segments (icon + value); a segment opens its list. */
+  _segBar(segs, cls = "") {
+    const on = segs.filter(Boolean);
+    return on.length ? `<div class="segs ${cls}">${on.map((g) => `<button class="seg ${g.tone || ""}" data-a="${g.a}" data-v="${cesc(g.v || "")}" aria-label="${cesc(g.label)}"><ha-icon icon="${g.icon}"></ha-icon>${g.txt != null ? `<span>${cesc(String(g.txt))}</span>` : ""}</button>`).join("")}</div>` : "";
+  }
+
   _homePage(m) {
     const s = this._s;
     const f = m.floors.find((q) => q.id === s.floor);
@@ -1230,39 +1340,58 @@ class DeviceFloorplanMobile extends HTMLElement {
     const home = m.people.filter((p) => p.home).length;
     const iss = this._issues(m);
     const sumLine = [m.people.length ? dfT("mob.k_of_n_home", { k: home, n: m.people.length }) : "", iss.length ? dfT("mob.n_attention", { n: iss.length }) : dfT("mob.all_good")].filter(Boolean).join(" · ");
-    // #53: what is on (small pills above the plan, wrapping) …
+    // #65: the shown floor's climate (its rooms); a floor without any: the main floor's, named.
+    const multi = m.floors.length > 1;
+    const climOf = (fid) => {
+      const rs = m.rooms.filter((r) => r.floor === fid);
+      const ar = rs.filter((r) => r.airR != null);
+      return { t: dfmAvg(rs.filter((r) => r.temp != null).map((r) => r.temp)), h: dfmAvg(rs.filter((r) => r.hum != null).map((r) => r.hum)), air: ar.length ? Math.max(...ar.map((r) => r.airR)) : null };
+    };
+    let cf = f.id;
+    let cl = climOf(f.id);
+    if (cl.t == null && cl.h == null && cl.air == null) {
+      cf = this._mainFloor(m);
+      cl = climOf(cf);
+    }
     const out = this._outside();
+    const inLine = [cl.t != null ? `${cl.t}°` : "", cl.h != null ? `${Math.round(cl.h)}%` : ""].filter(Boolean).join(" · ");
+    const cfName = multi ? (m.floors.find((q) => q.id === cf) || {}).name || "" : "";
+    const clim = out || inLine || cl.air != null ? `<button class="clim" data-a="ovs" data-v="comfort">${out ? `<span class="cl"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><b>${cesc(out)}</b><small>${dfT("mob.outside")}</small></span>` : ""}${inLine ? `<span class="cl"><ha-icon icon="mdi:home-thermometer-outline"></ha-icon><b>${cesc(inLine)}</b>${cfName ? `<small>${cesc(cfName)}</small>` : ""}</span>` : ""}${cl.air != null ? `<span class="cl"><ha-icon icon="mdi:air-filter"></ha-icon>${this._airDot(cl.air)}<b>${cesc(this._airTxt(cl.air))}</b></span>` : ""}</button>` : "";
+    // #64: what is going on in the whole house: icon + number, zero hidden.
     const lightsOn = this._members("lights", m.items).filter((x) => x.on).length;
-    const tin = dfmAvg(m.items.flatMap((x) => x.temps));
-    const hin = dfmAvg(m.items.flatMap((x) => x.hums));
-    const airR = m.rooms.some((r) => r.airR != null) ? Math.max(...m.rooms.filter((r) => r.airR != null).map((r) => r.airR)) : null;
     const off = m.items.filter((x) => x.offline).length;
     const low = m.items.filter((x) => x.battery != null && x.battery <= 15).length;
     const wn = m.items.filter((x) => x.warn.length).length;
-    const pill = (ov, icon, t, cls = "") => `<button class="pi ${cls}" ${ov ? `data-a="ovs" data-v="${ov}"` : ""}><ha-icon icon="${icon}"></ha-icon>${t}</button>`;
-    const info = [
-      out ? pill("", "mdi:weather-partly-cloudy", cesc(`${out} ${dfT("mob.outside")}`), "wx") : "",
-      tin != null ? pill("comfort", "mdi:home-thermometer-outline", cesc([`${tin}°`, hin != null ? `${Math.round(hin)}%` : ""].filter(Boolean).join(" · "))) : "",
-      airR != null ? pill("comfort", "mdi:air-filter", `${this._airDot(airR)}${cesc(this._airTxt(airR))}`) : "",
-      lightsOn ? pill("lights", "mdi:lightbulb-group", cesc(dfT("mob.lights_on", { n: lightsOn }))) : "",
-      off ? pill("network", "mdi:lan-disconnect", cesc(dfT("mob.n_offline", { n: off })), "warn") : "",
-      low ? pill("health", "mdi:battery-alert-variant-outline", cesc(dfT("mob.n_low", { n: low })), "warn") : "",
-      wn ? pill("health", "mdi:alert-outline", cesc(dfT("mob.n_warn", { n: wn })), "warn") : "",
-    ].join("");
-    // … and what needs a look (small red pills under the plan, at most 6, then "+n").
-    const issHtml = iss.slice(0, 6).map((i) => {
-      const room = i.room || m.rooms.find((r) => r.id === i.x.room && r.floor === i.x.floor);
-      const where = room ? room.name : "";
-      return `<button class="pi att" data-a="${room ? "room" : "more"}" data-v="${cesc(room ? `${room.floor}|${room.id}` : i.e)}">${i.e ? `<ha-state-icon data-ent="${cesc(i.e)}"></ha-state-icon>` : `<ha-icon icon="mdi:air-filter"></ha-icon>`}<span class="t">${cesc(i.txt)}</span>${cesc([i.st, where].filter(Boolean).map((q) => ` · ${q}`).join(""))}</button>`;
-    }).join("") + (iss.length > 6 ? `<button class="pi att" data-a="issues">+${iss.length - 6}</button>` : "");
-    const rooms = this._sortRooms(m.rooms);
+    const top = this._segBar([
+      lightsOn && { a: "ovs", v: "lights", icon: "mdi:lightbulb-group", txt: lightsOn, label: dfT("mob.lights_on", { n: lightsOn }), tone: "on" },
+      off && { a: "ovs", v: "network", icon: "mdi:lan-disconnect", txt: off, label: dfT("mob.n_offline", { n: off }), tone: "warn" },
+      low && { a: "ovs", v: "health", icon: "mdi:battery-alert-variant-outline", txt: low, label: dfT("mob.n_low", { n: low }), tone: "warn" },
+      wn && { a: "ovs", v: "health", icon: "mdi:alert-outline", txt: wn, label: dfT("mob.n_warn", { n: wn }), tone: "warn" },
+    ]);
+    // #64: under the plan, like the Wallpanel's row: this floor's openings and shutters, the house's alarm.
+    const fi = m.items.filter((x) => x.floor === f.id);
+    const nAl = fi.reduce((t, x) => t + x.alarm.length, 0);
+    const opDev = fi.filter((x) => x.nOpen);
+    const nOp = opDev.reduce((t, x) => t + x.open.length, 0);
+    const covs = [...new Set(fi.flatMap((x) => x.ents.filter((e) => domainOf(e) === "cover")))];
+    const nCv = covs.filter((e) => ["open", "opening"].includes((this._hass.states[e] || {}).state)).length;
+    const acp = Object.keys(this._hass.states).filter((e) => e.startsWith("alarm_control_panel.") && live(this._hass.states[e]));
+    const ast = acp.length ? this._hass.states[acp[0]] : null;
+    const aTone = !ast ? "" : ast.state === "triggered" ? "att" : ["arming", "pending"].includes(ast.state) ? "warn" : ast.state.startsWith("armed") ? "act" : "";
+    const bottom = this._segBar([
+      nAl && { a: "items", v: "alarm", icon: "mdi:alarm-light", txt: nAl, label: dfT("mob.alert"), tone: "att" },
+      opDev.length && { a: "items", v: "open", icon: nOp ? "mdi:door-open" : "mdi:door-closed", txt: nOp ? dfT("mob.open_n", { n: nOp }) : dfT("mob.all_closed"), label: dfT("mob.openings"), tone: nOp ? "att" : "" },
+      covs.length && { a: "items", v: "cover", icon: nCv ? "mdi:window-shutter-open" : "mdi:window-shutter", txt: nCv ? dfT("mob.open_n", { n: nCv }) : dfT("mob.all_closed"), label: dfT("mob.shutters"), tone: nCv ? "act" : "" },
+      ast && { a: "more", v: acp[0], icon: ast.state.startsWith("armed") || ast.state === "triggered" ? "mdi:shield-lock" : "mdi:shield-off-outline", txt: this._fmtE(acp[0]), label: dfT("mob.alarm_panel"), tone: aTone },
+    ], "below");
+    const rooms = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
     const cams = this._cams(m);
     const avatar = me && me.pic ? `<span class="me"><img src="${cesc(me.pic)}" alt=""></span>` : "";
-    return `<header class="hd top">${avatar}<div class="grow"><div class="h1">${cesc(greet)}</div><div class="sub">${cesc(sumLine)}</div></div></header>
-      ${info ? `<div class="pills">${info}</div>` : ""}
+    return `<header class="hd top">${avatar}<div class="grow"><div class="h1">${cesc(greet)}</div><div class="sub">${cesc(sumLine)}</div></div>${clim}</header>
+      ${top}
       <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "mini")}${this._planNav(m, f)}</div>
-      ${issHtml ? `<div class="pills iss">${issHtml}</div>` : ""}
-      <section>${this._secHead("rooms", "mdi:floor-plan", dfT("mob.rooms"))}${this._secBody("rooms", rooms.map((r) => this._tile(m, r)).join(""))}</section>
+      ${bottom}
+      <section>${this._secHead("rooms", "mdi:floor-plan", multi ? `${dfT("mob.rooms")} · ${cesc(f.name)}` : dfT("mob.rooms"))}${this._secBody("rooms", rooms.map((r) => this._tile(m, r)).join(""))}</section>
       <section>${this._secHead("ctl", "mdi:view-dashboard-outline", dfT("mob.home_control"))}${this._secBody("ctl", this._ovTiles(m))}</section>
       ${cams.length ? `<section>${this._secHead("cams", "mdi:cctv", dfT("mob.cameras"))}${this._secBody("cams", cams.map((c) => this._camTile(m, c)).join(""))}</section>` : ""}`;
   }
@@ -1293,6 +1422,12 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   /** #56 / #57: a room tile: its icon, one badge per overlay with something to say (max 4 + "+n"), its name and values. */
   _tile(m, r) {
+    const line = [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · ");
+    return `<button class="rt" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="bds">${this._badges(m, r)}</span><b>${cesc(r.name)}</b><small>${r.airR != null ? this._airDot(r.airR) : ""}${cesc(line || dfT("mob.n_devices", { n: r.items.length }))}</small></button>`;
+  }
+
+  /** #71: a room's overlay badges, built once for its tile and its row. */
+  _badges(m, r) {
     const f = m.floors.find((q) => q.id === r.floor);
     const bd = [];
     for (const o of this._overlayList(f)) {
@@ -1311,9 +1446,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     if (!bd.length && r.people.length) bd.push(`<b class="tb2" style="--c:${DFM_OVC.people}"><ha-icon icon="mdi:account"></ha-icon>${r.people.length}</b>`);
     const more = bd.length > 4 ? `<b class="tb2 more">+${bd.length - 3}</b>` : "";
-    const badges = bd.length > 4 ? bd.slice(0, 3).join("") + more : bd.join("");
-    const line = [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · ");
-    return `<button class="rt" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="bds">${badges}</span><b>${cesc(r.name)}</b><small>${r.airR != null ? this._airDot(r.airR) : ""}${cesc(line || dfT("mob.n_devices", { n: r.items.length }))}</small></button>`;
+    return bd.length > 4 ? bd.slice(0, 3).join("") + more : bd.join("");
   }
 
   /** #60: "Home control": one big tile per overlay; a tap opens its sheet. */
@@ -1356,10 +1489,10 @@ class DeviceFloorplanMobile extends HTMLElement {
       body = `<h3>${dfT("mob.needs_look")}</h3>${this._issues(m).map((i) => i.x ? this._row(i.x, { room: this._roomName(i.x) }) : `<button class="srow" data-a="room" data-v="${cesc(`${i.room.floor}|${i.room.id}`)}"><span class="rtile"><ha-icon icon="mdi:air-filter"></ha-icon></span><span class="txt"><span class="nm">${cesc(`${i.txt} · ${i.room.name}`)}</span><span class="sub">${cesc(i.st)}</span></span></button>`).join("")}`;
     } else if (sh.step === "ov") {
       body = this._ovSheet(m, sh.ov);
-    } else {
-      const f = m.floors.find((q) => q.id === sh.floor) || m.floors[0];
-      const rs = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
-      body = `<h3>${m.floors.length > 1 ? `<button class="bk" data-a="sheet-back" aria-label="${dfT("mob.back")}">‹</button>` : ""}${cesc(f.name)}<button class="all" data-a="floor" data-v="${cesc(f.id)}">${dfT("mob.whole_floor")} ›</button></h3>${rs.map((r) => this._roomRow(r)).join("")}`;
+    } else if (sh.step === "items") {
+      // #64: the floor's openings / shutters / alarms, from the bar under the plan.
+      const list = this._floorItems(m, sh.floor, sh.kind);
+      body = `<h3>${cesc(sh.title || "")}</h3>${list.map((x) => this._row(x, { room: this._roomName(x) })).join("") || `<p class="empty">${dfT("mob.quiet")}</p>`}`;
     }
     return `<div class="scrim" data-a="close"></div><div class="sheet" data-scroll="sheet"><i class="grab"></i>${body}</div>`;
   }
@@ -1407,19 +1540,6 @@ class DeviceFloorplanMobile extends HTMLElement {
       }).join("") || `<div class="none">${dfT("mob.nothing")}</div>`;
     }
     return `<h3 class="sh"><span class="rtile" style="color:${DFM_OVC[o] || "inherit"}"><ha-icon icon="${cesc(icon)}"></ha-icon></span>${cesc(title)}<button class="x" data-a="close" aria-label="${dfT("close")}"><ha-icon icon="mdi:close"></ha-icon></button></h3>${top || acts ? `<div class="scenes">${top}${acts}</div>` : ""}${list}`;
-  }
-
-  _roomRow(r) {
-    const m = this._m;
-    return `<button class="srow" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rtile"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="txt"><span class="nm"><span class="t">${cesc(r.name)}</span></span><span class="sub">${cesc(this._roomSub(r))}</span></span><span class="bds row">${this._tile(m, r).match(/<span class="bds">(.*?)<\/span><b>/)[1]}</span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
-  }
-
-  _roomsPage(m) {
-    const s = this._s;
-    const f = m.floors.find((q) => q.id === s.floor);
-    const rs = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
-    return `<header class="hd"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div><div class="h1">${cesc(f.name)}</div><div class="sub">${dfT("mob.n_rooms", { n: rs.length })}</div></div></header>
-      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "floor")}${this._planNav(m, f)}</div><div class="list">${rs.map((r) => this._roomRow(r)).join("")}</div>`;
   }
 
   _roomPage(m) {
@@ -1559,10 +1679,10 @@ class DeviceFloorplanMobile extends HTMLElement {
 }
 
 const DFM_CSS = `
-:host { display:block; --dfm-g1: var(--dfm-bg-top, color-mix(in srgb, var(--primary-background-color, #f3f5f9) 35%, #f3f5f9)); --dfm-g2: var(--dfm-bg-bottom, color-mix(in srgb, var(--primary-background-color, #e3e7ee) 35%, #e3e7ee)); --dfm-bg: var(--dfm-g2); --dfm-card: color-mix(in srgb, var(--card-background-color, #fff) 82%, transparent); --dfm-fg: var(--primary-text-color, #222); --dfm-sub: var(--secondary-text-color, #777); --dfm-acc: var(--primary-color, #03a9f4); --dfm-red: var(--error-color, #db4437); --dfm-amber: var(--warning-color, #f4b400); --dfm-div: var(--divider-color, rgba(0,0,0,.08)); color: var(--dfm-fg); font-family: var(--paper-font-body1_-_font-family, inherit); }
+:host { display:block; /* 0.13.9.17 #69: the HA theme as it is: page, cards, sheets, lines and text from its own variables. */ --dfm-g1: var(--dfm-bg-top, var(--primary-background-color, #f3f5f9)); --dfm-g2: var(--dfm-bg-bottom, color-mix(in srgb, var(--primary-background-color, #f3f5f9) 94%, #000)); --dfm-bg: var(--dfm-g2); --dfm-card: var(--ha-card-background, var(--card-background-color, #fff)); --dfm-sheet: var(--secondary-background-color, var(--dfm-card)); --dfm-fg: var(--primary-text-color, #222); --dfm-sub: var(--secondary-text-color, #777); --dfm-acc: var(--primary-color, #03a9f4); --dfm-red: var(--error-color, #db4437); --dfm-amber: var(--warning-color, #f4b400); --dfm-div: var(--divider-color, rgba(0,0,0,.08)); color: var(--dfm-fg); font-family: var(--paper-font-body1_-_font-family, inherit); }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 .empty { padding: 24px; color: var(--dfm-sub); }
-:host([dark]) { --dfm-g1: var(--dfm-bg-top, color-mix(in srgb, var(--primary-background-color, #1f2636) 30%, #1f2636)); --dfm-g2: var(--dfm-bg-bottom, color-mix(in srgb, var(--primary-background-color, #121418) 30%, #121418)); --dfm-card: rgba(255,255,255,.06); }
+:host([dark]) { --dfm-g2: var(--dfm-bg-bottom, color-mix(in srgb, var(--primary-background-color, #111) 85%, #000)); }
 /* #38: a soft gradient behind everything, fixed to the screen */
 .bgfix { position: fixed; inset: 0; z-index: 0; background: linear-gradient(180deg, var(--dfm-g1), var(--dfm-g2)); pointer-events: none; }
 .port { position: relative; min-height: calc(100dvh - var(--dfm-top, 56px)); }
@@ -1593,6 +1713,24 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .mini .nav.l { left: -4px; } .mini .nav.r { right: -4px; }
 /* #53: small pills that wrap: what is on above the plan, what needs a look under it */
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+/* #64: the climate card (top right) and the two segment bars (house above the plan, floor under it) */
+.clim { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 7px 10px; border-radius: 14px; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.07); font-size: 12px; text-align: left; max-width: 52%; }
+.clim .cl { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; }
+.clim .cl ha-icon { --mdc-icon-size: 15px; color: var(--dfm-acc); flex: none; }
+.clim .cl b { font-weight: 650; }
+.clim .cl small { color: var(--dfm-sub); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+.clim .adot { margin: 0; }
+.segs { display: flex; gap: 0; margin: 2px 0 8px; border-radius: 14px; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden; }
+.segs.below { margin: 6px 0 10px; }
+.seg { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 6px; font-size: 13px; font-weight: 650; color: var(--dfm-sub); white-space: nowrap; }
+.seg + .seg { box-shadow: inset 1px 0 0 var(--dfm-div); }
+.seg span { overflow: hidden; text-overflow: ellipsis; }
+.seg ha-icon { --mdc-icon-size: 18px; flex: none; }
+.seg.on { color: #e8b923; }
+.seg.warn { color: var(--dfm-amber); }
+.seg.att { color: var(--dfm-red); }
+.seg.act { color: var(--dfm-acc); }
+.seg:active { background: color-mix(in srgb, var(--dfm-fg) 8%, transparent); }
 .pills.iss { margin: 4px 0 8px; max-height: 60px; overflow: hidden; }
 .pi { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 999px; background: var(--dfm-card); font-size: 12px; white-space: nowrap; max-width: 100%; box-sizing: border-box; overflow: hidden; }
 .pi ha-icon, .pi ha-state-icon { --mdc-icon-size: 14px; color: var(--dfm-acc); flex: none; }
@@ -1652,7 +1790,7 @@ section.folded { margin-bottom: 0; }
 .rt { position: relative; width: 150px; min-height: 150px; justify-content: flex-end; }
 .rt .rti { position: absolute; left: 12px; top: 12px; }
 .rt .bds { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.bds.row { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+.bds.inl { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
 .tb2 { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
 .tb2 ha-icon { --mdc-icon-size: 13px !important; color: inherit !important; }
 .tb2.more { --c: var(--dfm-sub); }
@@ -1703,9 +1841,19 @@ section.folded { margin-bottom: 0; }
 .av img { width:100%; height:100%; object-fit:cover; }
 .list, section { display:flex; flex-direction:column; gap:8px; }
 .row, .srow { display:flex; align-items:center; gap:12px; padding: 11px 12px; border-radius: 16px; background: var(--dfm-card); box-shadow: 0 1px 3px rgba(0,0,0,.06); min-height: 44px; width: 100%; box-sizing: border-box; }
-.row.att { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--dfm-red) 70%, transparent); }
+/* #68: device rows are flat (no box, no icon tile): the icon's colour says the state; a short highlight on press. */
+.row { background: transparent; box-shadow: none; border-radius: 12px; padding: 7px 6px; min-height: 40px; transition: background .15s; }
+.row:active { background: color-mix(in srgb, var(--dfm-fg) 8%, transparent); }
+.row.att { box-shadow: none; }
+.row.att .nm .t { color: var(--dfm-red); }
 .tile, .rtile { width:38px; height:38px; flex:none; border-radius: 11px; display:flex; align-items:center; justify-content:center; background: color-mix(in srgb, var(--dfm-sub) 12%, transparent); color: var(--dfm-sub); }
-.row:not(.on) .tile { filter: saturate(.3); opacity:.85; }
+.row .tile { width: 30px; height: 30px; background: none !important; --mdc-icon-size: 24px; }
+.row .tile.s-on { color: #e8b923; }
+.row .tile.s-open, .row .tile.s-alarm { color: var(--dfm-red); }
+.row .tile.s-warm { color: #e5853b; }
+.row .tile.s-cool { color: #3b9ad9; }
+.row .tile.s-act { color: var(--dfm-acc); }
+.row .sub .ago { color: var(--dfm-sub); }
 .rtile.on { color:#c99a00; background: color-mix(in srgb, #f6c445 22%, transparent); }
 .rtile.att { color: var(--dfm-red); background: color-mix(in srgb, var(--dfm-red) 14%, transparent); }
 .txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
@@ -1729,19 +1877,19 @@ button.sw.on i { left: 21px; }
 /* #34: the bar is its own layer, fixed to the bottom of the screen, with the page fading under it */
 .barwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 28px 0 max(12px, env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--dfm-g2) 40%, color-mix(in srgb, var(--dfm-g2) 0%, transparent)); pointer-events: none; }
 .bar { display:flex; align-items:center; justify-content:center; gap: 10px; margin: 0 auto; width: max-content; pointer-events: auto; }
-.pill2 { height: 48px; display:flex; align-items:center; border-radius: 999px; background: color-mix(in srgb, var(--card-background-color, #fff) 92%, transparent); box-shadow: 0 4px 16px rgba(0,0,0,.16); }
+.pill2 { height: 48px; display:flex; align-items:center; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 4px 16px rgba(0,0,0,.16); }
 .pill2 .ph { height: 48px; padding: 0 14px 0 18px; display:flex; align-items:center; gap: 8px; font-weight: 650; font-size: 15px; }
 .pill2 .pl { height: 48px; padding: 0 16px 0 12px; display:flex; align-items:center; }
 .pill2 .on { color: var(--dfm-acc); }
 .pill2 .sep { width: 1px; height: 24px; background: var(--dfm-div); }
 .pill2 .up { --mdc-icon-size: 18px; }
-.tb { width:48px; height:48px; border-radius:50%; background: color-mix(in srgb, var(--card-background-color, #fff) 92%, transparent); box-shadow: 0 4px 16px rgba(0,0,0,.14); display:flex; align-items:center; justify-content:center; }
+.tb { width:48px; height:48px; border-radius:50%; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 4px 16px rgba(0,0,0,.14); display:flex; align-items:center; justify-content:center; }
 .tb.on { color: var(--dfm-acc); }
 .pill { height:48px; padding: 0 18px; border-radius: 999px; background: var(--dfm-card); box-shadow: 0 4px 16px rgba(0,0,0,.14); display:flex; align-items:center; gap:8px; font-weight:650; font-size: 15px; }
 .pill.on { color: var(--dfm-acc); }
 .pill .up { --mdc-icon-size: 18px; }
 .scrim { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.25); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; max-height: 78vh; overflow-y: auto; background: var(--dfm-bg); border-radius: 22px 22px 0 0; padding: 8px 14px calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:8px; box-shadow: 0 -6px 30px rgba(0,0,0,.18); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; max-height: 78vh; overflow-y: auto; background: var(--dfm-sheet); border-radius: 22px 22px 0 0; padding: 8px 14px calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:8px; box-shadow: 0 -6px 30px rgba(0,0,0,.18); }
 .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--dfm-sub) 40%, transparent); margin: 2px auto 6px; }
 .sheet h3 { display:flex; align-items:center; gap: 10px; margin: 4px 2px; font-size: 17px; }
 .sheet h3 .bk { width:34px; height:34px; font-size: 19px; }

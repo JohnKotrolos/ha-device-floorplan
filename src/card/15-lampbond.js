@@ -93,7 +93,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const rank = (e) => (["sensor", "climate", "weather"].includes(domainOf(e)) ? 0 : domainOf(e) === "binary_sensor" ? 1 : 2);
     if (!(item && (item.bond || item.phantom))) reads = reads.map((e, i) => [e, i]).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map((x) => x[0]);
     const pool = [...new Set([...(item.entities || []), ...(item.allEntities || [])])];
-    const presses = pool.filter((e) => ["button", "input_button"].includes(domainOf(e)) && live(hass.states[e]) && !this._aux(e)).slice(0, 3);
+    const presses = pool.filter((e) => ["button", "input_button"].includes(domainOf(e)) && hass.states[e] && hass.states[e].state !== "unavailable" && !this._aux(e)).slice(0, 3); // 0.13.9.17: a never-pressed button is "unknown", still a button
     // 0.12.9: names without the card's name or Home Assistant's device name in front.
     const strip = (e) => this._shortName(item, e, name, !!(item && (item.bond || item.phantom)));
     const seen = new Set();

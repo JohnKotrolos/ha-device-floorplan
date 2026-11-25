@@ -284,6 +284,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (cf) {
       const p = this._popup;
       this._popup = null;
+      if (p && p.action === "press" && p.eid) this._press(p.eid);
       if (p && p.action === "all_off") {
         const ents = this._lightEnts();
         if (ents.length) this._hass.callService("homeassistant", "turn_off", { entity_id: ents });
@@ -406,6 +407,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
       else this._moreInfo(s.ents[0]);
       return;
     }
+    // 0.13.9.17 #63: press a button (the one picked, else the device's / bond's first real button); asks first unless turned off.
+    if (act === "press") {
+      const e0 = this._pressEnt(s, pre);
+      if (!e0) return this._moreInfo(s.ents[0]);
+      const o0 = { ...this._dev(s.item.id), ...this._per(s.item, this._overlay) };
+      if (o0[`${pre}ask`] === false) return this._press(e0);
+      this._popup = { type: "confirm", action: "press", eid: e0 };
+      return this._update(true);
+    }
     if (act === "network") {
       this._popup = { type: "net", key: s.key };
       return this._update(true);
@@ -507,7 +517,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.12.6: what a tap / long press does, in words (Edit markers, the card editor). */
   _actWords(s, hold) {
     const multi = (s.phantom || s.item.bond || s.item.phantom) && !this._rdPhantom(s);
-    const W = { "more-info": "details", toggle: "switch on / off", readings: "readings with history", navigate: "open a dashboard", popup: "a popup card", none: "nothing", network: "network info", robot: "robot panel", info: "info card" };
+    const W = { "more-info": "details", toggle: "switch on / off", readings: "readings with history", navigate: "open a dashboard", popup: "a popup card", none: "nothing", press: "press a button", network: "network info", robot: "robot panel", info: "info card" };
     if (hold) {
       const h = this._holdAction(s);
       if (h && h !== "default") return W[h] || h;
@@ -567,6 +577,23 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   /** A short message on the card (Edit markers simulation). */
+  /** 0.13.9.17 #63: the button a "Press a button" tap presses. */
+  _pressEnt(s, pre = "") {
+    const o = { ...this._dev(s.item.id), ...this._per(s.item, this._overlay) };
+    const want = o[`${pre}press`];
+    if (want && this._hass.states[want]) return want;
+    const pool = [...new Set([...(s.ents || []), ...(s.item.entities || []), ...(s.item.allEntities || [])])];
+    return pool.find((e) => e && ["button", "input_button"].includes(domainOf(e)) && this._hass.states[e] && this._hass.states[e].state !== "unavailable" && !this._aux(e) && !/_identify$/.test(e)) || null;
+  },
+
+  _press(e0) {
+    const st = this._hass.states[e0];
+    const b = (st && st.attributes.friendly_name) || e0;
+    if (this._isPreview()) return this._toast(dfT("toast.would_press", { b }));
+    this._hass.callService(domainOf(e0), "press", { entity_id: e0 });
+    this._toast(dfT("toast.pressed", { b }));
+  },
+
   _toast(text) {
     const card = this.shadowRoot && this.shadowRoot.querySelector("ha-card");
     if (!card) return;

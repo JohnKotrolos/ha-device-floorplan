@@ -84,6 +84,11 @@ Object.assign(DeviceFloorplanCard.prototype, {
     this._prevShown = !this._popup && !!p;
     if (!p) return "";
     const close = `<button data-close="1" aria-label="${dfT("close")}">×</button>`;
+    if (p.type === "confirm" && p.action === "press") {
+      const st = this._hass.states[p.eid];
+      const b = (st && st.attributes.friendly_name) || p.eid;
+      return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(b)}"><h3>${dfT("press.q", { b: cesc(b) })}${close}</h3><div class="acts"><button data-close="1">${dfT("cancel")}</button><button class="pri" data-confirm="1">${dfT("press.do")}</button></div></div></div>`;
+    }
     if (p.type === "confirm") {
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${dfT("scene.all_off")}"><h3>${dfT("alloff.q")}${close}</h3><div>${p.n ? dfT("alloff.n_on", { n: p.n }) : dfT("alloff.none")}</div><div class="acts"><button data-close="1">${dfT("cancel")}</button><button class="pri" data-confirm="1">${dfT("scene.all_off")}</button></div></div></div>`;
     }

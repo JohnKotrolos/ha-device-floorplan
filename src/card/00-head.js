@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.9.16).
+ * Device Floorplan – dashboard card (v0.13.9.17).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.16";
+const CARD_VERSION = "0.13.9.17";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -140,6 +140,7 @@ const TAP_OPTIONS = [
   { value: "readings", label: "Readings popup with history" },
   { value: "navigate", label: "Open a dashboard" },
   { value: "popup", label: "Popup with a card (browser_mod)" },
+  { value: "press", label: "Press a button" }, // 0.13.9.17 #63
   { value: "none", label: "Nothing" },
 ];
 // 0.12.6: long press per kind / per device; "default" = details (a phantom: graphs; a bond of lamps: its info card).

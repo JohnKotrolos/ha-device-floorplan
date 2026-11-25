@@ -621,12 +621,17 @@ def _entity_rank(ent: er.RegistryEntry) -> tuple[int, int, str]:
         bonus = -1
     if ent.domain == "sensor" and dc in _WEAK_SENSOR:
         bonus = 2
+    if ent.domain == "sensor" and dc == "temperature":
+        bonus = -1  # 0.13.9.17 #66: a thermometer is its temperature, not its humidity
     if ent.domain == "button" and ent.entity_id.endswith("_identify"):
         bonus = 3
     category = 0 if ent.entity_category is None else 10
     # 0.8.1: HA 2026.11 "Main entity of the device" leads: the user said it is what the device is.
     if getattr(ent, "uses_device_name", False) is True:
         category = -1
+    # 0.13.9.17 #61: an entity hidden in HA never leads while a visible one exists.
+    if ent.hidden_by is not None:
+        category = 20
     return (category, dom * 4 + bonus, ent.entity_id)
 
 
