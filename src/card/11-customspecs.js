@@ -203,9 +203,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
   /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
-  dfOutlineRoom(id) {
-    if ((this._olRoom || null) === (id || null)) return;
+  dfOutlineRoom(id, txt = "") {
+    if ((this._olRoom || null) === (id || null) && (this._olTxt || "") === txt) return;
     this._olRoom = id || null;
+    this._olTxt = txt;
     if (this._config) this._update(true);
   },
 

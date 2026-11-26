@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.22";
+const CARD_VERSION = "0.13.9.23";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -974,6 +974,8 @@ const PIC_CSS = `
 .pic .ptint { position:absolute; inset:0; mix-blend-mode:multiply; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
 .pic.faint .ptint { opacity:.38; }
 .pic svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.room.olsel { z-index: 4; display:flex; flex-direction:column; align-items:center; gap: 1px; padding: 5px 11px 6px; border-radius: 12px; background: var(--card-background-color, #fff); color: var(--primary-text-color); border: 2px solid var(--primary-color, #03a9f4); box-shadow: 0 3px 12px rgba(0,0,0,.22); font-weight: 700; white-space: nowrap; text-shadow: none; opacity: 1; }
+.room.olsel .olv { font-size: .85em; font-weight: 500; color: var(--secondary-text-color); }
 .olroom { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:visible; }
 .olroom polygon, .olroom ellipse { fill: color-mix(in srgb, var(--primary-color, #03a9f4) 10%, transparent); stroke: var(--primary-color, #03a9f4); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pic svg polygon { fill:none; stroke: var(--dfc-accent, var(--primary-color, #03a9f4)); stroke-width:1.6; vector-effect: non-scaling-stroke; }
@@ -6377,9 +6379,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
   /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
-  dfOutlineRoom(id) {
-    if ((this._olRoom || null) === (id || null)) return;
+  dfOutlineRoom(id, txt = "") {
+    if ((this._olRoom || null) === (id || null) && (this._olTxt || "") === txt) return;
     this._olRoom = id || null;
+    this._olTxt = txt;
     if (this._config) this._update(true);
   },
 
@@ -7117,7 +7120,9 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
       // #82: with values, two lines centred on the room; near the plan's edge the label stays inside it.
       const two = vv && names ? ` rvw${room.x < 12 ? " el" : room.x > 88 ? " er" : ""}` : "";
-      return `<div class="room ${cls}${two}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}${vv}</div>`;
+      // #109: the room chosen on the mobile card's plan: its own label becomes the mark (name + values).
+      const ol = id === this._olRoom;
+      return `<div class="room ${cls}${two}${tap ? " ctap" : ""}${names || ol ? "" : " solo"}${ol ? " olsel" : ""}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names || ol ? cesc(name) : ""}${age}${pw}${ol && this._olTxt ? `<small class="olv">${cesc(this._olTxt)}</small>` : vv}</div>`;
     }).join("");
   },
 
@@ -13082,7 +13087,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     el._dfmOv = want;
     if (land && el.dfOutlineRoom && this._m) {
       const sel = this._landSel(this._m); // #107: the chosen room outlined
-      el.dfOutlineRoom(sel ? sel.id : null);
+      el.dfOutlineRoom(sel ? sel.id : null, sel ? this._vals(sel) : "");
     }
   }
 
@@ -13327,10 +13332,6 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       return this._kick(true);
     }
     if (a === "floor") return this._go({ page: "home", floor: v, room: null }); // #107: landscape: that floor's plan
-    if (a === "unsel") {
-      Object.assign(this._s, { page: "home", room: null });
-      return this._kick(true);
-    }
     if (a === "room") {
       const [f, r] = v.split("|");
       this._sheet = null;
@@ -14250,8 +14251,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     } else {
       // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
       const hint = !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
-      const chip = sel ? `<button class="float selchip" data-a="unsel"><b>${cesc(sel.name)}</b>${this._vals(sel) ? `<span>${cesc(this._vals(sel))}</span>` : ""}<ha-icon icon="mdi:close"></ha-icon></button>` : hint;
-      body = `${this._slot(f.id, "live", "", "land", "lplan")}${chip}`;
+      body = `${this._slot(f.id, "live", "", "land", "lplan")}${sel ? "" : hint}`; // #109: the mark is on the plan, at the room
     }
     return `<div class="land">${this._navHtml(m, f, scope)}<div class="left full" ${scope === "floor" ? 'data-swipe="floor"' : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
   },
@@ -14262,14 +14262,14 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     return s.page === "room" && s.room ? m.rooms.find((q) => q.id === s.room && q.floor === s.floor) || null : null;
   },
 
-  /** #108: landscape navigation in its own strip on the left, beside the plan (never over it): ☰, the floors
-   *  (highest first, by level), Home (the 3D home). */
+  /** #108 / #109: landscape navigation beside the plan, top left, in the Floorplan card's own floor-rail look:
+   *  ☰ on a small tab, then one slim capsule with the floors (highest first) and ⌂ Home below a divider. */
   _navHtml(m, f, scope) {
-    const menu = this._hdrOn ? `<button class="ln menu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
+    const menu = this._hdrOn ? `<button class="lnm" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
     const short = (q) => (Number.isFinite(q.level) ? String(q.level) : (q.name || "?").trim().charAt(0).toUpperCase());
-    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="ln fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
-    const home = m.levels.length > 1 ? `<button class="ln home ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
-    return `<nav class="lnav">${menu}<div class="lfl">${fl}${home}</div></nav>`;
+    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
+    const home = m.levels.length > 1 ? `<span class="div"></span><button class="fl ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
+    return `<nav class="lnav">${menu}${fl || home ? `<div class="lcap">${fl}${home}</div>` : ""}</nav>`;
   },
 
   /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:
@@ -14287,7 +14287,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const n = lv.length;
     const ratio = (f) => (f.a.image_width && f.a.image_height ? f.a.image_width / f.a.image_height : 1.6);
     const A = Math.max(...lv.map((l) => l.plans.reduce((t, f) => t + ratio(f), 0)));
-    const W = window.innerWidth - 48; // #83: the whole screen
+    const W = window.innerWidth - 48 - 48; // #83: the whole screen beside the navigation (#109)
     const H = window.innerHeight - (this._top || 0) - 90;
     const th = (30 * Math.PI) / 180;
     const ph = (56 * Math.PI) / 180;
@@ -14378,20 +14378,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
 /* #93: the landscape overlay rail: its own element, no background, labels whole */
-.land { padding-right: calc(var(--dfm-rail-w, 92px) + env(safe-area-inset-right, 0px)); padding-left: calc(var(--dfm-nav-w, 54px) + env(safe-area-inset-left, 0px)); box-sizing: border-box; }
-/* #108: the landscape navigation strip on the left, beside the plan: ☰ on top, floors and Home in the middle. */
-.lnav { position: absolute; top: 0; bottom: 0; left: env(safe-area-inset-left, 0px); width: var(--dfm-nav-w, 54px); display:flex; flex-direction:column; align-items:center; padding: 8px 0; box-sizing: border-box; z-index: 4; }
-.lnav .lfl { display:flex; flex-direction:column; align-items:center; gap: 8px; margin: auto 0; }
-.ln { width: 40px; height: 40px; border-radius: 50%; display:flex; align-items:center; justify-content:center; flex:none; text-align:center; font-weight: 700; font-size: 16px; color: var(--dfm-fg); background: color-mix(in srgb, var(--dfm-card) 80%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-.ln ha-icon { --mdc-icon-size: 22px; }
-.ln.on { background: var(--dfm-acc); color: #fff; }
-.ln.menu { background: none; box-shadow: none; color: var(--dfm-sub); }
-.ln.home { margin-top: 6px; }
-/* #107: the room chosen on the landscape plan */
-.float.selchip { left: 12px; bottom: 12px; display:flex; align-items:center; gap: 8px; padding: 7px 10px 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); font-size: 14px; text-shadow: none; max-width: 70%; }
-.float.selchip span { color: var(--dfm-sub); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.float.selchip ha-icon { --mdc-icon-size: 16px; color: var(--dfm-sub); flex: none; }
-.lrail { position: absolute; top: 0; right: env(safe-area-inset-right, 0px); bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.land { padding-right: var(--dfm-rail-w, 92px); padding-left: 48px; box-sizing: border-box; }
+/* #108 / #109: navigation in the Floorplan card's floor-rail look (same sizes / colours), top left, beside the plan. */
+.lnav { position: absolute; top: 6px; left: 6px; width: 36px; display:flex; flex-direction:column; align-items:center; gap: 8px; z-index: 4; }
+.lnm { width: 36px; height: 32px; border-radius: 8px; display:flex; align-items:center; justify-content:center; color: var(--dfm-acc); background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); --mdc-icon-size: 22px; }
+.lcap { width: 36px; box-sizing: border-box; display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 3px 0; border-radius: 18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+.lcap .fl { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--divider-color, rgba(0,0,0,.12)); background: var(--card-background-color, #fff); color: var(--primary-text-color); font-size: 13px; font-weight: 600; display:flex; align-items:center; justify-content:center; padding: 0; --mdc-icon-size: 18px; text-align: center; }
+.lcap .fl.on { background: var(--dfm-acc); border-color: var(--dfm-acc); color: #fff; }
+.lcap .div { width: 22px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.12)); margin: 1px 0; }
+.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
 .lrail::-webkit-scrollbar { display: none; }
 .lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
 .lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
@@ -14648,6 +14643,9 @@ button.sw.on i { left: 21px; }
 .float.sw button { width:30px; height:30px; }
 .float.hint { bottom: 14px; left: 16px; font-size: 13px; color: var(--dfm-sub); }
 .house { position:absolute; inset: 0; perspective: 1800px; overflow: hidden; }
+.house ~ .float.hdr.chip { padding: 5px 12px 6px; border-radius: 12px; }
+.house ~ .float.hdr.chip .h1 { font-size: 17px; }
+.house ~ .float.hdr.chip .sub { font-size: 12px; }
 .stage { position:absolute; left: 44%; top: 54%; transform-style: preserve-3d; transform: translate(-50%, -50%) rotateX(var(--ph)) rotateZ(calc(-1 * var(--th))); }
 .lvl { position:absolute; inset: 0; display:flex; justify-content:center; transform-style: preserve-3d; pointer-events: none; }
 .plane { position:relative; height: 100%; display:block; pointer-events: auto; border-radius: 4px; background: var(--dfm-card); box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 30px -12px rgba(0,0,0,.35); overflow: visible; }

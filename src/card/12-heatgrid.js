@@ -270,7 +270,9 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
       // #82: with values, two lines centred on the room; near the plan's edge the label stays inside it.
       const two = vv && names ? ` rvw${room.x < 12 ? " el" : room.x > 88 ? " er" : ""}` : "";
-      return `<div class="room ${cls}${two}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}${vv}</div>`;
+      // #109: the room chosen on the mobile card's plan: its own label becomes the mark (name + values).
+      const ol = id === this._olRoom;
+      return `<div class="room ${cls}${two}${tap ? " ctap" : ""}${names || ol ? "" : " solo"}${ol ? " olsel" : ""}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names || ol ? cesc(name) : ""}${age}${pw}${ol && this._olTxt ? `<small class="olv">${cesc(this._olTxt)}</small>` : vv}</div>`;
     }).join("");
   },
 

@@ -18,8 +18,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     } else {
       // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
       const hint = !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
-      const chip = sel ? `<button class="float selchip" data-a="unsel"><b>${cesc(sel.name)}</b>${this._vals(sel) ? `<span>${cesc(this._vals(sel))}</span>` : ""}<ha-icon icon="mdi:close"></ha-icon></button>` : hint;
-      body = `${this._slot(f.id, "live", "", "land", "lplan")}${chip}`;
+      body = `${this._slot(f.id, "live", "", "land", "lplan")}${sel ? "" : hint}`; // #109: the mark is on the plan, at the room
     }
     return `<div class="land">${this._navHtml(m, f, scope)}<div class="left full" ${scope === "floor" ? 'data-swipe="floor"' : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
   },
@@ -30,14 +29,14 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     return s.page === "room" && s.room ? m.rooms.find((q) => q.id === s.room && q.floor === s.floor) || null : null;
   },
 
-  /** #108: landscape navigation in its own strip on the left, beside the plan (never over it): ☰, the floors
-   *  (highest first, by level), Home (the 3D home). */
+  /** #108 / #109: landscape navigation beside the plan, top left, in the Floorplan card's own floor-rail look:
+   *  ☰ on a small tab, then one slim capsule with the floors (highest first) and ⌂ Home below a divider. */
   _navHtml(m, f, scope) {
-    const menu = this._hdrOn ? `<button class="ln menu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
+    const menu = this._hdrOn ? `<button class="lnm" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
     const short = (q) => (Number.isFinite(q.level) ? String(q.level) : (q.name || "?").trim().charAt(0).toUpperCase());
-    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="ln fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
-    const home = m.levels.length > 1 ? `<button class="ln home ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
-    return `<nav class="lnav">${menu}<div class="lfl">${fl}${home}</div></nav>`;
+    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
+    const home = m.levels.length > 1 ? `<span class="div"></span><button class="fl ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
+    return `<nav class="lnav">${menu}${fl || home ? `<div class="lcap">${fl}${home}</div>` : ""}</nav>`;
   },
 
   /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:
@@ -55,7 +54,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const n = lv.length;
     const ratio = (f) => (f.a.image_width && f.a.image_height ? f.a.image_width / f.a.image_height : 1.6);
     const A = Math.max(...lv.map((l) => l.plans.reduce((t, f) => t + ratio(f), 0)));
-    const W = window.innerWidth - 48; // #83: the whole screen
+    const W = window.innerWidth - 48 - 48; // #83: the whole screen beside the navigation (#109)
     const H = window.innerHeight - (this._top || 0) - 90;
     const th = (30 * Math.PI) / 180;
     const ph = (56 * Math.PI) / 180;

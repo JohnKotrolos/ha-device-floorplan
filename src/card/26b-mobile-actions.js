@@ -209,10 +209,6 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       return this._kick(true);
     }
     if (a === "floor") return this._go({ page: "home", floor: v, room: null }); // #107: landscape: that floor's plan
-    if (a === "unsel") {
-      Object.assign(this._s, { page: "home", room: null });
-      return this._kick(true);
-    }
     if (a === "room") {
       const [f, r] = v.split("|");
       this._sheet = null;

@@ -782,7 +782,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     el._dfmOv = want;
     if (land && el.dfOutlineRoom && this._m) {
       const sel = this._landSel(this._m); // #107: the chosen room outlined
-      el.dfOutlineRoom(sel ? sel.id : null);
+      el.dfOutlineRoom(sel ? sel.id : null, sel ? this._vals(sel) : "");
     }
   }
 
