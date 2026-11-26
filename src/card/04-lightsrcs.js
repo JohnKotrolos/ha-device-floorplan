@@ -538,7 +538,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
   _roomOf(item, a = this._a) {
     const areas = (a && a.areas) || {};
     if (item.area_id && areas[item.area_id] && Array.isArray(areas[item.area_id].shape) && areas[item.area_id].shape.length >= 3) return item.area_id;
-    return Object.keys(areas).find((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3 && inPoly(item.x, item.y, areas[k].shape)) || null;
+    // 0.13.9.19 #87: an opening drawn as a bar counts by its middle; a device on a wall (outside every room shape)
+    // belongs to the nearest room within a few % of the plan (the integration's own `locate` rule).
+    const op = item.opening;
+    const x = op && Number.isFinite(op.x1) ? (op.x1 + op.x2) / 2 : item.x;
+    const y = op && Number.isFinite(op.y1) ? (op.y1 + op.y2) / 2 : item.y;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const shaped = Object.keys(areas).filter((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3);
+    const hit = shaped.find((k) => inPoly(x, y, areas[k].shape));
+    if (hit) return hit;
+    const segD = (px, py, [ax, ay], [bx, by]) => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const t = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0;
+      return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    };
+    let best = null;
+    for (const k of shaped) {
+      const sh = areas[k].shape;
+      const d = Math.min(...sh.map((p, i) => segD(x, y, p, sh[(i + 1) % sh.length])));
+      if (d <= 4 && (!best || d < best[1])) best = [k, d];
+    }
+    return best ? best[0] : null;
   },
 
   /** Motion and presence sensors on the plan, with their room. */

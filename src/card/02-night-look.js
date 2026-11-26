@@ -767,7 +767,8 @@ ha-card.dock-right { flex-direction: row; }
 @keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
 .box svg.focus { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; fill: var(--dfc-focus-dim, var(--primary-background-color, #f2f2f2)); fill-opacity:.6; }
-.box .m, .box .chip, .box .room, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
+.box .m, .box .chip, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
+.box .room { scale: var(--dfc-ui-room, var(--dfc-ui, 1)); } /* 0.13.9.19 #95: room names shrink less than icons */
 .room .rv { font-weight: 600; display:inline-flex; align-items:center; gap: 3px; }
 .room.rvw { flex-direction: column; gap: 0; line-height: 1.15; text-align: center; }
 .room.rvw .rv { font-size: .85em; }

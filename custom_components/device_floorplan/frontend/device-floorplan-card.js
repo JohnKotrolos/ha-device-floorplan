@@ -1,5 +1,5 @@
 /*
- * Device Floorplan – dashboard card (v0.13.9.18).
+ * Device Floorplan – dashboard card (v0.13.9.19).
  *
  * The view is calm: the plan and the overlay buttons. Everything else (what
  * each overlay shows, icons, names, tap behaviour, rooms, scenes, custom
@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.18";
+const CARD_VERSION = "0.13.9.19";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -140,7 +140,7 @@ const TAP_OPTIONS = [
   { value: "readings", label: "Readings popup with history" },
   { value: "navigate", label: "Open a dashboard" },
   { value: "popup", label: "Popup with a card (browser_mod)" },
-  { value: "press", label: "Press a button" }, // 0.13.9.18 #63
+  { value: "press", label: "Press a button" }, // 0.13.9.19 #63
   { value: "none", label: "Nothing" },
 ];
 // 0.12.6: long press per kind / per device; "default" = details (a phantom: graphs; a bond of lamps: its info card).
@@ -394,7 +394,7 @@ const ieeeKey = (i) => String(i || "").toLowerCase().replace(/^0x/, "").replace(
 
 
 // ---- translations (joined from src/i18n by tools/build.mjs: edit those files) ----
-const DF_I18N = {"de":{"action":"Aktion","actions":"Aktionen","admin.new_place":"{n} neu · Platzieren","admin.new_short":"{n} neu","admin.new_title":{"one":"{n} neues Gerät · nur Admins sehen das","other":"{n} neue Geräte · nur Admins sehen das"},"alloff.n_on":{"one":"{n} Licht ist an.","other":"{n} Lichter sind an."},"alloff.none":"Gerade ist kein Licht an.","alloff.q":"Alle Lichter ausschalten?","appl.appliances":"Haushaltsgeräte","appl.done_unload":"Fertig · zum Ausräumen tippen","appl.door_open":"Tür offen","appl.drying":"Trocknet","appl.error":"Fehler","appl.finished":"Fertig","appl.idle":"Inaktiv","appl.min_elapsed":"seit {n} Min.","appl.min_left":"noch {n} Min.","appl.paused":"Pausiert","appl.pct_done":"{n}% erledigt","appl.run_coffee":"Brüht","appl.run_oven":"Gart","appl.run_printer":"Druckt","appl.running":"Läuft","appl.unavailable":"Status nicht verfügbar","appl.unloaded":"Ausgeräumt","bar.more":"Weitere Schaltflächen","bar.overlays":"Ansichten","bar.scroll_back":"Zurückscrollen","battery":"Batterie","bond":"Gruppe","cancel":"Abbrechen","card.choose_plan":"Wähle einen Plan (plan: <plan id>)","card.description":"Dein Grundriss mit Live-Ansichten: Live, Licht, Komfort, Sicherheit, Netzwerk, Zustand und deine eigenen.","card.plan_missing":"Plan „{p}“ nicht gefunden. Prüfe die Plan-ID oder öffne den Floorplan Editor in der Seitenleiste.","chip.n_of_on":"{n} von {t} an","chip.n_of_open":"{n} von {t} offen","chip.n_on":"{n} an","chip.n_open":"{n} offen","chip.off":"Aus","chip.on":"An","clean.cant_room":"Dein Roboter kann aus Home Assistant keinen einzelnen Raum reinigen (braucht seine Raumzuordnung, Home Assistant 2026.3+).","clean.clean_now":"Jetzt reinigen","clean.cleaned":"Gereinigt {t}.","clean.cleaned_by":"Gereinigt {t} von {by}.","clean.cleaning_l":"wird gereinigt","clean.cleaning_now":"Wird gerade gereinigt","clean.due":"Fällig","clean.every_d":"alle {n} T.","clean.in_d":"in {n} T.","clean.last7":"Letzte 7 Tage","clean.last_cleaned":"Zuletzt gereinigt","clean.last_time":"Beim letzten Mal gereinigt","clean.leg_fresh":"Frisch","clean.leg_now":"Jetzt","clean.map_hint":"Ordne diesen Raum in den Einstellungen des Roboters einem seiner Räume zu (Map vacuum segments to areas), um ihn von hier zu reinigen.","clean.never":"nie","clean.none_yet":"Hier wurde noch keine Reinigung erfasst.","clean.not_cleaned":"nicht gereinigt","clean.now":"jetzt","clean.now_with":"Jetzt mit {r} reinigen","clean.robot_usually":"Roboter reinigt meist","clean.usually_takes":"Dauert meist","climate.auto":"Auto","climate.cooling":"Kühlen","climate.defrosting":"Abtauen","climate.dry":"Entfeuchten","climate.drying":"Entfeuchten","climate.fan":"Lüfter","climate.heating":"Heizen","climate.idle":"Inaktiv","climate.off":"Aus","climate.preheating":"Vorheizen","close":"Schließen","conn.radio":"Funk","cover.all":"Alle","cover.close":"Schließen","cover.close_all":"Alle schließen","cover.open":"Öffnen","cover.open_all":"Alle öffnen","cover.position":"Position","cover.stop":"Stopp","cover.stop_all":"Alle stoppen","details":"Details","details_more":"Details ›","edit.hide_here":"Hier ausblenden (nur in dieser Ansicht)","edit.markers":"Marker bearbeiten","edit.pen_title":"Tippe auf Marker, um sie auszublenden oder Anzeige, Symbol, Name und Tippen zu wählen","energy.grid":"Netz","energy.last24":"Letzte 24 h","energy.loading":"Energie wird geladen…","energy.no_data":"Energiedaten nicht verfügbar","energy.none_yet":"Noch keine Geräte in den Energie-Einstellungen von Home Assistant. Füge sie unter Einstellungen → Dashboards → Energie hinzu, dann erscheinen sie hier.","energy.not_on_plan":"Nicht auf diesem Plan","energy.now_live":"Jetzt (live)","energy.on_plan":"Auf dem Plan","energy.panel":"Stromverteiler","energy.place_panel":"Platziere den Stromverteiler im Floorplan Editor (Schritt 3, Energiepunkte), um die Flusslinien zu sehen.","energy.rooms_darker":"Räume: dunkler = mehr Energie","energy.scrub":"Energie: die letzten 24 Stunden, Stunde für Stunde","energy.solar":"Solar","floor.change_a":"Etage {f}, Etage wechseln","floor.change_t":"{f}: Etage wechseln","floor.down":"Etage nach unten","floor.floors":"Etagen","floor.left":"Plan links","floor.right":"Plan rechts","floor.up":"Etage nach oben","graphs_more":"Verläufe ›","heat.estimated":"Geschätzt zwischen den Sensoren","heat.room_temp":"Raumtemperatur","heat.strength":"Stärke der Heatmap","hist.not_enough":"Noch nicht genug Verlauf","humidity":"Luftfeuchtigkeit","humidity_details":"Details zur Luftfeuchtigkeit","humidity_l":"Luftfeuchtigkeit","lay.air":"Luftstrom der Klimageräte","lay.all_sensors":"Alle Sensoren","lay.cams":"Kameras","lay.cams_not_replay":"Kameras (nicht im Replay)","lay.clim":"Klimageräte","lay.fill":"Raumschattierung","lay.flow":"Flusslinien","lay.heat":"Heatmap","lay.labels":"Temperaturanzeigen","lay.no_cam_replay":"Kein Kameravideo im Replay","lay.pall":"Ringe um alle Proxys","lay.path":"Reinigungsweg","lay.path_last":"Weg der letzten Reinigung","lay.pdist":"Abstand von Personen","lay.reset":"Zurück zu den Standards der Karte","lay.rooms":"Raumnamen","layers":"Ebenen","leg.colour_strength":"Farbstärke","mob.afternoon":"Guten Tag","mob.air_good":"Luft gut","mob.air_mod":"Luft mäßig","mob.air_poor":"Luft schlecht","mob.alarm_panel":"Alarmanlage","mob.alert":"Alarm","mob.all_closed":"Alles zu","mob.all_devices":"Alle Geräte","mob.all_fine":"Alles in Ordnung","mob.all_good":"Alles gut","mob.all_off":"Alles aus","mob.all_online":"Alles online","mob.appliances":"Haushaltsgeräte","mob.as_grid":"Als Raster zeigen","mob.as_row":"Als Reihe zeigen","mob.back":"Zurück","mob.battery":"Batterie {n}%","mob.brightness":"Helligkeit","mob.cameras":"Kameras","mob.card_desc":"Dein Zuhause auf dem Handy: Räume, Geräte und Ebenen aus dem Floorplan.","mob.card_name":"Device Floorplan (Handy)","mob.cfg_copy_help":"Personen, Raumnamen, Aussehen und Ebenen-Einstellungen der ersten Floorplan-Karte auf deinen Dashboards.","mob.cfg_copy_settings":"Einstellungen meiner Floorplan-Karte verwenden","mob.cfg_default_overlay":"Plan zeigt","mob.cfg_hide_header":"Obere Leiste von Home Assistant auf Handys ausblenden","mob.cfg_hide_help":"Nur auf diesem Dashboard und solange es offen ist; ☰ unten öffnet das Menü. Zum Bearbeiten ?edit=1 an die Adresse anhängen.","mob.cfg_layout":"Layout","mob.cfg_layout_help":"Automatisch: der Haus-Explorer, wenn das Handy quer gehalten wird.","mob.cfg_room_order":"Reihenfolge der Räume","mob.climate_to":"{s} auf {t}°","mob.control":"Steuerung","mob.details":"Details","mob.devices":"Geräte","mob.door":"Tür","mob.door_open":"Tür offen","mob.energy":"Energie","mob.evening":"Guten Abend","mob.floor_down":"Etage darunter","mob.floor_up":"Etage darüber","mob.floors":"Etagen","mob.g_appl":"Haushaltsgeräte","mob.g_comfort":"Komfort","mob.g_lights":"Licht","mob.g_media":"Medien","mob.g_other":"Sonstiges","mob.g_security":"Sicherheit","mob.hide":"Ausblenden","mob.home":"Zuhause","mob.home_control":"Haussteuerung","mob.house_hint":"Tippe auf eine Etage, um sie zu öffnen","mob.inside":"{t}° drinnen","mob.k_of_n_home":"{k}/{n} zu Hause","mob.last":"Zuletzt","mob.last_run":"Zuletzt {t}","mob.layout_auto":"Automatisch","mob.layout_landscape":"Immer quer","mob.layout_portrait":"Immer hochkant","mob.lights_on":{"one":"{n} Licht an","other":"{n} Lichter an"},"mob.measured":"jetzt, aus den Geräten mit Leistungsmessung","mob.menu":"Home-Assistant-Menü","mob.morning":"Guten Morgen","mob.n_attention":{"one":"{n} braucht Aufmerksamkeit","other":"{n} brauchen Aufmerksamkeit"},"mob.n_devices":{"one":"{n} Gerät","other":"{n} Geräte"},"mob.n_floors":{"one":"{n} Etage","other":"{n} Etagen"},"mob.n_home":{"one":"{n} Person zu Hause","other":"{n} Personen zu Hause"},"mob.n_low":{"one":"{n} Batterie schwach","other":"{n} Batterien schwach"},"mob.n_offline":{"one":"{n} offline","other":"{n} offline"},"mob.n_on":{"one":"{n} an","other":"{n} an"},"mob.n_rooms":{"one":"{n} Raum","other":"{n} Räume"},"mob.n_shown":{"one":"{n} angezeigt","other":"{n} angezeigt"},"mob.n_warn":{"one":"{n} Warnung","other":"{n} Warnungen"},"mob.needs_look":"Braucht Aufmerksamkeit","mob.next_room":"Nächster Raum","mob.no_people":"Keine Personen","mob.no_plans":"Noch keine Pläne: zeichne einen im Floorplan Editor.","mob.no_room":"Kein Raum","mob.nothing":"Nichts hier","mob.now_n":{"one":"{n} Sache läuft","other":"{n} Sachen laufen"},"mob.offline":"Offline","mob.on_plan":"Im Plan zeigen","mob.open":"Offen","mob.open_n":{"one":"{n} offen","other":"{n} offen"},"mob.openings":"Öffnungen","mob.order_active":"Aktivste zuerst","mob.order_alpha":"Alphabetisch","mob.order_plan":"Reihenfolge im Plan","mob.outside":"draußen","mob.overlays":"Ebenen","mob.overlays_sub":"Alle Ebenen und Home Replay","mob.people":"Personen","mob.power":"Leistung","mob.prev_room":"Vorheriger Raum","mob.program":"Programm","mob.quiet":"Ruhig","mob.replay_sub":"Sieh, wie es vorhin zu Hause aussah","mob.rooms":"Räume","mob.search":"Geräte oder Räume suchen","mob.see_all":"Alle","mob.show_plan":"Plan zeigen","mob.shutters":"Rollläden","mob.status":"Status","motion.clear":"Keine Bewegung","motion.detected":"Bewegung","n_devices":{"one":"{n} Gerät","other":"{n} Geräte"},"net.ap":"Zugangspunkt","net.cable":"Kabel","net.cable_lan":"Kabel (LAN)","net.connected_devices":"Verbundene Geräte ({n})","net.connected_here":"Hier verbunden","net.connection":"Verbindung","net.connections":"Verbindungen","net.default":"Standard","net.fair":"mittel","net.good":"gut","net.hub_links":"Verbindungen über Hub / Bridge","net.includes":"Enthält","net.legend":"Legende","net.link":"Verbindung","net.no_lqi":"Noch keine Verbindungsqualität bekannt (ZHA-Daten werden für Admins geladen).","net.no_signal":"Kein Signalwert: aktiviere den Signalsensor dieses Geräts in Home Assistant, um ihn hier zu sehen.","net.not_connected":"nicht verbunden","net.not_on_floor":"nicht auf dieser Etage","net.on_floor":"auf dieser Etage","net.path":"Weg","net.refresh":"Aktualisieren","net.rescan":"Zigbee-Netzwerk neu scannen","net.role":"Rolle","net.router":"Router","net.scanning":"Scannt…","net.show_hide":"Ein- / ausblenden","net.show_hide_range":"Verbindungen in diesem Bereich ein- / ausblenden","net.signal":"Signal","net.through":"Über {d}","net.through_k":"Über","net.via_hub":"über Hub / Bridge","net.weak":"schwach","net.wifi_links":"WLAN- / LAN-Verbindungen","net.wifi_net":"WLAN-Netz","net.zha_at":"Zigbee-Daten aktualisiert um {t}","net.zigbee_links":"Zigbee-Verbindungen","newov.add":"Zu dieser Karte hinzufügen","newov.energy":". Platziere dann deine Energiesensoren im Floorplan Editor (Schritt 3, Energiepunkte) für die Flusslinien.","newov.not_now":"Nicht jetzt","newov.save_add":"Konnte nicht im Dashboard speichern: füge {o} in den Einstellungen der Karte hinzu (Ansichten)","newov.save_later":"Konnte nicht im Dashboard speichern: es erscheint nach dem Neuladen wieder","newov.text":"Neu: Ansicht {o}","offline":"Offline","open_more":"Öffnen ›","ov.cleaning":"Reinigung","ov.comfort":"Komfort","ov.custom":"Eigene","ov.energy":"Energie","ov.health":"Zustand","ov.lights":"Licht","ov.live":"Live","ov.network":"Netzwerk","ov.people":"Personen","ov.plan":"Plan","ov.security":"Sicherheit","people.home":"Zuhause","people.home_unknown":"zuhause, Raum unbekannt","people.not_sure":"unsicher","ph.average":"Durchschnitt","ph.highest":"höchster Wert","ph.lowest":"niedrigster Wert","ph.one":"ein Sensor","phantom":"Phantom","phantom.place_hint":"Platziere diese Geräte im Floorplan Editor auf dem Plan, um jedes einzeln zu sehen.","press.do":"Drücken","press.q":"„{b}“ drücken?","robot.area":"Fläche","robot.charging":"Lädt","robot.charging_l":"lädt","robot.cleaning":"Reinigt","robot.consumables":"Verschleißteile","robot.continue":"Fortsetzen","robot.dock":"Station","robot.docked":"In der Station","robot.error":"Fehler","robot.idle":"Inaktiv","robot.last_cleaning":"Letzte Reinigung","robot.pause":"Pause","robot.paused":"Pausiert","robot.returning":"Kehrt zurück","robot.settings":"Einstellungen","robot.start":"Start","robot.this_run":"Dieser Durchgang","robot.took":"Dauer","role.ap":"Router / Zugangspunkt","role.btproxy":"Bluetooth-Proxy","role.coordinator":"Koordinator","role.device":"Gerät","role.end":"Endgerät","role.gp":"Batterielos (Green Power)","role.hub":"Hub / Bridge","role.router":"Router / Repeater","role.unavailable":"Nicht verfügbar","role.unknown":"Unbekannt","rp.avg_temp":"Durchschnittliche Raumtemperatur ({u}), niedrigste–höchste","rp.back_now":"Zurück zu jetzt","rp.before":"Vor den geladenen {n} h: ihr Anfang wird gezeigt","rp.close":"Home Replay schließen","rp.day":"Tag","rp.future":"Diese Zeit liegt noch in der Zukunft: Jetzt wird gezeigt","rp.go":"Los","rp.goto":"Zu Tag und Uhrzeit springen","rp.name":"Home Replay","rp.next":"Nächstes Ereignis","rp.no_switch":"Replay: tippe auf ← Jetzt, um Geräte zu schalten","rp.now":"Jetzt","rp.overlay":"Ansicht für das Replay","rp.pause":"Pause","rp.play":"Abspielen","rp.prev":"Vorheriges Ereignis","rp.range":"Zeitraum","rp.short":"Replay","rp.speed":"Geschwindigkeit","rp.tap_goto":"Tippen, um zu Tag und Uhrzeit zu springen","rp.time":"Replay-Zeit","rp.time_input":"Uhrzeit (Sekunden optional)","rp.today":"Heute","rp.yesterday":"Gestern","save.cam_failed":"Der Kameraplatz konnte nicht im Dashboard gespeichert werden.","save.cam_yaml":"Dieses Dashboard wird in YAML gepflegt: der Kameraplatz gilt bis zum Neuladen der Seite.","save.failed":"Konnte nicht im Dashboard speichern. Nutze stattdessen Karte bearbeiten → Marker bearbeiten.","save.notfound":"Diese Karte wurde außerhalb des Marker-Editors geändert. Schließe ihn (Fertig) und öffne Marker bearbeiten erneut.","save.yaml":"Dieses Dashboard wird in YAML gepflegt: nutze dort Karte bearbeiten → Marker bearbeiten und kopiere das YAML.","scene.all_off":"Alle aus","scene.all_on":"Alle an","scene.bar":"Lichtszenen","scene.n":"Szene {n}","sec.all_closed":"Alles zu","sec.all_secure":"Alles sicher","sec.n_open":"{n} offen","shortcut":"Kurzbefehl","temperature":"Temperatur","temperature_details":"Details zur Temperatur","temperature_l":"Temperatur","this_device":"Dieses Gerät","time.ago":"vor {t}","time.just_now":"gerade eben","time.now":"jetzt","tip.close":"Tipp schließen","tip.go":"Ausprobieren","tip.new_in":"Neu in {v}","tip.text":"Weihnachtslichter und Bäume","toast.cleaning_started":"Reinigung gestartet","toast.no_shortcuts_editing":"Kurzbefehle laufen beim Bearbeiten nicht","toast.pressed":"Gedrückt · {b}","toast.preview_not_run":"Vorschau: „{b}“ läuft beim Bearbeiten nicht","toast.unavailable":"{d} ist nicht verfügbar","toast.would_open":"Würde öffnen: {u}","toast.would_press":"Würde drücken: {b}","turn_off":"Ausschalten","turn_on":"Einschalten","unavailable_l":"nicht verfügbar","unit.d":"{n} T.","unit.h":"{n} Std.","unit.min":"{n} Min.","yes":"ja"},"el":{"action":"Ενέργεια","actions":"Ενέργειες","admin.new_place":"{n} νέες · Τοποθέτησέ τες","admin.new_short":"{n} νέες","admin.new_title":{"one":"{n} νέα συσκευή · τη βλέπουν μόνο οι διαχειριστές","other":"{n} νέες συσκευές · τις βλέπουν μόνο οι διαχειριστές"},"alloff.n_on":{"one":"{n} φως είναι αναμμένο.","other":"{n} φώτα είναι αναμμένα."},"alloff.none":"Κανένα φως δεν είναι αναμμένο αυτή τη στιγμή.","alloff.q":"Να σβήσουν όλα τα φώτα;","appl.appliances":"Συσκευές","appl.done_unload":"Τελείωσε · πάτα όταν αδειάσει","appl.door_open":"Ανοιχτή πόρτα","appl.drying":"Στεγνώνει","appl.error":"Σφάλμα","appl.finished":"Τελείωσε","appl.idle":"Αδρανές","appl.min_elapsed":"{n} λεπ. από την έναρξη","appl.min_left":"απομένουν {n} λεπ.","appl.paused":"Σε παύση","appl.pct_done":"{n}% ολοκληρώθηκε","appl.run_coffee":"Παρασκευή","appl.run_oven":"Μαγείρεμα","appl.run_printer":"Εκτύπωση","appl.running":"Λειτουργεί","appl.unavailable":"Η κατάσταση δεν είναι διαθέσιμη","appl.unloaded":"Άδειασε","bar.more":"Περισσότερα κουμπιά","bar.overlays":"Επίπεδα","bar.scroll_back":"Κύλιση πίσω","battery":"Μπαταρία","bond":"Ομάδα","cancel":"Άκυρο","card.choose_plan":"Επίλεξε μια κάτοψη (plan: <plan id>)","card.description":"Η κάτοψή σου με ζωντανά επίπεδα: Ζωντανά, Φώτα, Άνεση, Ασφάλεια, Δίκτυο, Υγεία και τα δικά σου.","card.plan_missing":"Η κάτοψη “{p}” δεν βρέθηκε. Έλεγξε το plan id ή άνοιξε το Floorplan Editor από την πλαϊνή μπάρα.","chip.n_of_on":"{n} από {t} αναμμένα","chip.n_of_open":"{n} από {t} ανοιχτά","chip.n_on":"{n} αναμμένα","chip.n_open":"{n} ανοιχτά","chip.off":"Σβηστά","chip.on":"Αναμμένα","clean.cant_room":"Η σκούπα σου δεν μπορεί να καθαρίσει ένα μόνο δωμάτιο από το Home Assistant (χρειάζεται αντιστοίχιση δωματίων, Home Assistant 2026.3+).","clean.clean_now":"Καθάρισε τώρα","clean.cleaned":"Καθαρίστηκε {t}.","clean.cleaned_by":"Καθαρίστηκε {t} από {by}.","clean.cleaning_l":"καθαρίζεται","clean.cleaning_now":"Καθαρίζεται τώρα","clean.due":"Επόμενος","clean.every_d":"κάθε {n} ημ.","clean.in_d":"σε {n} ημ.","clean.last7":"Τελευταίες 7 ημέρες","clean.last_cleaned":"Τελευταίος καθαρισμός","clean.last_time":"Καθαρίστηκε την τελευταία φορά","clean.leg_fresh":"Πρόσφατα","clean.leg_now":"Τώρα","clean.map_hint":"Αντιστοίχισε αυτό το δωμάτιο με ένα από τα δωμάτια της σκούπας στις ρυθμίσεις της (Map vacuum segments to areas) για να το καθαρίζεις από εδώ.","clean.never":"ποτέ","clean.none_yet":"Δεν έχει καταγραφεί καθαρισμός εδώ ακόμα.","clean.not_cleaned":"δεν καθαρίστηκε","clean.now":"τώρα","clean.now_with":"Καθάρισε τώρα με {r}","clean.robot_usually":"Η σκούπα καθαρίζει συνήθως","clean.usually_takes":"Διαρκεί συνήθως","climate.auto":"Αυτόματο","climate.cooling":"Ψύξη","climate.defrosting":"Απόψυξη","climate.dry":"Αφύγρανση","climate.drying":"Αφύγρανση","climate.fan":"Ανεμιστήρας","climate.heating":"Θέρμανση","climate.idle":"Αδρανές","climate.off":"Κλειστό","climate.preheating":"Προθέρμανση","close":"Κλείσιμο","conn.radio":"Ασύρματο","cover.all":"Όλα","cover.close":"Κλείσιμο","cover.close_all":"Κλείσιμο όλων","cover.open":"Άνοιγμα","cover.open_all":"Άνοιγμα όλων","cover.position":"Θέση","cover.stop":"Στοπ","cover.stop_all":"Στοπ όλων","details":"Λεπτομέρειες","details_more":"Λεπτομέρειες ›","edit.hide_here":"Απόκρυψη εδώ (μόνο σε αυτό το επίπεδο)","edit.markers":"Επεξεργασία δεικτών","edit.pen_title":"Πάτα σε δείκτες για να τους κρύψεις ή να διαλέξεις τι δείχνουν, εικονίδιο, όνομα, πάτημα","energy.grid":"Δίκτυο ρεύματος","energy.last24":"Τελευταίες 24 ώρες","energy.loading":"Φόρτωση ενέργειας…","energy.no_data":"Τα δεδομένα ενέργειας δεν είναι διαθέσιμα","energy.none_yet":"Δεν υπάρχουν ακόμα συσκευές στις ρυθμίσεις Ενέργειας του Home Assistant. Πρόσθεσέ τες στις Ρυθμίσεις → Πίνακες εργαλείων → Ενέργεια και θα εμφανιστούν εδώ.","energy.not_on_plan":"Εκτός κάτοψης","energy.now_live":"Τώρα (ζωντανά)","energy.on_plan":"Στην κάτοψη","energy.panel":"Ηλεκτρικός πίνακας","energy.place_panel":"Τοποθέτησε τον Ηλεκτρικό πίνακα στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για να δεις τις γραμμές ροής.","energy.rooms_darker":"Δωμάτια: πιο σκούρο = περισσότερη ενέργεια","energy.scrub":"Ενέργεια: οι τελευταίες 24 ώρες, ώρα με την ώρα","energy.solar":"Ηλιακά","floor.change_a":"Όροφος {f}, αλλαγή ορόφου","floor.change_t":"{f}: αλλαγή ορόφου","floor.down":"Όροφος κάτω","floor.floors":"Όροφοι","floor.left":"Κάτοψη αριστερά","floor.right":"Κάτοψη δεξιά","floor.up":"Όροφος πάνω","graphs_more":"Γραφήματα ›","heat.estimated":"Εκτίμηση ανάμεσα στους αισθητήρες","heat.room_temp":"Θερμοκρασία δωματίων","heat.strength":"Ένταση θερμικού χάρτη","hist.not_enough":"Δεν υπάρχει ακόμα αρκετό ιστορικό","humidity":"Υγρασία","humidity_details":"Λεπτομέρειες υγρασίας","humidity_l":"υγρασία","lay.air":"Ροή αέρα κλιματιστικών","lay.all_sensors":"Όλοι οι αισθητήρες","lay.cams":"Κάμερες","lay.cams_not_replay":"Κάμερες (όχι στην Αναπαραγωγή)","lay.clim":"Συσκευές κλιματισμού","lay.fill":"Σκίαση δωματίων","lay.flow":"Γραμμές ροής","lay.heat":"Θερμικός χάρτης","lay.labels":"Ετικέτες θερμοκρασίας","lay.no_cam_replay":"Χωρίς βίντεο κάμερας στην Αναπαραγωγή","lay.pall":"Κύκλοι γύρω από όλους τους proxies","lay.path":"Διαδρομή καθαρισμού","lay.path_last":"Διαδρομή του τελευταίου καθαρισμού","lay.pdist":"Απόσταση ατόμων","lay.reset":"Πίσω στις προεπιλογές της κάρτας","lay.rooms":"Ονόματα δωματίων","layers":"Στρώσεις","leg.colour_strength":"Ένταση χρώματος","mob.afternoon":"Καλό απόγευμα","mob.air_good":"Καλός αέρας","mob.air_mod":"Μέτριος αέρας","mob.air_poor":"Κακός αέρας","mob.alarm_panel":"Συναγερμός","mob.alert":"Συναγερμός","mob.all_closed":"Όλα κλειστά","mob.all_devices":"Όλες οι συσκευές","mob.all_fine":"Όλα εντάξει","mob.all_good":"Όλα εντάξει","mob.all_off":"Όλα σβηστά","mob.all_online":"Όλα συνδεδεμένα","mob.appliances":"Οικιακές συσκευές","mob.as_grid":"Εμφάνιση σε πλέγμα","mob.as_row":"Εμφάνιση σε σειρά","mob.back":"Πίσω","mob.battery":"Μπαταρία {n}%","mob.brightness":"Φωτεινότητα","mob.cameras":"Κάμερες","mob.card_desc":"Το σπίτι σας στο κινητό: δωμάτια, συσκευές και επικαλύψεις από το Floorplan.","mob.card_name":"Device Floorplan (κινητό)","mob.cfg_copy_help":"Άτομα, ονόματα δωματίων, εμφάνιση και ρυθμίσεις επικαλύψεων από την πρώτη κάρτα Floorplan στους πίνακές σας.","mob.cfg_copy_settings":"Χρήση των ρυθμίσεων της κάρτας Floorplan","mob.cfg_default_overlay":"Ο χάρτης δείχνει","mob.cfg_hide_header":"Απόκρυψη της πάνω μπάρας του Home Assistant στα κινητά","mob.cfg_hide_help":"Μόνο σε αυτόν τον πίνακα και όσο είναι ανοιχτός· το ☰ κάτω ανοίγει το μενού. Για επεξεργασία, προσθέστε ?edit=1 στη διεύθυνση.","mob.cfg_layout":"Διάταξη","mob.cfg_layout_help":"Αυτόματα: η εξερεύνηση του σπιτιού όταν γυρίζετε το κινητό οριζόντια.","mob.cfg_room_order":"Σειρά δωματίων","mob.climate_to":"{s} στους {t}°","mob.control":"Έλεγχος","mob.details":"Λεπτομέρειες","mob.devices":"Συσκευές","mob.door":"Πόρτα","mob.door_open":"Πόρτα ανοιχτή","mob.energy":"Ενέργεια","mob.evening":"Καλησπέρα","mob.floor_down":"Όροφος από κάτω","mob.floor_up":"Όροφος από πάνω","mob.floors":"Όροφοι","mob.g_appl":"Οικιακές συσκευές","mob.g_comfort":"Άνεση","mob.g_lights":"Φώτα","mob.g_media":"Πολυμέσα","mob.g_other":"Άλλα","mob.g_security":"Ασφάλεια","mob.hide":"Απόκρυψη","mob.home":"Αρχική","mob.home_control":"Έλεγχος σπιτιού","mob.house_hint":"Πατήστε έναν όροφο για να τον ανοίξετε","mob.inside":"{t}° μέσα","mob.k_of_n_home":"{k}/{n} στο σπίτι","mob.last":"Τελευταία λειτουργία","mob.last_run":"Τελευταία λειτουργία {t}","mob.layout_auto":"Αυτόματα","mob.layout_landscape":"Πάντα οριζόντια","mob.layout_portrait":"Πάντα κάθετα","mob.lights_on":{"one":"{n} φως αναμμένο","other":"{n} φώτα αναμμένα"},"mob.measured":"τώρα, από τις συσκευές με μέτρηση ισχύος","mob.menu":"Μενού Home Assistant","mob.morning":"Καλημέρα","mob.n_attention":{"one":"{n} θέλει προσοχή","other":"{n} θέλουν προσοχή"},"mob.n_devices":{"one":"{n} συσκευή","other":"{n} συσκευές"},"mob.n_floors":{"one":"{n} όροφος","other":"{n} όροφοι"},"mob.n_home":{"one":"{n} άτομο στο σπίτι","other":"{n} άτομα στο σπίτι"},"mob.n_low":{"one":"{n} χαμηλή μπαταρία","other":"{n} χαμηλές μπαταρίες"},"mob.n_offline":{"one":"{n} εκτός σύνδεσης","other":"{n} εκτός σύνδεσης"},"mob.n_on":{"one":"{n} ενεργό","other":"{n} ενεργά"},"mob.n_rooms":{"one":"{n} δωμάτιο","other":"{n} δωμάτια"},"mob.n_shown":{"one":"{n} εμφανίζεται","other":"{n} εμφανίζονται"},"mob.n_warn":{"one":"{n} προειδοποίηση","other":"{n} προειδοποιήσεις"},"mob.needs_look":"Θέλει προσοχή","mob.next_room":"Επόμενο δωμάτιο","mob.no_people":"Κανένα άτομο","mob.no_plans":"Δεν υπάρχουν χάρτες ακόμη: σχεδιάστε έναν στον Floorplan Editor.","mob.no_room":"Χωρίς δωμάτιο","mob.nothing":"Τίποτα εδώ","mob.now_n":{"one":"{n} πράγμα σε εξέλιξη","other":"{n} πράγματα σε εξέλιξη"},"mob.offline":"Εκτός σύνδεσης","mob.on_plan":"Εμφάνιση στον χάρτη","mob.open":"Ανοιχτό","mob.open_n":{"one":"{n} ανοιχτό","other":"{n} ανοιχτά"},"mob.openings":"Ανοίγματα","mob.order_active":"Πιο ενεργά πρώτα","mob.order_alpha":"Αλφαβητικά","mob.order_plan":"Σειρά του χάρτη","mob.outside":"έξω","mob.overlays":"Επικαλύψεις","mob.overlays_sub":"Όλες οι επικαλύψεις και το Home Replay","mob.people":"Άτομα","mob.power":"Ισχύς","mob.prev_room":"Προηγούμενο δωμάτιο","mob.program":"Πρόγραμμα","mob.quiet":"Ήσυχα","mob.replay_sub":"Δείτε πώς ήταν το σπίτι νωρίτερα","mob.rooms":"Δωμάτια","mob.search":"Αναζήτηση συσκευών ή δωματίων","mob.see_all":"Όλα","mob.show_plan":"Εμφάνιση χάρτη","mob.shutters":"Ρολά","mob.status":"Κατάσταση","motion.clear":"Καμία κίνηση","motion.detected":"Κίνηση","n_devices":{"one":"{n} συσκευή","other":"{n} συσκευές"},"net.ap":"Σημείο πρόσβασης","net.cable":"καλώδιο","net.cable_lan":"Καλώδιο (LAN)","net.connected_devices":"Συνδεδεμένες συσκευές ({n})","net.connected_here":"Συνδεδεμένες εδώ","net.connection":"Σύνδεση","net.connections":"Συνδέσεις","net.default":"Προεπιλογή","net.fair":"μέτριο","net.good":"καλό","net.hub_links":"Συνδέσεις μέσω hub / γέφυρας","net.includes":"Περιλαμβάνει","net.legend":"Υπόμνημα","net.link":"Σύνδεσμος","net.no_lqi":"Δεν είναι γνωστή ακόμα η ποιότητα σύνδεσης (τα δεδομένα ZHA φορτώνονται για διαχειριστές).","net.no_signal":"Χωρίς τιμή σήματος: ενεργοποίησε τον αισθητήρα σήματος της συσκευής στο Home Assistant για να το δεις εδώ.","net.not_connected":"δεν είναι συνδεδεμένο","net.not_on_floor":"όχι σε αυτόν τον όροφο","net.on_floor":"σε αυτόν τον όροφο","net.path":"Διαδρομή","net.refresh":"Ανανέωση","net.rescan":"Νέα σάρωση του δικτύου Zigbee","net.role":"Ρόλος","net.router":"Router","net.scanning":"Σάρωση…","net.show_hide":"Εμφάνιση / απόκρυψη","net.show_hide_range":"Εμφάνιση / απόκρυψη συνδέσεων σε αυτό το εύρος","net.signal":"Σήμα","net.through":"Μέσω {d}","net.through_k":"Μέσω","net.via_hub":"μέσω hub / γέφυρας","net.weak":"αδύναμο","net.wifi_links":"Συνδέσεις Wi-Fi / LAN","net.wifi_net":"Δίκτυο Wi-Fi","net.zha_at":"Τα δεδομένα Zigbee ενημερώθηκαν στις {t}","net.zigbee_links":"Συνδέσεις Zigbee","newov.add":"Προσθήκη σε αυτή την κάρτα","newov.energy":". Μετά τοποθέτησε τους αισθητήρες ενέργειας στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για τις γραμμές ροής.","newov.not_now":"Όχι τώρα","newov.save_add":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: πρόσθεσε το {o} στις ρυθμίσεις της κάρτας (Επίπεδα)","newov.save_later":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: θα ξαναεμφανιστεί μετά από ανανέωση","newov.text":"Νέο: επίπεδο {o}","offline":"Εκτός σύνδεσης","open_more":"Άνοιγμα ›","ov.cleaning":"Καθαρισμός","ov.comfort":"Άνεση","ov.custom":"Προσαρμοσμένο","ov.energy":"Ενέργεια","ov.health":"Υγεία","ov.lights":"Φώτα","ov.live":"Ζωντανά","ov.network":"Δίκτυο","ov.people":"Άτομα","ov.plan":"Κάτοψη","ov.security":"Ασφάλεια","people.home":"Σπίτι","people.home_unknown":"στο σπίτι, άγνωστο δωμάτιο","people.not_sure":"όχι σίγουρο","ph.average":"μέσος όρος","ph.highest":"υψηλότερη","ph.lowest":"χαμηλότερη","ph.one":"ένας αισθητήρας","phantom":"Εικονική","phantom.place_hint":"Τοποθέτησε αυτές τις συσκευές στην κάτοψη στο Floorplan Editor για να βλέπεις την καθεμία χωριστά.","press.do":"Πάτημα","press.q":"Πάτημα «{b}»;","robot.area":"Επιφάνεια","robot.charging":"Φορτίζει","robot.charging_l":"φορτίζει","robot.cleaning":"Καθαρίζει","robot.consumables":"Αναλώσιμα","robot.continue":"Συνέχεια","robot.dock":"Βάση","robot.docked":"Στη βάση","robot.error":"Σφάλμα","robot.idle":"Αδρανής","robot.last_cleaning":"Τελευταίος καθαρισμός","robot.pause":"Παύση","robot.paused":"Σε παύση","robot.returning":"Επιστρέφει","robot.settings":"Ρυθμίσεις","robot.start":"Έναρξη","robot.this_run":"Αυτός ο κύκλος","robot.took":"Διάρκεια","role.ap":"Router / σημείο πρόσβασης","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Συσκευή","role.end":"Τελική συσκευή","role.gp":"Χωρίς μπαταρία (Green Power)","role.hub":"Hub / γέφυρα","role.router":"Router / αναμεταδότης","role.unavailable":"Μη διαθέσιμη","role.unknown":"Άγνωστο","rp.avg_temp":"Μέση θερμοκρασία δωματίων ({u}), χαμηλότερη–υψηλότερη","rp.back_now":"Πίσω στο τώρα","rp.before":"Πριν από τις {n} ώρες που φορτώθηκαν: εμφανίζεται η αρχή τους","rp.close":"Κλείσιμο Home Replay","rp.day":"Ημέρα","rp.future":"Αυτή η ώρα δεν έχει έρθει ακόμα: εμφανίζεται το Τώρα","rp.go":"Μετάβαση","rp.goto":"Μετάβαση σε ημέρα και ώρα","rp.name":"Home Replay","rp.next":"Επόμενο συμβάν","rp.no_switch":"Αναπαραγωγή: πάτα ← Τώρα για να χειριστείς συσκευές","rp.now":"Τώρα","rp.overlay":"Επίπεδο για αναπαραγωγή","rp.pause":"Παύση","rp.play":"Αναπαραγωγή","rp.prev":"Προηγούμενο συμβάν","rp.range":"Εύρος","rp.short":"Αναπαραγωγή","rp.speed":"Ταχύτητα","rp.tap_goto":"Πάτα για να πας σε ημέρα και ώρα","rp.time":"Ώρα αναπαραγωγής","rp.time_input":"Ώρα (τα δευτερόλεπτα προαιρετικά)","rp.today":"Σήμερα","rp.yesterday":"Χθες","save.cam_failed":"Δεν ήταν δυνατή η αποθήκευση της θέσης της κάμερας στον πίνακα.","save.cam_yaml":"Αυτός ο πίνακας είναι σε YAML: η θέση της κάμερας κρατά μέχρι να ανανεωθεί η σελίδα.","save.failed":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα. Χρησιμοποίησε Επεξεργασία κάρτας → Επεξεργασία δεικτών.","save.notfound":"Η κάρτα άλλαξε εκτός του Marker Editor. Κλείσ’ τον (Τέλος) και άνοιξε ξανά την Επεξεργασία δεικτών.","save.yaml":"Αυτός ο πίνακας είναι σε YAML: χρησιμοποίησε εκεί Επεξεργασία κάρτας → Επεξεργασία δεικτών και αντίγραψε το YAML.","scene.all_off":"Όλα σβηστά","scene.all_on":"Όλα αναμμένα","scene.bar":"Σκηνές φωτισμού","scene.n":"Σκηνή {n}","sec.all_closed":"Όλα κλειστά","sec.all_secure":"Όλα ασφαλή","sec.n_open":"{n} ανοιχτά","shortcut":"Συντόμευση","temperature":"Θερμοκρασία","temperature_details":"Λεπτομέρειες θερμοκρασίας","temperature_l":"θερμοκρασία","this_device":"Αυτή η συσκευή","time.ago":"πριν από {t}","time.just_now":"μόλις τώρα","time.now":"τώρα","tip.close":"Κλείσιμο συμβουλής","tip.go":"Δοκίμασέ τα","tip.new_in":"Νέο στην {v}","tip.text":"Χριστουγεννιάτικα φωτάκια και δέντρα","toast.cleaning_started":"Ο καθαρισμός ξεκίνησε","toast.no_shortcuts_editing":"Οι συντομεύσεις δεν εκτελούνται κατά την επεξεργασία","toast.pressed":"Πατήθηκε · {b}","toast.preview_not_run":"Προεπισκόπηση: το “{b}” δεν εκτελείται κατά την επεξεργασία","toast.unavailable":"{d}: μη διαθέσιμη","toast.would_open":"Θα άνοιγε: {u}","toast.would_press":"Θα πατούσε: {b}","turn_off":"Σβήσιμο","turn_on":"Άναμμα","unavailable_l":"μη διαθέσιμο","unit.d":"{n} ημ.","unit.h":"{n} ώρ.","unit.min":"{n} λεπ.","yes":"ναι"},"en":{"action":"Action","actions":"Actions","admin.new_place":"{n} new · Place them","admin.new_short":"{n} new","admin.new_title":{"one":"{n} new device · only admins see this","other":"{n} new devices · only admins see this"},"alloff.n_on":{"one":"{n} light is on.","other":"{n} lights are on."},"alloff.none":"No light is on right now.","alloff.q":"Turn all lights off?","appl.appliances":"Appliances","appl.done_unload":"Done · tap to unload","appl.door_open":"Door open","appl.drying":"Drying","appl.error":"Error","appl.finished":"Finished","appl.idle":"Idle","appl.min_elapsed":"{n} min elapsed","appl.min_left":"{n} min remaining","appl.paused":"Paused","appl.pct_done":"{n}% done","appl.run_coffee":"Brewing","appl.run_oven":"Cooking","appl.run_printer":"Printing","appl.running":"Running","appl.unavailable":"Status unavailable","appl.unloaded":"Unloaded","bar.more":"More buttons","bar.overlays":"Overlays","bar.scroll_back":"Scroll back","battery":"Battery","bond":"Bond","cancel":"Cancel","card.choose_plan":"Choose a plan (plan: <plan id>)","card.description":"Your floorplan with live overlays: Live, Lights, Comfort, Security, Network, Health and your own.","card.plan_missing":"Plan “{p}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.","chip.n_of_on":"{n} of {t} on","chip.n_of_open":"{n} of {t} open","chip.n_on":"{n} on","chip.n_open":"{n} open","chip.off":"Off","chip.on":"On","clean.cant_room":"Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+).","clean.clean_now":"Clean now","clean.cleaned":"Cleaned {t}.","clean.cleaned_by":"Cleaned {t} by {by}.","clean.cleaning_l":"cleaning","clean.cleaning_now":"Cleaning now","clean.due":"Due","clean.every_d":"every {n} d","clean.in_d":"in {n} d","clean.last7":"Last 7 days","clean.last_cleaned":"Last cleaned","clean.last_time":"Cleaned last time","clean.leg_fresh":"Fresh","clean.leg_now":"Now","clean.map_hint":"Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.","clean.never":"never","clean.none_yet":"No cleaning recorded here yet.","clean.not_cleaned":"not cleaned","clean.now":"now","clean.now_with":"Clean now with {r}","clean.robot_usually":"Robot usually cleans","clean.usually_takes":"Usually takes","climate.auto":"Auto","climate.cooling":"Cooling","climate.defrosting":"Defrosting","climate.dry":"Dry","climate.drying":"Drying","climate.fan":"Fan","climate.heating":"Heating","climate.idle":"Idle","climate.off":"Off","climate.preheating":"Preheating","close":"Close","conn.radio":"Wireless","cover.all":"All","cover.close":"Close","cover.close_all":"Close all","cover.open":"Open","cover.open_all":"Open all","cover.position":"Position","cover.stop":"Stop","cover.stop_all":"Stop all","details":"Details","details_more":"Details ›","edit.hide_here":"Hide it here (in this overlay only)","edit.markers":"Edit markers","edit.pen_title":"Click markers to hide them, choose what they show, icon, name, tap","energy.grid":"Grid","energy.last24":"Last 24 h","energy.loading":"Loading energy…","energy.no_data":"Energy data not available","energy.none_yet":"No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here.","energy.not_on_plan":"Not on this plan","energy.now_live":"Now (live)","energy.on_plan":"On the plan","energy.panel":"Electrical panel","energy.place_panel":"Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.","energy.rooms_darker":"Rooms: darker = more energy","energy.scrub":"Energy: the last 24 hours, hour by hour","energy.solar":"Solar","floor.change_a":"Floor {f}, change floor","floor.change_t":"{f}: change floor","floor.down":"Floor down","floor.floors":"Floors","floor.left":"Plan to the left","floor.right":"Plan to the right","floor.up":"Floor up","graphs_more":"Graphs ›","heat.estimated":"Estimated between sensors","heat.room_temp":"Room temperature","heat.strength":"Heatmap strength","hist.not_enough":"Not enough history yet","humidity":"Humidity","humidity_details":"Humidity details","humidity_l":"humidity","lay.air":"AC air flow","lay.all_sensors":"All sensors","lay.cams":"Cameras","lay.cams_not_replay":"Cameras (not in Replay)","lay.clim":"Climate devices","lay.fill":"Room shading","lay.flow":"Flow lines","lay.heat":"Heatmap","lay.labels":"Temperature labels","lay.no_cam_replay":"No camera video in Replay","lay.pall":"Rings around all proxies","lay.path":"Cleaning path","lay.path_last":"Path of the last run","lay.pdist":"People distance","lay.reset":"Back to the card's defaults","lay.rooms":"Room names","layers":"Layers","leg.colour_strength":"Colour strength","mob.afternoon":"Good afternoon","mob.air_good":"Air good","mob.air_mod":"Air moderate","mob.air_poor":"Air poor","mob.alarm_panel":"Alarm","mob.alert":"Alert","mob.all_closed":"All closed","mob.all_devices":"All devices","mob.all_fine":"All fine","mob.all_good":"All good","mob.all_off":"All off","mob.all_online":"All online","mob.appliances":"Appliances","mob.as_grid":"Show as a grid","mob.as_row":"Show as a row","mob.back":"Back","mob.battery":"Battery {n}%","mob.brightness":"Brightness","mob.cameras":"Cameras","mob.card_desc":"Your home on the phone: rooms, devices and overlays from the Floorplan.","mob.card_name":"Device Floorplan (mobile)","mob.cfg_copy_help":"People, room names, look and overlay settings from the first Floorplan card on your dashboards.","mob.cfg_copy_settings":"Use the settings of my Floorplan card","mob.cfg_default_overlay":"Plan shows","mob.cfg_hide_header":"Hide Home Assistant's top bar on phones","mob.cfg_hide_help":"Only on this dashboard and while it is open; ☰ at the bottom opens the menu. To edit the dashboard, add ?edit=1 to its address.","mob.cfg_layout":"Layout","mob.cfg_layout_help":"Automatic: the house explorer when a phone is turned sideways.","mob.cfg_room_order":"Room order","mob.climate_to":"{s} to {t}°","mob.control":"Control","mob.details":"Details","mob.devices":"Devices","mob.door":"Door","mob.door_open":"Door open","mob.energy":"Energy","mob.evening":"Good evening","mob.floor_down":"Floor below","mob.floor_up":"Floor above","mob.floors":"Floors","mob.g_appl":"Appliances","mob.g_comfort":"Comfort","mob.g_lights":"Lights","mob.g_media":"Media","mob.g_other":"Other","mob.g_security":"Security","mob.hide":"Hide","mob.home":"Home","mob.home_control":"Home control","mob.house_hint":"Tap a floor to open it","mob.inside":"{t}° inside","mob.k_of_n_home":"{k}/{n} home","mob.last":"Last run","mob.last_run":"Last run {t}","mob.layout_auto":"Automatic","mob.layout_landscape":"Always landscape","mob.layout_portrait":"Always portrait","mob.lights_on":{"one":"{n} light on","other":"{n} lights on"},"mob.measured":"now, from the devices with a power reading","mob.menu":"Home Assistant menu","mob.morning":"Good morning","mob.n_attention":{"one":"{n} needs a look","other":"{n} need a look"},"mob.n_devices":{"one":"{n} device","other":"{n} devices"},"mob.n_floors":{"one":"{n} floor","other":"{n} floors"},"mob.n_home":{"one":"{n} person home","other":"{n} people home"},"mob.n_low":{"one":"{n} low battery","other":"{n} low batteries"},"mob.n_offline":{"one":"{n} offline","other":"{n} offline"},"mob.n_on":{"one":"{n} on","other":"{n} on"},"mob.n_rooms":{"one":"{n} room","other":"{n} rooms"},"mob.n_shown":{"one":"{n} shown","other":"{n} shown"},"mob.n_warn":{"one":"{n} warning","other":"{n} warnings"},"mob.needs_look":"Needs a look","mob.next_room":"Next room","mob.no_people":"No people","mob.no_plans":"No Floorplan plans yet: draw one in the Floorplan Editor.","mob.no_room":"No room","mob.nothing":"Nothing here","mob.now_n":{"one":"{n} thing going on","other":"{n} things going on"},"mob.offline":"Offline","mob.on_plan":"Show on the plan","mob.open":"Open","mob.open_n":{"one":"{n} open","other":"{n} open"},"mob.openings":"Openings","mob.order_active":"Most active first","mob.order_alpha":"Alphabetical","mob.order_plan":"Plan order","mob.outside":"outside","mob.overlays":"Overlays","mob.overlays_sub":"Every overlay and Home Replay","mob.people":"People","mob.power":"Power","mob.prev_room":"Previous room","mob.program":"Program","mob.quiet":"Quiet","mob.replay_sub":"See how the home looked earlier","mob.rooms":"Rooms","mob.search":"Search devices or rooms","mob.see_all":"See all","mob.show_plan":"Show the plan","mob.shutters":"Shutters","mob.status":"Status","motion.clear":"Clear","motion.detected":"Detected","n_devices":{"one":"{n} device","other":"{n} devices"},"net.ap":"Access point","net.cable":"cable","net.cable_lan":"Cable (LAN)","net.connected_devices":"Connected devices ({n})","net.connected_here":"Connected here","net.connection":"Connection","net.connections":"Connections","net.default":"Default","net.fair":"fair","net.good":"good","net.hub_links":"Hub / bridge links","net.includes":"Includes","net.legend":"Legend","net.link":"Link","net.no_lqi":"No link quality known yet (ZHA data is loaded for admins).","net.no_signal":"No signal value: enable this device's signal sensor in Home Assistant to see it here.","net.not_connected":"not connected","net.not_on_floor":"not on this floor","net.on_floor":"on this floor","net.path":"Path","net.refresh":"Refresh","net.rescan":"Scan the Zigbee network again","net.role":"Role","net.router":"Router","net.scanning":"Scanning…","net.show_hide":"Show / hide","net.show_hide_range":"Show / hide links in this range","net.signal":"Signal","net.through":"Through {d}","net.through_k":"Through","net.via_hub":"through hub / bridge","net.weak":"weak","net.wifi_links":"Wi-Fi / LAN links","net.wifi_net":"Wi-Fi network","net.zha_at":"Zigbee data updated at {t}","net.zigbee_links":"Zigbee links","newov.add":"Add to this card","newov.energy":". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines.","newov.not_now":"Not now","newov.save_add":"Couldn't save to the dashboard: add {o} in the card's settings (Overlays)","newov.save_later":"Couldn't save to the dashboard: it shows again after a reload","newov.text":"New: {o} overlay","offline":"Offline","open_more":"Open ›","ov.cleaning":"Cleaning","ov.comfort":"Comfort","ov.custom":"Custom","ov.energy":"Energy","ov.health":"Health","ov.lights":"Lights","ov.live":"Live","ov.network":"Network","ov.people":"People","ov.plan":"Plan","ov.security":"Security","people.home":"Home","people.home_unknown":"home, room unknown","people.not_sure":"not sure","ph.average":"average","ph.highest":"highest","ph.lowest":"lowest","ph.one":"one sensor","phantom":"Phantom","phantom.place_hint":"Place these devices on the plan in the Floorplan Editor to see each one on its own.","press.do":"Press","press.q":"Press “{b}”?","robot.area":"Area","robot.charging":"Charging","robot.charging_l":"charging","robot.cleaning":"Cleaning","robot.consumables":"Consumables","robot.continue":"Continue","robot.dock":"Dock","robot.docked":"Docked","robot.error":"Error","robot.idle":"Idle","robot.last_cleaning":"Last cleaning","robot.pause":"Pause","robot.paused":"Paused","robot.returning":"Returning","robot.settings":"Settings","robot.start":"Start","robot.this_run":"This run","robot.took":"Took","role.ap":"Router / access point","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Device","role.end":"End device","role.gp":"Battery-free (Green Power)","role.hub":"Hub / bridge","role.router":"Router / repeater","role.unavailable":"Unavailable","role.unknown":"Unknown","rp.avg_temp":"Average room temperature ({u}), lowest–highest","rp.back_now":"Back to now","rp.before":"Before the loaded {n} h: showing their start","rp.close":"Close Home Replay","rp.day":"Day","rp.future":"That time is still to come: showing Now","rp.go":"Go","rp.goto":"Go to a day and time","rp.name":"Home Replay","rp.next":"Next event","rp.no_switch":"Replay: tap ← Now to switch devices","rp.now":"Now","rp.overlay":"Overlay to replay","rp.pause":"Pause","rp.play":"Play","rp.prev":"Previous event","rp.range":"Range","rp.short":"Replay","rp.speed":"Speed","rp.tap_goto":"Tap to go to a day and time","rp.time":"Replay time","rp.time_input":"Time (seconds optional)","rp.today":"Today","rp.yesterday":"Yesterday","save.cam_failed":"Couldn't save the camera spot to the dashboard.","save.cam_yaml":"This dashboard is kept in YAML: the camera spot lasts until the page reloads.","save.failed":"Couldn't save to the dashboard. Use Edit card → Edit markers instead.","save.notfound":"This card changed outside the Marker Editor. Close it (Done) and open Edit markers again.","save.yaml":"This dashboard is kept in YAML: use Edit card → Edit markers there and copy the YAML.","scene.all_off":"All off","scene.all_on":"All on","scene.bar":"Light scenes","scene.n":"Scene {n}","sec.all_closed":"All closed","sec.all_secure":"All secure","sec.n_open":"{n} open","shortcut":"Shortcut","temperature":"Temperature","temperature_details":"Temperature details","temperature_l":"temperature","this_device":"This device","time.ago":"{t} ago","time.just_now":"just now","time.now":"now","tip.close":"Close this tip","tip.go":"Try them","tip.new_in":"New in {v}","tip.text":"Christmas lights and trees","toast.cleaning_started":"Cleaning started","toast.no_shortcuts_editing":"Shortcuts aren't run while editing","toast.pressed":"Pressed · {b}","toast.preview_not_run":"Preview: “{b}” isn't run while editing","toast.unavailable":"{d} is unavailable","toast.would_open":"Would open: {u}","toast.would_press":"Would press: {b}","turn_off":"Turn off","turn_on":"Turn on","unavailable_l":"unavailable","unit.d":"{n} d","unit.h":"{n} h","unit.min":"{n} min","yes":"yes"}};
+const DF_I18N = {"de":{"action":"Aktion","actions":"Aktionen","admin.new_place":"{n} neu · Platzieren","admin.new_short":"{n} neu","admin.new_title":{"one":"{n} neues Gerät · nur Admins sehen das","other":"{n} neue Geräte · nur Admins sehen das"},"alloff.n_on":{"one":"{n} Licht ist an.","other":"{n} Lichter sind an."},"alloff.none":"Gerade ist kein Licht an.","alloff.q":"Alle Lichter ausschalten?","appl.appliances":"Haushaltsgeräte","appl.done_unload":"Fertig · zum Ausräumen tippen","appl.door_open":"Tür offen","appl.drying":"Trocknet","appl.error":"Fehler","appl.finished":"Fertig","appl.idle":"Inaktiv","appl.min_elapsed":"seit {n} Min.","appl.min_left":"noch {n} Min.","appl.paused":"Pausiert","appl.pct_done":"{n}% erledigt","appl.run_coffee":"Brüht","appl.run_oven":"Gart","appl.run_printer":"Druckt","appl.running":"Läuft","appl.unavailable":"Status nicht verfügbar","appl.unloaded":"Ausgeräumt","bar.more":"Weitere Schaltflächen","bar.overlays":"Ansichten","bar.scroll_back":"Zurückscrollen","battery":"Batterie","bond":"Gruppe","cancel":"Abbrechen","card.choose_plan":"Wähle einen Plan (plan: <plan id>)","card.description":"Dein Grundriss mit Live-Ansichten: Live, Licht, Komfort, Sicherheit, Netzwerk, Zustand und deine eigenen.","card.plan_missing":"Plan „{p}“ nicht gefunden. Prüfe die Plan-ID oder öffne den Floorplan Editor in der Seitenleiste.","chip.n_of_on":"{n} von {t} an","chip.n_of_open":"{n} von {t} offen","chip.n_on":"{n} an","chip.n_open":"{n} offen","chip.off":"Aus","chip.on":"An","clean.cant_room":"Dein Roboter kann aus Home Assistant keinen einzelnen Raum reinigen (braucht seine Raumzuordnung, Home Assistant 2026.3+).","clean.clean_now":"Jetzt reinigen","clean.cleaned":"Gereinigt {t}.","clean.cleaned_by":"Gereinigt {t} von {by}.","clean.cleaning_l":"wird gereinigt","clean.cleaning_now":"Wird gerade gereinigt","clean.due":"Fällig","clean.every_d":"alle {n} T.","clean.in_d":"in {n} T.","clean.last7":"Letzte 7 Tage","clean.last_cleaned":"Zuletzt gereinigt","clean.last_time":"Beim letzten Mal gereinigt","clean.leg_fresh":"Frisch","clean.leg_now":"Jetzt","clean.map_hint":"Ordne diesen Raum in den Einstellungen des Roboters einem seiner Räume zu (Map vacuum segments to areas), um ihn von hier zu reinigen.","clean.never":"nie","clean.none_yet":"Hier wurde noch keine Reinigung erfasst.","clean.not_cleaned":"nicht gereinigt","clean.now":"jetzt","clean.now_with":"Jetzt mit {r} reinigen","clean.robot_usually":"Roboter reinigt meist","clean.usually_takes":"Dauert meist","climate.auto":"Auto","climate.cooling":"Kühlen","climate.defrosting":"Abtauen","climate.dry":"Entfeuchten","climate.drying":"Entfeuchten","climate.fan":"Lüfter","climate.heating":"Heizen","climate.idle":"Inaktiv","climate.off":"Aus","climate.preheating":"Vorheizen","close":"Schließen","conn.radio":"Funk","cover.all":"Alle","cover.close":"Schließen","cover.close_all":"Alle schließen","cover.open":"Öffnen","cover.open_all":"Alle öffnen","cover.position":"Position","cover.stop":"Stopp","cover.stop_all":"Alle stoppen","details":"Details","details_more":"Details ›","edit.hide_here":"Hier ausblenden (nur in dieser Ansicht)","edit.markers":"Marker bearbeiten","edit.pen_title":"Tippe auf Marker, um sie auszublenden oder Anzeige, Symbol, Name und Tippen zu wählen","energy.grid":"Netz","energy.last24":"Letzte 24 h","energy.loading":"Energie wird geladen…","energy.no_data":"Energiedaten nicht verfügbar","energy.none_yet":"Noch keine Geräte in den Energie-Einstellungen von Home Assistant. Füge sie unter Einstellungen → Dashboards → Energie hinzu, dann erscheinen sie hier.","energy.not_on_plan":"Nicht auf diesem Plan","energy.now_live":"Jetzt (live)","energy.on_plan":"Auf dem Plan","energy.panel":"Stromverteiler","energy.place_panel":"Platziere den Stromverteiler im Floorplan Editor (Schritt 3, Energiepunkte), um die Flusslinien zu sehen.","energy.rooms_darker":"Räume: dunkler = mehr Energie","energy.scrub":"Energie: die letzten 24 Stunden, Stunde für Stunde","energy.solar":"Solar","floor.change_a":"Etage {f}, Etage wechseln","floor.change_t":"{f}: Etage wechseln","floor.down":"Etage nach unten","floor.floors":"Etagen","floor.left":"Plan links","floor.right":"Plan rechts","floor.up":"Etage nach oben","graphs_more":"Verläufe ›","heat.estimated":"Geschätzt zwischen den Sensoren","heat.room_temp":"Raumtemperatur","heat.strength":"Stärke der Heatmap","hist.not_enough":"Noch nicht genug Verlauf","humidity":"Luftfeuchtigkeit","humidity_details":"Details zur Luftfeuchtigkeit","humidity_l":"Luftfeuchtigkeit","lay.air":"Luftstrom der Klimageräte","lay.all_sensors":"Alle Sensoren","lay.cams":"Kameras","lay.cams_not_replay":"Kameras (nicht im Replay)","lay.clim":"Klimageräte","lay.fill":"Raumschattierung","lay.flow":"Flusslinien","lay.heat":"Heatmap","lay.labels":"Temperaturanzeigen","lay.no_cam_replay":"Kein Kameravideo im Replay","lay.pall":"Ringe um alle Proxys","lay.path":"Reinigungsweg","lay.path_last":"Weg der letzten Reinigung","lay.pdist":"Abstand von Personen","lay.reset":"Zurück zu den Standards der Karte","lay.rooms":"Raumnamen","layers":"Ebenen","leg.colour_strength":"Farbstärke","mob.afternoon":"Guten Tag","mob.air_good":"Luft gut","mob.air_mod":"Luft mäßig","mob.air_poor":"Luft schlecht","mob.alarm_panel":"Alarmanlage","mob.alert":"Alarm","mob.all_closed":"Alles zu","mob.all_devices":"Alle Geräte","mob.all_fine":"Alles in Ordnung","mob.all_good":"Alles gut","mob.all_off":"Alles aus","mob.all_online":"Alles online","mob.appliances":"Haushaltsgeräte","mob.as_grid":"Als Raster zeigen","mob.as_row":"Als Reihe zeigen","mob.back":"Zurück","mob.battery":"Batterie {n}%","mob.brightness":"Helligkeit","mob.cameras":"Kameras","mob.card_desc":"Dein Zuhause auf dem Handy: Räume, Geräte und Ebenen aus dem Floorplan.","mob.card_name":"Device Floorplan (Handy)","mob.cfg_hide_header":"Obere Leiste von Home Assistant auf Handys ausblenden","mob.cfg_hide_help":"Nur auf diesem Dashboard und solange es offen ist; ☰ unten öffnet das Menü. Zum Bearbeiten ?edit=1 an die Adresse anhängen.","mob.cfg_layout":"Layout","mob.cfg_layout_help":"Automatisch: der Haus-Explorer, wenn das Handy quer gehalten wird.","mob.cfg_people":"Haushalt","mob.cfg_people_help":"Die Personen, die als zu Hause / weg zählen. Leer: alle in Home Assistant.","mob.cfg_room_order":"Reihenfolge der Räume","mob.cfg_sections":"Abschnitte der Startseite","mob.cfg_sections_help":"Welche Abschnitte die Startseite zeigt, in dieser Reihenfolge.","mob.cfg_source":"Einstellungen von","mob.cfg_source_auto":"Automatisch (die erste gefundene Floorplan-Karte)","mob.cfg_source_help":"Die Floorplan-Karte, deren Overlays, Geräte, Personen, Szenen und Aussehen die Mobilkarte übernimmt (nie ihr Layout).","mob.climate_to":"{s} auf {t}°","mob.control":"Steuerung","mob.details":"Details","mob.devices":"Geräte","mob.door":"Tür","mob.door_open":"Tür offen","mob.energy":"Energie","mob.evening":"Guten Abend","mob.floor_down":"Etage darunter","mob.floor_up":"Etage darüber","mob.floors":"Etagen","mob.g_appl":"Haushaltsgeräte","mob.g_comfort":"Komfort","mob.g_lights":"Licht","mob.g_media":"Medien","mob.g_other":"Sonstiges","mob.g_security":"Sicherheit","mob.hide":"Ausblenden","mob.hint_land":"Tippen Sie auf einen Raum, um ihn zu öffnen, oder auf ein Gerät, um es zu steuern","mob.hint_port":"Tippen Sie auf einen Raum, um ihn zu öffnen","mob.home":"Zuhause","mob.home_control":"Haussteuerung","mob.house_hint":"Tippe auf eine Etage, um sie zu öffnen","mob.k_of_n_home":"{k}/{n} zu Hause","mob.last":"Zuletzt","mob.last_run":"Zuletzt {t}","mob.layout_auto":"Automatisch","mob.layout_landscape":"Immer quer","mob.layout_portrait":"Immer hochkant","mob.lights_on":{"one":"{n} Licht an","other":"{n} Lichter an"},"mob.measured":"jetzt, aus den Geräten mit Leistungsmessung","mob.menu":"Home-Assistant-Menü","mob.morning":"Guten Morgen","mob.n_attention":{"one":"{n} braucht Aufmerksamkeit","other":"{n} brauchen Aufmerksamkeit"},"mob.n_devices":{"one":"{n} Gerät","other":"{n} Geräte"},"mob.n_floors":{"one":"{n} Etage","other":"{n} Etagen"},"mob.n_home":{"one":"{n} Person zu Hause","other":"{n} Personen zu Hause"},"mob.n_low":{"one":"{n} Batterie schwach","other":"{n} Batterien schwach"},"mob.n_offline":{"one":"{n} offline","other":"{n} offline"},"mob.n_on":{"one":"{n} an","other":"{n} an"},"mob.n_rooms":{"one":"{n} Raum","other":"{n} Räume"},"mob.n_shown":{"one":"{n} angezeigt","other":"{n} angezeigt"},"mob.n_warn":{"one":"{n} Warnung","other":"{n} Warnungen"},"mob.needs_look":"Braucht Aufmerksamkeit","mob.next_room":"Nächster Raum","mob.no_people":"Keine Personen","mob.no_plans":"Noch keine Pläne: zeichne einen im Floorplan Editor.","mob.no_room":"Kein Raum","mob.nothing":"Nichts hier","mob.now_n":{"one":"{n} Sache läuft","other":"{n} Sachen laufen"},"mob.offline":"Offline","mob.open":"Offen","mob.open_n":{"one":"{n} offen","other":"{n} offen"},"mob.openings":"Öffnungen","mob.order_active":"Aktivste zuerst","mob.order_alpha":"Alphabetisch","mob.order_plan":"Reihenfolge im Plan","mob.outside":"draußen","mob.people":"Personen","mob.power":"Leistung","mob.prev_room":"Vorheriger Raum","mob.program":"Programm","mob.quiet":"Ruhig","mob.rooms":"Räume","mob.search":"Geräte oder Räume suchen","mob.sec_appliances":"Haushaltsgeräte","mob.sec_cameras":"Kameras","mob.sec_control":"Haussteuerung","mob.sec_rooms":"Räume","mob.see_all":"Alle","mob.show_plan":"Plan zeigen","mob.shutters":"Rollläden","mob.status":"Status","mob.whole_home":"ganzes Zuhause","motion.clear":"Keine Bewegung","motion.detected":"Bewegung","n_devices":{"one":"{n} Gerät","other":"{n} Geräte"},"net.ap":"Zugangspunkt","net.cable":"Kabel","net.cable_lan":"Kabel (LAN)","net.connected_devices":"Verbundene Geräte ({n})","net.connected_here":"Hier verbunden","net.connection":"Verbindung","net.connections":"Verbindungen","net.default":"Standard","net.fair":"mittel","net.good":"gut","net.hub_links":"Verbindungen über Hub / Bridge","net.includes":"Enthält","net.legend":"Legende","net.link":"Verbindung","net.no_lqi":"Noch keine Verbindungsqualität bekannt (ZHA-Daten werden für Admins geladen).","net.no_signal":"Kein Signalwert: aktiviere den Signalsensor dieses Geräts in Home Assistant, um ihn hier zu sehen.","net.not_connected":"nicht verbunden","net.not_on_floor":"nicht auf dieser Etage","net.on_floor":"auf dieser Etage","net.path":"Weg","net.refresh":"Aktualisieren","net.rescan":"Zigbee-Netzwerk neu scannen","net.role":"Rolle","net.router":"Router","net.scanning":"Scannt…","net.show_hide":"Ein- / ausblenden","net.show_hide_range":"Verbindungen in diesem Bereich ein- / ausblenden","net.signal":"Signal","net.through":"Über {d}","net.through_k":"Über","net.via_hub":"über Hub / Bridge","net.weak":"schwach","net.wifi_links":"WLAN- / LAN-Verbindungen","net.wifi_net":"WLAN-Netz","net.zha_at":"Zigbee-Daten aktualisiert um {t}","net.zigbee_links":"Zigbee-Verbindungen","newov.add":"Zu dieser Karte hinzufügen","newov.energy":". Platziere dann deine Energiesensoren im Floorplan Editor (Schritt 3, Energiepunkte) für die Flusslinien.","newov.not_now":"Nicht jetzt","newov.save_add":"Konnte nicht im Dashboard speichern: füge {o} in den Einstellungen der Karte hinzu (Ansichten)","newov.save_later":"Konnte nicht im Dashboard speichern: es erscheint nach dem Neuladen wieder","newov.text":"Neu: Ansicht {o}","offline":"Offline","open_more":"Öffnen ›","ov.cleaning":"Reinigung","ov.comfort":"Komfort","ov.custom":"Eigene","ov.energy":"Energie","ov.health":"Zustand","ov.lights":"Licht","ov.live":"Live","ov.network":"Netzwerk","ov.people":"Personen","ov.plan":"Plan","ov.security":"Sicherheit","people.home":"Zuhause","people.home_unknown":"zuhause, Raum unbekannt","people.not_sure":"unsicher","ph.average":"Durchschnitt","ph.highest":"höchster Wert","ph.lowest":"niedrigster Wert","ph.one":"ein Sensor","phantom":"Phantom","phantom.place_hint":"Platziere diese Geräte im Floorplan Editor auf dem Plan, um jedes einzeln zu sehen.","press.do":"Drücken","press.q":"„{b}“ drücken?","robot.area":"Fläche","robot.charging":"Lädt","robot.charging_l":"lädt","robot.cleaning":"Reinigt","robot.consumables":"Verschleißteile","robot.continue":"Fortsetzen","robot.dock":"Station","robot.docked":"In der Station","robot.error":"Fehler","robot.idle":"Inaktiv","robot.last_cleaning":"Letzte Reinigung","robot.pause":"Pause","robot.paused":"Pausiert","robot.returning":"Kehrt zurück","robot.settings":"Einstellungen","robot.start":"Start","robot.this_run":"Dieser Durchgang","robot.took":"Dauer","role.ap":"Router / Zugangspunkt","role.btproxy":"Bluetooth-Proxy","role.coordinator":"Koordinator","role.device":"Gerät","role.end":"Endgerät","role.gp":"Batterielos (Green Power)","role.hub":"Hub / Bridge","role.router":"Router / Repeater","role.unavailable":"Nicht verfügbar","role.unknown":"Unbekannt","rp.avg_temp":"Durchschnittliche Raumtemperatur ({u}), niedrigste–höchste","rp.back_now":"Zurück zu jetzt","rp.before":"Vor den geladenen {n} h: ihr Anfang wird gezeigt","rp.close":"Home Replay schließen","rp.day":"Tag","rp.future":"Diese Zeit liegt noch in der Zukunft: Jetzt wird gezeigt","rp.go":"Los","rp.goto":"Zu Tag und Uhrzeit springen","rp.name":"Home Replay","rp.next":"Nächstes Ereignis","rp.no_switch":"Replay: tippe auf ← Jetzt, um Geräte zu schalten","rp.now":"Jetzt","rp.overlay":"Ansicht für das Replay","rp.pause":"Pause","rp.play":"Abspielen","rp.prev":"Vorheriges Ereignis","rp.range":"Zeitraum","rp.short":"Replay","rp.speed":"Geschwindigkeit","rp.tap_goto":"Tippen, um zu Tag und Uhrzeit zu springen","rp.time":"Replay-Zeit","rp.time_input":"Uhrzeit (Sekunden optional)","rp.today":"Heute","rp.yesterday":"Gestern","save.cam_failed":"Der Kameraplatz konnte nicht im Dashboard gespeichert werden.","save.cam_yaml":"Dieses Dashboard wird in YAML gepflegt: der Kameraplatz gilt bis zum Neuladen der Seite.","save.failed":"Konnte nicht im Dashboard speichern. Nutze stattdessen Karte bearbeiten → Marker bearbeiten.","save.notfound":"Diese Karte wurde außerhalb des Marker-Editors geändert. Schließe ihn (Fertig) und öffne Marker bearbeiten erneut.","save.yaml":"Dieses Dashboard wird in YAML gepflegt: nutze dort Karte bearbeiten → Marker bearbeiten und kopiere das YAML.","scene.all_off":"Alle aus","scene.all_on":"Alle an","scene.bar":"Lichtszenen","scene.n":"Szene {n}","sec.all_closed":"Alles zu","sec.all_secure":"Alles sicher","sec.n_open":"{n} offen","shortcut":"Kurzbefehl","temperature":"Temperatur","temperature_details":"Details zur Temperatur","temperature_l":"Temperatur","this_device":"Dieses Gerät","time.ago":"vor {t}","time.just_now":"gerade eben","time.now":"jetzt","tip.close":"Tipp schließen","tip.go":"Ausprobieren","tip.new_in":"Neu in {v}","tip.text":"Weihnachtslichter und Bäume","toast.cleaning_started":"Reinigung gestartet","toast.no_shortcuts_editing":"Kurzbefehle laufen beim Bearbeiten nicht","toast.pressed":"Gedrückt · {b}","toast.preview_not_run":"Vorschau: „{b}“ läuft beim Bearbeiten nicht","toast.unavailable":"{d} ist nicht verfügbar","toast.would_open":"Würde öffnen: {u}","toast.would_press":"Würde drücken: {b}","turn_off":"Ausschalten","turn_on":"Einschalten","unavailable_l":"nicht verfügbar","unit.d":"{n} T.","unit.h":"{n} Std.","unit.min":"{n} Min.","yes":"ja"},"el":{"action":"Ενέργεια","actions":"Ενέργειες","admin.new_place":"{n} νέες · Τοποθέτησέ τες","admin.new_short":"{n} νέες","admin.new_title":{"one":"{n} νέα συσκευή · τη βλέπουν μόνο οι διαχειριστές","other":"{n} νέες συσκευές · τις βλέπουν μόνο οι διαχειριστές"},"alloff.n_on":{"one":"{n} φως είναι αναμμένο.","other":"{n} φώτα είναι αναμμένα."},"alloff.none":"Κανένα φως δεν είναι αναμμένο αυτή τη στιγμή.","alloff.q":"Να σβήσουν όλα τα φώτα;","appl.appliances":"Συσκευές","appl.done_unload":"Τελείωσε · πάτα όταν αδειάσει","appl.door_open":"Ανοιχτή πόρτα","appl.drying":"Στεγνώνει","appl.error":"Σφάλμα","appl.finished":"Τελείωσε","appl.idle":"Αδρανές","appl.min_elapsed":"{n} λεπ. από την έναρξη","appl.min_left":"απομένουν {n} λεπ.","appl.paused":"Σε παύση","appl.pct_done":"{n}% ολοκληρώθηκε","appl.run_coffee":"Παρασκευή","appl.run_oven":"Μαγείρεμα","appl.run_printer":"Εκτύπωση","appl.running":"Λειτουργεί","appl.unavailable":"Η κατάσταση δεν είναι διαθέσιμη","appl.unloaded":"Άδειασε","bar.more":"Περισσότερα κουμπιά","bar.overlays":"Επίπεδα","bar.scroll_back":"Κύλιση πίσω","battery":"Μπαταρία","bond":"Ομάδα","cancel":"Άκυρο","card.choose_plan":"Επίλεξε μια κάτοψη (plan: <plan id>)","card.description":"Η κάτοψή σου με ζωντανά επίπεδα: Ζωντανά, Φώτα, Άνεση, Ασφάλεια, Δίκτυο, Υγεία και τα δικά σου.","card.plan_missing":"Η κάτοψη “{p}” δεν βρέθηκε. Έλεγξε το plan id ή άνοιξε το Floorplan Editor από την πλαϊνή μπάρα.","chip.n_of_on":"{n} από {t} αναμμένα","chip.n_of_open":"{n} από {t} ανοιχτά","chip.n_on":"{n} αναμμένα","chip.n_open":"{n} ανοιχτά","chip.off":"Σβηστά","chip.on":"Αναμμένα","clean.cant_room":"Η σκούπα σου δεν μπορεί να καθαρίσει ένα μόνο δωμάτιο από το Home Assistant (χρειάζεται αντιστοίχιση δωματίων, Home Assistant 2026.3+).","clean.clean_now":"Καθάρισε τώρα","clean.cleaned":"Καθαρίστηκε {t}.","clean.cleaned_by":"Καθαρίστηκε {t} από {by}.","clean.cleaning_l":"καθαρίζεται","clean.cleaning_now":"Καθαρίζεται τώρα","clean.due":"Επόμενος","clean.every_d":"κάθε {n} ημ.","clean.in_d":"σε {n} ημ.","clean.last7":"Τελευταίες 7 ημέρες","clean.last_cleaned":"Τελευταίος καθαρισμός","clean.last_time":"Καθαρίστηκε την τελευταία φορά","clean.leg_fresh":"Πρόσφατα","clean.leg_now":"Τώρα","clean.map_hint":"Αντιστοίχισε αυτό το δωμάτιο με ένα από τα δωμάτια της σκούπας στις ρυθμίσεις της (Map vacuum segments to areas) για να το καθαρίζεις από εδώ.","clean.never":"ποτέ","clean.none_yet":"Δεν έχει καταγραφεί καθαρισμός εδώ ακόμα.","clean.not_cleaned":"δεν καθαρίστηκε","clean.now":"τώρα","clean.now_with":"Καθάρισε τώρα με {r}","clean.robot_usually":"Η σκούπα καθαρίζει συνήθως","clean.usually_takes":"Διαρκεί συνήθως","climate.auto":"Αυτόματο","climate.cooling":"Ψύξη","climate.defrosting":"Απόψυξη","climate.dry":"Αφύγρανση","climate.drying":"Αφύγρανση","climate.fan":"Ανεμιστήρας","climate.heating":"Θέρμανση","climate.idle":"Αδρανές","climate.off":"Κλειστό","climate.preheating":"Προθέρμανση","close":"Κλείσιμο","conn.radio":"Ασύρματο","cover.all":"Όλα","cover.close":"Κλείσιμο","cover.close_all":"Κλείσιμο όλων","cover.open":"Άνοιγμα","cover.open_all":"Άνοιγμα όλων","cover.position":"Θέση","cover.stop":"Στοπ","cover.stop_all":"Στοπ όλων","details":"Λεπτομέρειες","details_more":"Λεπτομέρειες ›","edit.hide_here":"Απόκρυψη εδώ (μόνο σε αυτό το επίπεδο)","edit.markers":"Επεξεργασία δεικτών","edit.pen_title":"Πάτα σε δείκτες για να τους κρύψεις ή να διαλέξεις τι δείχνουν, εικονίδιο, όνομα, πάτημα","energy.grid":"Δίκτυο ρεύματος","energy.last24":"Τελευταίες 24 ώρες","energy.loading":"Φόρτωση ενέργειας…","energy.no_data":"Τα δεδομένα ενέργειας δεν είναι διαθέσιμα","energy.none_yet":"Δεν υπάρχουν ακόμα συσκευές στις ρυθμίσεις Ενέργειας του Home Assistant. Πρόσθεσέ τες στις Ρυθμίσεις → Πίνακες εργαλείων → Ενέργεια και θα εμφανιστούν εδώ.","energy.not_on_plan":"Εκτός κάτοψης","energy.now_live":"Τώρα (ζωντανά)","energy.on_plan":"Στην κάτοψη","energy.panel":"Ηλεκτρικός πίνακας","energy.place_panel":"Τοποθέτησε τον Ηλεκτρικό πίνακα στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για να δεις τις γραμμές ροής.","energy.rooms_darker":"Δωμάτια: πιο σκούρο = περισσότερη ενέργεια","energy.scrub":"Ενέργεια: οι τελευταίες 24 ώρες, ώρα με την ώρα","energy.solar":"Ηλιακά","floor.change_a":"Όροφος {f}, αλλαγή ορόφου","floor.change_t":"{f}: αλλαγή ορόφου","floor.down":"Όροφος κάτω","floor.floors":"Όροφοι","floor.left":"Κάτοψη αριστερά","floor.right":"Κάτοψη δεξιά","floor.up":"Όροφος πάνω","graphs_more":"Γραφήματα ›","heat.estimated":"Εκτίμηση ανάμεσα στους αισθητήρες","heat.room_temp":"Θερμοκρασία δωματίων","heat.strength":"Ένταση θερμικού χάρτη","hist.not_enough":"Δεν υπάρχει ακόμα αρκετό ιστορικό","humidity":"Υγρασία","humidity_details":"Λεπτομέρειες υγρασίας","humidity_l":"υγρασία","lay.air":"Ροή αέρα κλιματιστικών","lay.all_sensors":"Όλοι οι αισθητήρες","lay.cams":"Κάμερες","lay.cams_not_replay":"Κάμερες (όχι στην Αναπαραγωγή)","lay.clim":"Συσκευές κλιματισμού","lay.fill":"Σκίαση δωματίων","lay.flow":"Γραμμές ροής","lay.heat":"Θερμικός χάρτης","lay.labels":"Ετικέτες θερμοκρασίας","lay.no_cam_replay":"Χωρίς βίντεο κάμερας στην Αναπαραγωγή","lay.pall":"Κύκλοι γύρω από όλους τους proxies","lay.path":"Διαδρομή καθαρισμού","lay.path_last":"Διαδρομή του τελευταίου καθαρισμού","lay.pdist":"Απόσταση ατόμων","lay.reset":"Πίσω στις προεπιλογές της κάρτας","lay.rooms":"Ονόματα δωματίων","layers":"Στρώσεις","leg.colour_strength":"Ένταση χρώματος","mob.afternoon":"Καλό απόγευμα","mob.air_good":"Καλός αέρας","mob.air_mod":"Μέτριος αέρας","mob.air_poor":"Κακός αέρας","mob.alarm_panel":"Συναγερμός","mob.alert":"Συναγερμός","mob.all_closed":"Όλα κλειστά","mob.all_devices":"Όλες οι συσκευές","mob.all_fine":"Όλα εντάξει","mob.all_good":"Όλα εντάξει","mob.all_off":"Όλα σβηστά","mob.all_online":"Όλα συνδεδεμένα","mob.appliances":"Οικιακές συσκευές","mob.as_grid":"Εμφάνιση σε πλέγμα","mob.as_row":"Εμφάνιση σε σειρά","mob.back":"Πίσω","mob.battery":"Μπαταρία {n}%","mob.brightness":"Φωτεινότητα","mob.cameras":"Κάμερες","mob.card_desc":"Το σπίτι σας στο κινητό: δωμάτια, συσκευές και επικαλύψεις από το Floorplan.","mob.card_name":"Device Floorplan (κινητό)","mob.cfg_hide_header":"Απόκρυψη της πάνω μπάρας του Home Assistant στα κινητά","mob.cfg_hide_help":"Μόνο σε αυτόν τον πίνακα και όσο είναι ανοιχτός· το ☰ κάτω ανοίγει το μενού. Για επεξεργασία, προσθέστε ?edit=1 στη διεύθυνση.","mob.cfg_layout":"Διάταξη","mob.cfg_layout_help":"Αυτόματα: η εξερεύνηση του σπιτιού όταν γυρίζετε το κινητό οριζόντια.","mob.cfg_people":"Νοικοκυριό","mob.cfg_people_help":"Τα άτομα που μετράνε ως στο σπίτι / εκτός. Κενό: όλοι στο Home Assistant.","mob.cfg_room_order":"Σειρά δωματίων","mob.cfg_sections":"Ενότητες αρχικής σελίδας","mob.cfg_sections_help":"Ποιες ενότητες δείχνει η αρχική σελίδα, με αυτή τη σειρά.","mob.cfg_source":"Ρυθμίσεις από","mob.cfg_source_auto":"Αυτόματα (η πρώτη κάρτα Floorplan που βρέθηκε)","mob.cfg_source_help":"Η κάρτα Floorplan της οποίας τα overlays, τις συσκευές, τα άτομα, τις σκηνές και την εμφάνιση χρησιμοποιεί η κάρτα κινητού (ποτέ τη διάταξή της).","mob.climate_to":"{s} στους {t}°","mob.control":"Έλεγχος","mob.details":"Λεπτομέρειες","mob.devices":"Συσκευές","mob.door":"Πόρτα","mob.door_open":"Πόρτα ανοιχτή","mob.energy":"Ενέργεια","mob.evening":"Καλησπέρα","mob.floor_down":"Όροφος από κάτω","mob.floor_up":"Όροφος από πάνω","mob.floors":"Όροφοι","mob.g_appl":"Οικιακές συσκευές","mob.g_comfort":"Άνεση","mob.g_lights":"Φώτα","mob.g_media":"Πολυμέσα","mob.g_other":"Άλλα","mob.g_security":"Ασφάλεια","mob.hide":"Απόκρυψη","mob.hint_land":"Πατήστε ένα δωμάτιο για να το ανοίξετε ή μια συσκευή για να τη χειριστείτε","mob.hint_port":"Πατήστε ένα δωμάτιο για να το ανοίξετε","mob.home":"Αρχική","mob.home_control":"Έλεγχος σπιτιού","mob.house_hint":"Πατήστε έναν όροφο για να τον ανοίξετε","mob.k_of_n_home":"{k}/{n} στο σπίτι","mob.last":"Τελευταία λειτουργία","mob.last_run":"Τελευταία λειτουργία {t}","mob.layout_auto":"Αυτόματα","mob.layout_landscape":"Πάντα οριζόντια","mob.layout_portrait":"Πάντα κάθετα","mob.lights_on":{"one":"{n} φως αναμμένο","other":"{n} φώτα αναμμένα"},"mob.measured":"τώρα, από τις συσκευές με μέτρηση ισχύος","mob.menu":"Μενού Home Assistant","mob.morning":"Καλημέρα","mob.n_attention":{"one":"{n} θέλει προσοχή","other":"{n} θέλουν προσοχή"},"mob.n_devices":{"one":"{n} συσκευή","other":"{n} συσκευές"},"mob.n_floors":{"one":"{n} όροφος","other":"{n} όροφοι"},"mob.n_home":{"one":"{n} άτομο στο σπίτι","other":"{n} άτομα στο σπίτι"},"mob.n_low":{"one":"{n} χαμηλή μπαταρία","other":"{n} χαμηλές μπαταρίες"},"mob.n_offline":{"one":"{n} εκτός σύνδεσης","other":"{n} εκτός σύνδεσης"},"mob.n_on":{"one":"{n} ενεργό","other":"{n} ενεργά"},"mob.n_rooms":{"one":"{n} δωμάτιο","other":"{n} δωμάτια"},"mob.n_shown":{"one":"{n} εμφανίζεται","other":"{n} εμφανίζονται"},"mob.n_warn":{"one":"{n} προειδοποίηση","other":"{n} προειδοποιήσεις"},"mob.needs_look":"Θέλει προσοχή","mob.next_room":"Επόμενο δωμάτιο","mob.no_people":"Κανένα άτομο","mob.no_plans":"Δεν υπάρχουν χάρτες ακόμη: σχεδιάστε έναν στον Floorplan Editor.","mob.no_room":"Χωρίς δωμάτιο","mob.nothing":"Τίποτα εδώ","mob.now_n":{"one":"{n} πράγμα σε εξέλιξη","other":"{n} πράγματα σε εξέλιξη"},"mob.offline":"Εκτός σύνδεσης","mob.open":"Ανοιχτό","mob.open_n":{"one":"{n} ανοιχτό","other":"{n} ανοιχτά"},"mob.openings":"Ανοίγματα","mob.order_active":"Πιο ενεργά πρώτα","mob.order_alpha":"Αλφαβητικά","mob.order_plan":"Σειρά του χάρτη","mob.outside":"έξω","mob.people":"Άτομα","mob.power":"Ισχύς","mob.prev_room":"Προηγούμενο δωμάτιο","mob.program":"Πρόγραμμα","mob.quiet":"Ήσυχα","mob.rooms":"Δωμάτια","mob.search":"Αναζήτηση συσκευών ή δωματίων","mob.sec_appliances":"Οικιακές συσκευές","mob.sec_cameras":"Κάμερες","mob.sec_control":"Έλεγχος σπιτιού","mob.sec_rooms":"Δωμάτια","mob.see_all":"Όλα","mob.show_plan":"Εμφάνιση χάρτη","mob.shutters":"Ρολά","mob.status":"Κατάσταση","mob.whole_home":"όλο το σπίτι","motion.clear":"Καμία κίνηση","motion.detected":"Κίνηση","n_devices":{"one":"{n} συσκευή","other":"{n} συσκευές"},"net.ap":"Σημείο πρόσβασης","net.cable":"καλώδιο","net.cable_lan":"Καλώδιο (LAN)","net.connected_devices":"Συνδεδεμένες συσκευές ({n})","net.connected_here":"Συνδεδεμένες εδώ","net.connection":"Σύνδεση","net.connections":"Συνδέσεις","net.default":"Προεπιλογή","net.fair":"μέτριο","net.good":"καλό","net.hub_links":"Συνδέσεις μέσω hub / γέφυρας","net.includes":"Περιλαμβάνει","net.legend":"Υπόμνημα","net.link":"Σύνδεσμος","net.no_lqi":"Δεν είναι γνωστή ακόμα η ποιότητα σύνδεσης (τα δεδομένα ZHA φορτώνονται για διαχειριστές).","net.no_signal":"Χωρίς τιμή σήματος: ενεργοποίησε τον αισθητήρα σήματος της συσκευής στο Home Assistant για να το δεις εδώ.","net.not_connected":"δεν είναι συνδεδεμένο","net.not_on_floor":"όχι σε αυτόν τον όροφο","net.on_floor":"σε αυτόν τον όροφο","net.path":"Διαδρομή","net.refresh":"Ανανέωση","net.rescan":"Νέα σάρωση του δικτύου Zigbee","net.role":"Ρόλος","net.router":"Router","net.scanning":"Σάρωση…","net.show_hide":"Εμφάνιση / απόκρυψη","net.show_hide_range":"Εμφάνιση / απόκρυψη συνδέσεων σε αυτό το εύρος","net.signal":"Σήμα","net.through":"Μέσω {d}","net.through_k":"Μέσω","net.via_hub":"μέσω hub / γέφυρας","net.weak":"αδύναμο","net.wifi_links":"Συνδέσεις Wi-Fi / LAN","net.wifi_net":"Δίκτυο Wi-Fi","net.zha_at":"Τα δεδομένα Zigbee ενημερώθηκαν στις {t}","net.zigbee_links":"Συνδέσεις Zigbee","newov.add":"Προσθήκη σε αυτή την κάρτα","newov.energy":". Μετά τοποθέτησε τους αισθητήρες ενέργειας στο Floorplan Editor (Βήμα 3, Σημεία ενέργειας) για τις γραμμές ροής.","newov.not_now":"Όχι τώρα","newov.save_add":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: πρόσθεσε το {o} στις ρυθμίσεις της κάρτας (Επίπεδα)","newov.save_later":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα: θα ξαναεμφανιστεί μετά από ανανέωση","newov.text":"Νέο: επίπεδο {o}","offline":"Εκτός σύνδεσης","open_more":"Άνοιγμα ›","ov.cleaning":"Καθαρισμός","ov.comfort":"Άνεση","ov.custom":"Προσαρμοσμένο","ov.energy":"Ενέργεια","ov.health":"Υγεία","ov.lights":"Φώτα","ov.live":"Ζωντανά","ov.network":"Δίκτυο","ov.people":"Άτομα","ov.plan":"Κάτοψη","ov.security":"Ασφάλεια","people.home":"Σπίτι","people.home_unknown":"στο σπίτι, άγνωστο δωμάτιο","people.not_sure":"όχι σίγουρο","ph.average":"μέσος όρος","ph.highest":"υψηλότερη","ph.lowest":"χαμηλότερη","ph.one":"ένας αισθητήρας","phantom":"Εικονική","phantom.place_hint":"Τοποθέτησε αυτές τις συσκευές στην κάτοψη στο Floorplan Editor για να βλέπεις την καθεμία χωριστά.","press.do":"Πάτημα","press.q":"Πάτημα «{b}»;","robot.area":"Επιφάνεια","robot.charging":"Φορτίζει","robot.charging_l":"φορτίζει","robot.cleaning":"Καθαρίζει","robot.consumables":"Αναλώσιμα","robot.continue":"Συνέχεια","robot.dock":"Βάση","robot.docked":"Στη βάση","robot.error":"Σφάλμα","robot.idle":"Αδρανής","robot.last_cleaning":"Τελευταίος καθαρισμός","robot.pause":"Παύση","robot.paused":"Σε παύση","robot.returning":"Επιστρέφει","robot.settings":"Ρυθμίσεις","robot.start":"Έναρξη","robot.this_run":"Αυτός ο κύκλος","robot.took":"Διάρκεια","role.ap":"Router / σημείο πρόσβασης","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Συσκευή","role.end":"Τελική συσκευή","role.gp":"Χωρίς μπαταρία (Green Power)","role.hub":"Hub / γέφυρα","role.router":"Router / αναμεταδότης","role.unavailable":"Μη διαθέσιμη","role.unknown":"Άγνωστο","rp.avg_temp":"Μέση θερμοκρασία δωματίων ({u}), χαμηλότερη–υψηλότερη","rp.back_now":"Πίσω στο τώρα","rp.before":"Πριν από τις {n} ώρες που φορτώθηκαν: εμφανίζεται η αρχή τους","rp.close":"Κλείσιμο Home Replay","rp.day":"Ημέρα","rp.future":"Αυτή η ώρα δεν έχει έρθει ακόμα: εμφανίζεται το Τώρα","rp.go":"Μετάβαση","rp.goto":"Μετάβαση σε ημέρα και ώρα","rp.name":"Home Replay","rp.next":"Επόμενο συμβάν","rp.no_switch":"Αναπαραγωγή: πάτα ← Τώρα για να χειριστείς συσκευές","rp.now":"Τώρα","rp.overlay":"Επίπεδο για αναπαραγωγή","rp.pause":"Παύση","rp.play":"Αναπαραγωγή","rp.prev":"Προηγούμενο συμβάν","rp.range":"Εύρος","rp.short":"Αναπαραγωγή","rp.speed":"Ταχύτητα","rp.tap_goto":"Πάτα για να πας σε ημέρα και ώρα","rp.time":"Ώρα αναπαραγωγής","rp.time_input":"Ώρα (τα δευτερόλεπτα προαιρετικά)","rp.today":"Σήμερα","rp.yesterday":"Χθες","save.cam_failed":"Δεν ήταν δυνατή η αποθήκευση της θέσης της κάμερας στον πίνακα.","save.cam_yaml":"Αυτός ο πίνακας είναι σε YAML: η θέση της κάμερας κρατά μέχρι να ανανεωθεί η σελίδα.","save.failed":"Δεν ήταν δυνατή η αποθήκευση στον πίνακα. Χρησιμοποίησε Επεξεργασία κάρτας → Επεξεργασία δεικτών.","save.notfound":"Η κάρτα άλλαξε εκτός του Marker Editor. Κλείσ’ τον (Τέλος) και άνοιξε ξανά την Επεξεργασία δεικτών.","save.yaml":"Αυτός ο πίνακας είναι σε YAML: χρησιμοποίησε εκεί Επεξεργασία κάρτας → Επεξεργασία δεικτών και αντίγραψε το YAML.","scene.all_off":"Όλα σβηστά","scene.all_on":"Όλα αναμμένα","scene.bar":"Σκηνές φωτισμού","scene.n":"Σκηνή {n}","sec.all_closed":"Όλα κλειστά","sec.all_secure":"Όλα ασφαλή","sec.n_open":"{n} ανοιχτά","shortcut":"Συντόμευση","temperature":"Θερμοκρασία","temperature_details":"Λεπτομέρειες θερμοκρασίας","temperature_l":"θερμοκρασία","this_device":"Αυτή η συσκευή","time.ago":"πριν από {t}","time.just_now":"μόλις τώρα","time.now":"τώρα","tip.close":"Κλείσιμο συμβουλής","tip.go":"Δοκίμασέ τα","tip.new_in":"Νέο στην {v}","tip.text":"Χριστουγεννιάτικα φωτάκια και δέντρα","toast.cleaning_started":"Ο καθαρισμός ξεκίνησε","toast.no_shortcuts_editing":"Οι συντομεύσεις δεν εκτελούνται κατά την επεξεργασία","toast.pressed":"Πατήθηκε · {b}","toast.preview_not_run":"Προεπισκόπηση: το “{b}” δεν εκτελείται κατά την επεξεργασία","toast.unavailable":"{d}: μη διαθέσιμη","toast.would_open":"Θα άνοιγε: {u}","toast.would_press":"Θα πατούσε: {b}","turn_off":"Σβήσιμο","turn_on":"Άναμμα","unavailable_l":"μη διαθέσιμο","unit.d":"{n} ημ.","unit.h":"{n} ώρ.","unit.min":"{n} λεπ.","yes":"ναι"},"en":{"action":"Action","actions":"Actions","admin.new_place":"{n} new · Place them","admin.new_short":"{n} new","admin.new_title":{"one":"{n} new device · only admins see this","other":"{n} new devices · only admins see this"},"alloff.n_on":{"one":"{n} light is on.","other":"{n} lights are on."},"alloff.none":"No light is on right now.","alloff.q":"Turn all lights off?","appl.appliances":"Appliances","appl.done_unload":"Done · tap to unload","appl.door_open":"Door open","appl.drying":"Drying","appl.error":"Error","appl.finished":"Finished","appl.idle":"Idle","appl.min_elapsed":"{n} min elapsed","appl.min_left":"{n} min remaining","appl.paused":"Paused","appl.pct_done":"{n}% done","appl.run_coffee":"Brewing","appl.run_oven":"Cooking","appl.run_printer":"Printing","appl.running":"Running","appl.unavailable":"Status unavailable","appl.unloaded":"Unloaded","bar.more":"More buttons","bar.overlays":"Overlays","bar.scroll_back":"Scroll back","battery":"Battery","bond":"Bond","cancel":"Cancel","card.choose_plan":"Choose a plan (plan: <plan id>)","card.description":"Your floorplan with live overlays: Live, Lights, Comfort, Security, Network, Health and your own.","card.plan_missing":"Plan “{p}” not found. Check the plan id, or open the Floorplan Editor in the sidebar.","chip.n_of_on":"{n} of {t} on","chip.n_of_open":"{n} of {t} open","chip.n_on":"{n} on","chip.n_open":"{n} open","chip.off":"Off","chip.on":"On","clean.cant_room":"Your robot can't clean a single room from Home Assistant (needs its room mapping, Home Assistant 2026.3+).","clean.clean_now":"Clean now","clean.cleaned":"Cleaned {t}.","clean.cleaned_by":"Cleaned {t} by {by}.","clean.cleaning_l":"cleaning","clean.cleaning_now":"Cleaning now","clean.due":"Due","clean.every_d":"every {n} d","clean.in_d":"in {n} d","clean.last7":"Last 7 days","clean.last_cleaned":"Last cleaned","clean.last_time":"Cleaned last time","clean.leg_fresh":"Fresh","clean.leg_now":"Now","clean.map_hint":"Map this room to one of the robot's rooms in its settings (Map vacuum segments to areas) to clean it from here.","clean.never":"never","clean.none_yet":"No cleaning recorded here yet.","clean.not_cleaned":"not cleaned","clean.now":"now","clean.now_with":"Clean now with {r}","clean.robot_usually":"Robot usually cleans","clean.usually_takes":"Usually takes","climate.auto":"Auto","climate.cooling":"Cooling","climate.defrosting":"Defrosting","climate.dry":"Dry","climate.drying":"Drying","climate.fan":"Fan","climate.heating":"Heating","climate.idle":"Idle","climate.off":"Off","climate.preheating":"Preheating","close":"Close","conn.radio":"Wireless","cover.all":"All","cover.close":"Close","cover.close_all":"Close all","cover.open":"Open","cover.open_all":"Open all","cover.position":"Position","cover.stop":"Stop","cover.stop_all":"Stop all","details":"Details","details_more":"Details ›","edit.hide_here":"Hide it here (in this overlay only)","edit.markers":"Edit markers","edit.pen_title":"Click markers to hide them, choose what they show, icon, name, tap","energy.grid":"Grid","energy.last24":"Last 24 h","energy.loading":"Loading energy…","energy.no_data":"Energy data not available","energy.none_yet":"No devices in Home Assistant's Energy settings yet. Add them under Settings → Dashboards → Energy, and they show here.","energy.not_on_plan":"Not on this plan","energy.now_live":"Now (live)","energy.on_plan":"On the plan","energy.panel":"Electrical panel","energy.place_panel":"Place the Electrical panel in the Floorplan Editor (Step 3, Energy points) to see the flow lines.","energy.rooms_darker":"Rooms: darker = more energy","energy.scrub":"Energy: the last 24 hours, hour by hour","energy.solar":"Solar","floor.change_a":"Floor {f}, change floor","floor.change_t":"{f}: change floor","floor.down":"Floor down","floor.floors":"Floors","floor.left":"Plan to the left","floor.right":"Plan to the right","floor.up":"Floor up","graphs_more":"Graphs ›","heat.estimated":"Estimated between sensors","heat.room_temp":"Room temperature","heat.strength":"Heatmap strength","hist.not_enough":"Not enough history yet","humidity":"Humidity","humidity_details":"Humidity details","humidity_l":"humidity","lay.air":"AC air flow","lay.all_sensors":"All sensors","lay.cams":"Cameras","lay.cams_not_replay":"Cameras (not in Replay)","lay.clim":"Climate devices","lay.fill":"Room shading","lay.flow":"Flow lines","lay.heat":"Heatmap","lay.labels":"Temperature labels","lay.no_cam_replay":"No camera video in Replay","lay.pall":"Rings around all proxies","lay.path":"Cleaning path","lay.path_last":"Path of the last run","lay.pdist":"People distance","lay.reset":"Back to the card's defaults","lay.rooms":"Room names","layers":"Layers","leg.colour_strength":"Colour strength","mob.afternoon":"Good afternoon","mob.air_good":"Air good","mob.air_mod":"Air moderate","mob.air_poor":"Air poor","mob.alarm_panel":"Alarm","mob.alert":"Alert","mob.all_closed":"All closed","mob.all_devices":"All devices","mob.all_fine":"All fine","mob.all_good":"All good","mob.all_off":"All off","mob.all_online":"All online","mob.appliances":"Appliances","mob.as_grid":"Show as a grid","mob.as_row":"Show as a row","mob.back":"Back","mob.battery":"Battery {n}%","mob.brightness":"Brightness","mob.cameras":"Cameras","mob.card_desc":"Your home on the phone: rooms, devices and overlays from the Floorplan.","mob.card_name":"Device Floorplan (mobile)","mob.cfg_hide_header":"Hide Home Assistant's top bar on phones","mob.cfg_hide_help":"Only on this dashboard and while it is open; ☰ at the bottom opens the menu. To edit the dashboard, add ?edit=1 to its address.","mob.cfg_layout":"Layout","mob.cfg_layout_help":"Automatic: the house explorer when a phone is turned sideways.","mob.cfg_people":"Household","mob.cfg_people_help":"The people counted as home / away. Empty: everyone in Home Assistant.","mob.cfg_room_order":"Room order","mob.cfg_sections":"Home page sections","mob.cfg_sections_help":"Which sections the Home page shows, in this order.","mob.cfg_source":"Settings from","mob.cfg_source_auto":"Automatic (the first Floorplan card found)","mob.cfg_source_help":"The Floorplan card whose overlays, devices, people, scenes and look the mobile card uses (never its layout).","mob.climate_to":"{s} to {t}°","mob.control":"Control","mob.details":"Details","mob.devices":"Devices","mob.door":"Door","mob.door_open":"Door open","mob.energy":"Energy","mob.evening":"Good evening","mob.floor_down":"Floor below","mob.floor_up":"Floor above","mob.floors":"Floors","mob.g_appl":"Appliances","mob.g_comfort":"Comfort","mob.g_lights":"Lights","mob.g_media":"Media","mob.g_other":"Other","mob.g_security":"Security","mob.hide":"Hide","mob.hint_land":"Tap a room to open it, or a device to control it","mob.hint_port":"Tap a room to open it","mob.home":"Home","mob.home_control":"Home control","mob.house_hint":"Tap a floor to open it","mob.k_of_n_home":"{k}/{n} home","mob.last":"Last run","mob.last_run":"Last run {t}","mob.layout_auto":"Automatic","mob.layout_landscape":"Always landscape","mob.layout_portrait":"Always portrait","mob.lights_on":{"one":"{n} light on","other":"{n} lights on"},"mob.measured":"now, from the devices with a power reading","mob.menu":"Home Assistant menu","mob.morning":"Good morning","mob.n_attention":{"one":"{n} needs a look","other":"{n} need a look"},"mob.n_devices":{"one":"{n} device","other":"{n} devices"},"mob.n_floors":{"one":"{n} floor","other":"{n} floors"},"mob.n_home":{"one":"{n} person home","other":"{n} people home"},"mob.n_low":{"one":"{n} low battery","other":"{n} low batteries"},"mob.n_offline":{"one":"{n} offline","other":"{n} offline"},"mob.n_on":{"one":"{n} on","other":"{n} on"},"mob.n_rooms":{"one":"{n} room","other":"{n} rooms"},"mob.n_shown":{"one":"{n} shown","other":"{n} shown"},"mob.n_warn":{"one":"{n} warning","other":"{n} warnings"},"mob.needs_look":"Needs a look","mob.next_room":"Next room","mob.no_people":"No people","mob.no_plans":"No Floorplan plans yet: draw one in the Floorplan Editor.","mob.no_room":"No room","mob.nothing":"Nothing here","mob.now_n":{"one":"{n} thing going on","other":"{n} things going on"},"mob.offline":"Offline","mob.open":"Open","mob.open_n":{"one":"{n} open","other":"{n} open"},"mob.openings":"Openings","mob.order_active":"Most active first","mob.order_alpha":"Alphabetical","mob.order_plan":"Plan order","mob.outside":"outside","mob.people":"People","mob.power":"Power","mob.prev_room":"Previous room","mob.program":"Program","mob.quiet":"Quiet","mob.rooms":"Rooms","mob.search":"Search devices or rooms","mob.sec_appliances":"Appliances","mob.sec_cameras":"Cameras","mob.sec_control":"Home control","mob.sec_rooms":"Rooms","mob.see_all":"See all","mob.show_plan":"Show the plan","mob.shutters":"Shutters","mob.status":"Status","mob.whole_home":"whole home","motion.clear":"Clear","motion.detected":"Detected","n_devices":{"one":"{n} device","other":"{n} devices"},"net.ap":"Access point","net.cable":"cable","net.cable_lan":"Cable (LAN)","net.connected_devices":"Connected devices ({n})","net.connected_here":"Connected here","net.connection":"Connection","net.connections":"Connections","net.default":"Default","net.fair":"fair","net.good":"good","net.hub_links":"Hub / bridge links","net.includes":"Includes","net.legend":"Legend","net.link":"Link","net.no_lqi":"No link quality known yet (ZHA data is loaded for admins).","net.no_signal":"No signal value: enable this device's signal sensor in Home Assistant to see it here.","net.not_connected":"not connected","net.not_on_floor":"not on this floor","net.on_floor":"on this floor","net.path":"Path","net.refresh":"Refresh","net.rescan":"Scan the Zigbee network again","net.role":"Role","net.router":"Router","net.scanning":"Scanning…","net.show_hide":"Show / hide","net.show_hide_range":"Show / hide links in this range","net.signal":"Signal","net.through":"Through {d}","net.through_k":"Through","net.via_hub":"through hub / bridge","net.weak":"weak","net.wifi_links":"Wi-Fi / LAN links","net.wifi_net":"Wi-Fi network","net.zha_at":"Zigbee data updated at {t}","net.zigbee_links":"Zigbee links","newov.add":"Add to this card","newov.energy":". Then place your energy sensors in the Floorplan Editor (Step 3, Energy points) for the flow lines.","newov.not_now":"Not now","newov.save_add":"Couldn't save to the dashboard: add {o} in the card's settings (Overlays)","newov.save_later":"Couldn't save to the dashboard: it shows again after a reload","newov.text":"New: {o} overlay","offline":"Offline","open_more":"Open ›","ov.cleaning":"Cleaning","ov.comfort":"Comfort","ov.custom":"Custom","ov.energy":"Energy","ov.health":"Health","ov.lights":"Lights","ov.live":"Live","ov.network":"Network","ov.people":"People","ov.plan":"Plan","ov.security":"Security","people.home":"Home","people.home_unknown":"home, room unknown","people.not_sure":"not sure","ph.average":"average","ph.highest":"highest","ph.lowest":"lowest","ph.one":"one sensor","phantom":"Phantom","phantom.place_hint":"Place these devices on the plan in the Floorplan Editor to see each one on its own.","press.do":"Press","press.q":"Press “{b}”?","robot.area":"Area","robot.charging":"Charging","robot.charging_l":"charging","robot.cleaning":"Cleaning","robot.consumables":"Consumables","robot.continue":"Continue","robot.dock":"Dock","robot.docked":"Docked","robot.error":"Error","robot.idle":"Idle","robot.last_cleaning":"Last cleaning","robot.pause":"Pause","robot.paused":"Paused","robot.returning":"Returning","robot.settings":"Settings","robot.start":"Start","robot.this_run":"This run","robot.took":"Took","role.ap":"Router / access point","role.btproxy":"Bluetooth proxy","role.coordinator":"Coordinator","role.device":"Device","role.end":"End device","role.gp":"Battery-free (Green Power)","role.hub":"Hub / bridge","role.router":"Router / repeater","role.unavailable":"Unavailable","role.unknown":"Unknown","rp.avg_temp":"Average room temperature ({u}), lowest–highest","rp.back_now":"Back to now","rp.before":"Before the loaded {n} h: showing their start","rp.close":"Close Home Replay","rp.day":"Day","rp.future":"That time is still to come: showing Now","rp.go":"Go","rp.goto":"Go to a day and time","rp.name":"Home Replay","rp.next":"Next event","rp.no_switch":"Replay: tap ← Now to switch devices","rp.now":"Now","rp.overlay":"Overlay to replay","rp.pause":"Pause","rp.play":"Play","rp.prev":"Previous event","rp.range":"Range","rp.short":"Replay","rp.speed":"Speed","rp.tap_goto":"Tap to go to a day and time","rp.time":"Replay time","rp.time_input":"Time (seconds optional)","rp.today":"Today","rp.yesterday":"Yesterday","save.cam_failed":"Couldn't save the camera spot to the dashboard.","save.cam_yaml":"This dashboard is kept in YAML: the camera spot lasts until the page reloads.","save.failed":"Couldn't save to the dashboard. Use Edit card → Edit markers instead.","save.notfound":"This card changed outside the Marker Editor. Close it (Done) and open Edit markers again.","save.yaml":"This dashboard is kept in YAML: use Edit card → Edit markers there and copy the YAML.","scene.all_off":"All off","scene.all_on":"All on","scene.bar":"Light scenes","scene.n":"Scene {n}","sec.all_closed":"All closed","sec.all_secure":"All secure","sec.n_open":"{n} open","shortcut":"Shortcut","temperature":"Temperature","temperature_details":"Temperature details","temperature_l":"temperature","this_device":"This device","time.ago":"{t} ago","time.just_now":"just now","time.now":"now","tip.close":"Close this tip","tip.go":"Try them","tip.new_in":"New in {v}","tip.text":"Christmas lights and trees","toast.cleaning_started":"Cleaning started","toast.no_shortcuts_editing":"Shortcuts aren't run while editing","toast.pressed":"Pressed · {b}","toast.preview_not_run":"Preview: “{b}” isn't run while editing","toast.unavailable":"{d} is unavailable","toast.would_open":"Would open: {u}","toast.would_press":"Would press: {b}","turn_off":"Turn off","turn_on":"Turn on","unavailable_l":"unavailable","unit.d":"{n} d","unit.h":"{n} h","unit.min":"{n} min","yes":"yes"}};
 // 0.14 (L1): the card's texts in the user's Home Assistant language (English when a text has no translation).
 // tools/build.mjs joins this file and the language files of src/i18n into each bundle that uses dfT().
 let dfLang = "en";
@@ -1347,7 +1347,8 @@ ha-card.dock-right { flex-direction: row; }
 @keyframes dfcBarAlert { 0%, 100% { box-shadow:0 0 4px rgba(255,87,34,.5); opacity:.75; } 50% { box-shadow:0 0 14px rgba(255,87,34,1); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
 .box svg.focus { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; fill: var(--dfc-focus-dim, var(--primary-background-color, #f2f2f2)); fill-opacity:.6; }
-.box .m, .box .chip, .box .room, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
+.box .m, .box .chip, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
+.box .room { scale: var(--dfc-ui-room, var(--dfc-ui, 1)); } /* 0.13.9.19 #95: room names shrink less than icons */
 .room .rv { font-weight: 600; display:inline-flex; align-items:center; gap: 3px; }
 .room.rvw { flex-direction: column; gap: 0; line-height: 1.15; text-align: center; }
 .room.rvw .rv { font-size: .85em; }
@@ -3167,7 +3168,28 @@ Object.assign(DeviceFloorplanCard.prototype, {
   _roomOf(item, a = this._a) {
     const areas = (a && a.areas) || {};
     if (item.area_id && areas[item.area_id] && Array.isArray(areas[item.area_id].shape) && areas[item.area_id].shape.length >= 3) return item.area_id;
-    return Object.keys(areas).find((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3 && inPoly(item.x, item.y, areas[k].shape)) || null;
+    // 0.13.9.19 #87: an opening drawn as a bar counts by its middle; a device on a wall (outside every room shape)
+    // belongs to the nearest room within a few % of the plan (the integration's own `locate` rule).
+    const op = item.opening;
+    const x = op && Number.isFinite(op.x1) ? (op.x1 + op.x2) / 2 : item.x;
+    const y = op && Number.isFinite(op.y1) ? (op.y1 + op.y2) / 2 : item.y;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const shaped = Object.keys(areas).filter((k) => Array.isArray(areas[k].shape) && areas[k].shape.length >= 3);
+    const hit = shaped.find((k) => inPoly(x, y, areas[k].shape));
+    if (hit) return hit;
+    const segD = (px, py, [ax, ay], [bx, by]) => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const t = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0;
+      return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    };
+    let best = null;
+    for (const k of shaped) {
+      const sh = areas[k].shape;
+      const d = Math.min(...sh.map((p, i) => segD(x, y, p, sh[(i + 1) % sh.length])));
+      if (d <= 4 && (!best || d < best[1])) best = [k, d];
+    }
+    return best ? best[0] : null;
   },
 
   /** Motion and presence sensors on the plan, with their room. */
@@ -12254,6 +12276,8 @@ console.info(`%c DEVICE-FLOORPLAN-CARD %c ${CARD_VERSION} `, "background:#03a9f4
 // Only Floorplan data: plans = floors, plan rooms = rooms, placed devices / bonds / entities. The plan itself is the
 // normal card (one code path), embedded without its card look; the shell adds pages, lists and the landscape explorer.
 // ---------------------------------------------------------------------------------------------------------------
+// #96: the Home page sections the editor can show / hide / order.
+const DFM_SECTIONS = ["rooms", "control", "appliances", "cameras"];
 const DFM_GROUPS = ["lights", "comfort", "security", "appl", "media", "other"];
 const DFM_GICON = { lights: "mdi:lightbulb-group-outline", comfort: "mdi:thermometer", security: "mdi:shield-home-outline", appl: "mdi:washing-machine", media: "mdi:television-classic", other: "mdi:dots-horizontal-circle-outline" };
 const DFM_GOV = { lights: "lights", comfort: "comfort", security: "security", appl: "live", media: "live", other: "live" };
@@ -12284,6 +12308,38 @@ function dfmAir(eid, st) {
 }
 // #67: kinds whose rows say when they last changed (not readings: they change all the time).
 const DFM_AGO = new Set(["opening", "motion", "light", "switch", "fan", "cover", "lock", "media", "appliance", "safety", "binary", "alarm", "camera"]);
+/** #96: every Floorplan card on every dashboard: { key, label, cfg } (key = "dashboard|id:card_id" or "|n:index").
+ *  firstOnly: stop at the first one (the automatic choice). */
+async function dfmFloorplanCards(hass, firstOnly = false) {
+  if (!hass) return [];
+  const boards = await hass.callWS({ type: "lovelace/dashboards/list" }).catch(() => []);
+  const out = [];
+  for (const bd of [{ url_path: null, title: "Overview" }, ...boards]) {
+    const cfg = await hass.callWS({ type: "lovelace/config", ...(bd.url_path ? { url_path: bd.url_path } : {}) }).catch(() => null);
+    if (!cfg || !Array.isArray(cfg.views)) continue;
+    let n = 0;
+    cfg.views.forEach((v, vi) => {
+      const walk = (x) => {
+        if (!x || typeof x !== "object") return;
+        if (Array.isArray(x)) return x.forEach(walk);
+        if (x.type === "custom:device-floorplan-card") {
+          const id = x.card_id ? `id:${x.card_id}` : `n:${n}`;
+          n += 1;
+          const what = x.card_id || x.title || (Array.isArray(x.plans) ? x.plans.join(", ") : x.plan) || "Floorplan";
+          out.push({ key: `${bd.url_path || ""}|${id}`, label: `${bd.title || bd.url_path || "Overview"} › ${v.title || v.path || vi + 1} · ${what}`, cfg: x });
+          return;
+        }
+        for (const y of Object.values(x)) if (y && typeof y === "object") walk(y);
+      };
+      walk(v);
+    });
+    if (firstOnly && out.length) return out;
+  }
+  return out;
+}
+
+// #92-13: which room badges matter most (alarms / open, then problems, lights, comfort, energy, the rest).
+const DFM_BPRIO = { security: 0, network: 1, health: 1, lights: 2, comfort: 3, energy: 4 };
 const dfmGroupLabel = (g) => dfT(`mob.g_${g}`);
 
 // Device categories (Floorplan Editor) → the room page's groups; "sensors" go by what they measure.
@@ -12455,24 +12511,31 @@ class DeviceFloorplanMobile extends HTMLElement {
     return {};
   }
 
-  static getConfigForm() {
+  /** #96: a basic editor: only what the mobile card itself needs (the rest is set in the Floorplan Editor and the
+   *  Floorplan card it takes its settings from). */
+  static async getConfigForm() {
+    const ha = document.querySelector("home-assistant");
+    const cards = await dfmFloorplanCards(ha && ha.hass).catch(() => []);
     return {
       schema: [
-        { name: "room_order", selector: { select: { mode: "dropdown", options: ["active", "alpha", "plan"].map((v) => ({ value: v, label: dfT(`mob.order_${v}`) })) } } },
-        { name: "default_overlay", selector: { select: { mode: "dropdown", options: OVERLAY_ORDER.map((v) => ({ value: v, label: OVERLAYS[v].label })) } } },
+        { name: "source", selector: { select: { mode: "dropdown", options: [{ value: "", label: dfT("mob.cfg_source_auto") }, ...cards.map((c) => ({ value: c.key, label: c.label }))] } } },
         { name: "layout", selector: { select: { mode: "dropdown", options: ["auto", "portrait", "landscape"].map((v) => ({ value: v, label: dfT(`mob.layout_${v}`) })) } } },
+        { name: "room_order", selector: { select: { mode: "dropdown", options: ["active", "alpha", "plan"].map((v) => ({ value: v, label: dfT(`mob.order_${v}`) })) } } },
+        { name: "sections", selector: { select: { multiple: true, reorder: true, options: DFM_SECTIONS.map((v) => ({ value: v, label: dfT(`mob.sec_${v}`) })) } } },
+        { name: "people", selector: { entity: { domain: "person", multiple: true } } },
         { name: "hide_header", selector: { boolean: {} } },
-        { name: "copy_settings", selector: { boolean: {} } },
       ],
       computeLabel: (s) => dfT(`mob.cfg_${s.name}`),
-      computeHelper: (s) => (s.name === "copy_settings" ? dfT("mob.cfg_copy_help") : s.name === "hide_header" ? dfT("mob.cfg_hide_help") : s.name === "layout" ? dfT("mob.cfg_layout_help") : undefined),
+      computeHelper: (s) => (s.name === "source" ? dfT("mob.cfg_source_help") : s.name === "hide_header" ? dfT("mob.cfg_hide_help") : s.name === "layout" ? dfT("mob.cfg_layout_help") : s.name === "sections" ? dfT("mob.cfg_sections_help") : s.name === "people" ? dfT("mob.cfg_people_help") : undefined),
     };
   }
 
   setConfig(config) {
+    const had = !!this._config;
+    const prevSrc = (this._config && this._config.source) || "";
     this._config = { room_order: "active", default_overlay: "live", layout: "auto", copy_settings: true, hide_header: true, ...(config || {}) };
-    this._s = this._s || { page: "home", floor: null, room: null, ov: null, back: [] };
-    this._tab = this._tab || null;
+    if (had && this._hass && prevSrc !== (this._config.source || "")) this._loadBase(); // #96: another source picked
+    this._s = this._s || { page: "house", floor: null, room: null, ov: null, back: [] }; // #89: the card opens on Home
     this._kick();
   }
 
@@ -12508,7 +12571,10 @@ class DeviceFloorplanMobile extends HTMLElement {
       this.shadowRoot.addEventListener("pointercancel", () => (this._ptr = null), true);
       this.shadowRoot.addEventListener("scroll", () => (this._scrollAt = Date.now()), true);
     }
-    this._onScroll = this._onScroll || (() => (this._scrollAt = Date.now()));
+    this._onScroll = this._onScroll || (() => {
+      this._scrollAt = Date.now();
+      if (!this._wasLand) this._pY = window.scrollY || 0; // #92-2: the portrait page's place, kept for the way back
+    });
     window.addEventListener("scroll", this._onScroll, { passive: true, capture: true });
     this._onRot = this._onRot || (() => this._kick(true));
     window.addEventListener("resize", this._onRot);
@@ -12528,36 +12594,27 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   // ------------------------------------------------------------- settings of the main Floorplan card
   /** The first Floorplan card on the user's dashboards: its people, rooms, look and overlay settings (cached). */
+  /** #96: the settings of the Floorplan card picked in the editor ("Settings from"), else the first one found. */
   async _loadBase() {
     if (this._config.copy_settings === false) return;
+    const want = this._config.source || "";
     try {
-      this._base = lsGet("dfm_base") || null;
+      const cached = lsGet("dfm_base");
+      this._base = cached && cached.key === want ? cached.b : this._base || null;
     } catch (_e) {
       this._base = null;
     }
     try {
-      const boards = await this._hass.callWS({ type: "lovelace/dashboards/list" }).catch(() => []);
-      const paths = [null, ...boards.filter((b) => b.mode !== "yaml" || true).map((b) => b.url_path)];
-      const walk = (n, out) => {
-        if (!n || typeof n !== "object" || out.length) return;
-        if (Array.isArray(n)) return n.forEach((x) => walk(x, out));
-        if (n.type === "custom:device-floorplan-card") return out.push(n);
-        for (const v of Object.values(n)) if (v && typeof v === "object") walk(v, out);
-      };
-      for (const p of paths) {
-        const cfg = await this._hass.callWS({ type: "lovelace/config", ...(p ? { url_path: p } : {}) }).catch(() => null);
-        const out = [];
-        walk(cfg, out);
-        if (out.length) {
-          const b = {};
-          for (const k of DFM_COPY) if (out[0][k] !== undefined) b[k] = out[0][k];
-          this._base = b;
-          lsSet("dfm_base", b);
-          for (const el of (this._plans || new Map()).values()) el._dfmCfg = null;
-          this._kick(true);
-          return;
-        }
-      }
+      const cards = await dfmFloorplanCards(this._hass, !want);
+      const hit = (want && cards.find((c) => c.key === want)) || cards[0];
+      if (!hit) return;
+      const b = {};
+      for (const k of DFM_COPY) if (hit.cfg[k] !== undefined) b[k] = hit.cfg[k];
+      this._base = b;
+      this._baseKey = hit.key;
+      lsSet("dfm_base", { key: want, b });
+      for (const el of (this._plans || new Map()).values()) el._dfmCfg = null;
+      this._kick(true);
     } catch (_e) {
       /* no other card: defaults */
     }
@@ -12772,6 +12829,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (s.room && !m.rooms.some((r) => r.id === s.room && r.floor === s.floor)) s.room = null;
     if (s.page === "room" && !s.room) s.page = "home";
     const land = this._land();
+    const turned = this._wasLand !== undefined && land !== this._wasLand;
     if (land !== this._wasLand) {
       this._wasLand = land;
       this._hdrHidden = false;
@@ -12789,27 +12847,20 @@ class DeviceFloorplanMobile extends HTMLElement {
       el.stateObj = this._hass.states[el.dataset.ent];
     }
     for (const slot of root.querySelectorAll("[data-slot]")) this._mount(slot);
-    this._camHydrate(root);
     this._renderLayer(!land && this._useLayer() ? this._layerHtml : "");
     const top = this._hdrOn ? 0 : Math.max(0, Math.round(this.getBoundingClientRect().top + (window.scrollY || 0)));
     if (top !== this._top) {
       this._top = top;
       this.style.setProperty("--dfm-top", `${top}px`);
     }
-    if (land) {
-      this._fitLand();
-      this._hdrTimer();
-    }
+    if (land) this._hdrTimer();
     this._scaleAll();
+    this._fitGreet();
+    // #92-2: back to portrait = the portrait page as it was (its scroll place), never a leftover landscape layout.
+    if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
-      if (land) this._fitLand();
       this._scaleAll();
     });
-  }
-
-  /** #28: the landscape plan as large as fits the left area, centred, never cut (the card's own fit is not used). */
-  _fitLand() {
-    // #83: the landscape plan is the Floorplan card filling the screen (it fits its plan and its rail itself).
   }
 
   /** #20: Home Assistant's top bar hidden on this dashboard, on phones, while the card is open (option). Only a
@@ -12866,8 +12917,8 @@ class DeviceFloorplanMobile extends HTMLElement {
       // #79: its own storage key per kind of plan (layers, replay…): the mobile card never changes the dashboard
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
-      buttons: land ? { position: "rail_right", style: "labels", bar: "theme" } : { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: land ? "bar" : false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
+      replay: full || land ? undefined : false, replay_button: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
@@ -12883,9 +12934,10 @@ class DeviceFloorplanMobile extends HTMLElement {
     el._fitHost = land;
     if (el.parentNode !== slot) slot.appendChild(el);
     if (this._hass) el.hass = this._hass;
-    // Landscape: the user picks the overlay on the card's rail; it is set only once.
-    if (el.dfSetOverlay && (!land || !el._dfmOv)) el.dfSetOverlay(ov);
-    el._dfmOv = true;
+    // Landscape: the overlay picked on the mobile card's rail (#93).
+    const want = land ? this._lov || ov : ov;
+    if (el.dfSetOverlay && el._dfmOv !== want) el.dfSetOverlay(want);
+    el._dfmOv = want;
   }
 
   /** #33: the room band's shape: the screen's width × a third of its height (portrait); the left area (landscape). */
@@ -12909,13 +12961,17 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (ff) w /= Math.max(0.05, (100 + ff.l + ff.r) / 100);
       const k = Math.max(0.45, Math.min(1, w / 900)).toFixed(2);
       if (el.style.getPropertyValue("--dfc-ui") !== k) el.style.setProperty("--dfc-ui", k);
+      const kr = Math.max(0.75, Number(k)).toFixed(2); // #95: room names keep at least 3/4 of their size
+      if (el.style.getPropertyValue("--dfc-ui-room") !== kr) el.style.setProperty("--dfc-ui-room", kr);
     }
   }
 
   _slot(plan, ov, focus = "", mode = "mini", cls = "") {
     return `<div class="plan ${cls}" data-slot="${cesc([plan, ov, focus, mode].join("|"))}"></div>`;
   }
-
+}
+// Mobile card: navigation, gestures (swipe, plan taps) and the actions of its buttons (#86).
+Object.assign(DeviceFloorplanMobile.prototype, {
   /** Taps on an embedded plan (#21): a whole floor is tapped only to open a room; devices only in a room. The
    *  card's own buttons (Layers, Replay) keep working. */
   _planTap(e, el) {
@@ -12928,6 +12984,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #83: landscape is the detailed view: a device acts by its own tap settings (the card does it); an empty
     // spot of a floor opens its room (#75: not on a floor with one room); in a room it does nothing.
     if (mode === "land" || mode === "landroom") {
+      if (!lsGet("dfm_hint_l")) lsSet("dfm_hint_l", 1); // #92-6: the landscape hint has done its job
       if (path.find((n) => n && n.dataset && (n.dataset.k || n.dataset.touch))) return;
       this._stop(e);
       if (mode === "landroom") return;
@@ -12955,12 +13012,12 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (near && near[1] < 10) hit = near[0];
     }
     if (hit && this._m.rooms.some((q) => q.id === hit && q.floor === f.id)) this._go({ page: "room", floor: f.id, room: hit });
-  }
+  },
 
   _stop(e) {
     e.stopPropagation();
     e.preventDefault();
-  }
+  },
 
   /** One-finger swipe anywhere on a swipe area (#28): next / previous room or floor. */
   _pdown(e) {
@@ -12971,7 +13028,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const ctl = path.some((n) => n && n.classList && ["dockrow", "dock", "rprail", "rpbar", "rptrack", "layers", "pop", "lmenu", "ovbar"].some((c) => n.classList.contains(c)));
     const z = ctl ? null : path.find((n) => n && n.dataset && n.dataset.swipe);
     this._sw = z ? { x: e.clientX, y: e.clientY, t: Date.now(), zone: z.dataset.swipe } : null;
-  }
+  },
 
   _pup(e) {
     this._ptr = null;
@@ -12983,7 +13040,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx) * 0.7 || Date.now() - sw.t > 900) return;
     this._swAt = Date.now();
     this._step(dx < 0 ? 1 : -1, sw.zone);
-  }
+  },
 
   _step(dir, zone) {
     const s = this._s;
@@ -13003,18 +13060,20 @@ class DeviceFloorplanMobile extends HTMLElement {
     const n = fl[(i - dir + fl.length) % fl.length];
     if (n && n.id !== s.floor) {
       s.floor = n.id;
+      if (s.page === "house") s.page = "home"; // #89: a floor picked = that floor (landscape: its plan)
       this._kick(true);
     }
-  }
+  },
 
   /** #22: the main floor: the floor (a plan with a level) with the most devices; ties: the ground floor. */
   _mainFloor(m) {
     const cand = m.floors.filter((f) => Number.isFinite(f.level));
     return (cand.length ? cand : m.floors).map((f) => [f, m.items.filter((x) => x.floor === f.id).length]).sort((p, q) => q[1] - p[1] || (q[0].level === 0) - (p[0].level === 0))[0][0].id;
-  }
+  },
 
   // ------------------------------------------------------------- navigation
   _go(next) {
+    if (next.page === "room" && !lsGet("dfm_hint_p")) lsSet("dfm_hint_p", 1); // #92-6: the portrait hint has done its job
     const s = this._s;
     s.back.push({ page: s.page, floor: s.floor, room: s.room, ov: s.ov });
     if (s.back.length > 30) s.back.shift();
@@ -13024,7 +13083,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     this._kick(true);
     const pg = this.shadowRoot && this.shadowRoot.querySelector("[data-scroll=pg]");
     if (pg) pg.scrollTop = 0;
-  }
+  },
 
   _back() {
     const s = this._s;
@@ -13039,11 +13098,11 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (p) Object.assign(s, p);
     else Object.assign(s, { page: "home", room: null });
     this._kick(true);
-  }
+  },
 
   _more(eid) {
     this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: eid }, bubbles: true, composed: true }));
-  }
+  },
 
   _touched() {
     if (!this._land()) return;
@@ -13055,7 +13114,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       for (const x of h) x.classList.remove("gone");
     }
     this._hdrTimer();
-  }
+  },
 
   _hdrTimer() {
     clearTimeout(this._hdrT);
@@ -13063,7 +13122,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._hdrHidden = true;
       for (const x of this.shadowRoot.querySelectorAll(".float")) x.classList.add("gone");
     }, 5000);
-  }
+  },
 
   _click(e) {
     const t = e.target.closest("[data-a]");
@@ -13088,7 +13147,6 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #85: the place pill and "See all" of Rooms open the Navigator (Home, floors, their rooms).
     if (a === "home" || a === "nav") return open({ step: "nav" });
     if (a === "appl") return open({ step: "appl", key: v });
-    if (a === "cam") return open({ step: "cam", eid: v });
     if (a === "appldone") {
       const x = this._m.items.find((q) => q.ap && q.item.id === v);
       if (x && x.h._applDone) {
@@ -13114,6 +13172,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._freeze = false;
       return this._kick(true);
     }
+    this._fmenu = false;
     if (a === "floor") return this._go({ page: this._land() ? "rooms" : "home", floor: v, room: null });
     if (a === "room") {
       const [f, r] = v.split("|");
@@ -13121,10 +13180,11 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._freeze = false;
       return this._go({ page: "room", floor: f, room: r });
     }
+    // #89: Home = the whole home: portrait shows the main floor's Home page, landscape the 3D home.
     if (a === "gohome") {
       this._sheet = null;
       this._freeze = false;
-      return this._go({ page: this._land() && this._m.levels.length > 1 ? "house" : "home", room: null, floor: v || s.floor });
+      return this._go({ page: "house", room: null, floor: this._mainFloor(this._m) });
     }
     if (a === "ovs") {
       this._sheet = { step: "ov", ov: v };
@@ -13155,13 +13215,18 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._hass.callService("homeassistant", on ? "turn_off" : "turn_on", { entity_id: ents });
       return;
     }
+    if (a === "lov") {
+      this._lov = v;
+      for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
+      return this._kick(true);
+    }
+    if (a === "fmenu") {
+      this._fmenu = !this._fmenu;
+      return this._kick(true);
+    }
     if (a === "rp") {
       const el = [...(this._plans || new Map()).values()].find((x) => x.isConnected && (x._dfmMode === "land" || x._dfmMode === "landroom"));
-      if (el && el._rpOpen) el._rpOpen(true);
-      return;
-    }
-    if (a === "ltab") {
-      this._tab = v;
+      if (el && el._rpOpen) el._rpOpen(!(el._rp && el._rp.mode));
       return this._kick(true);
     }
     if (a === "step") return this._step(Number(v), t.dataset.z);
@@ -13189,7 +13254,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       return this._kick(true);
     }
     if (a === "search") return;
-  }
+  },
 
   /** #49: the main card's light scenes (All on / All off for the lights shown here). */
   _scene(id) {
@@ -13198,7 +13263,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (id === "all_on") return ents.length && this._hass.callService("homeassistant", "turn_on", { entity_id: ents });
     const h = this._helper(this._m.floors[0]);
     if (h) DeviceFloorplanCard.prototype._runScene.call(h, id);
-  }
+  },
 
   /** #41: a quick action shows on the plan above: the device's marker lights up for a few seconds. */
   _flash(eid) {
@@ -13210,7 +13275,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       const sp = [...el._specs.values()].find((q) => q.item && q.item.id === x.item.id);
       if (sp) el._highlight(sp.key);
     }, 700);
-  }
+  },
 
   _input(e) {
     const t = e.target;
@@ -13227,7 +13292,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       }, 250);
     }
     if (t.dataset.a === "bri") this._busy = true; // no redraws while the slider moves
-  }
+  },
 
   _change(e) {
     const t = e.target;
@@ -13236,7 +13301,28 @@ class DeviceFloorplanMobile extends HTMLElement {
       // Saved once, when the finger lets go (never per step).
       this._hass.callService("light", "turn_on", { entity_id: t.dataset.v, brightness_pct: Number(t.value) });
     }
-  }
+  },
+});
+// Mobile card, portrait: the Home, room and Control pages, their rows, tiles and bars (split from 26-mobile, #86).
+Object.assign(DeviceFloorplanMobile.prototype, {
+  /** #96: the Home sections to show, in order (all four by default). */
+  _secOrder() {
+    const v = this._config.sections;
+    return Array.isArray(v) && v.length ? v.filter((x) => DFM_SECTIONS.includes(x)) : DFM_SECTIONS;
+  },
+
+  /** #91: the greeting on one line, always whole: its font shrinks to the space (18 → 13 px); if even that is
+   *  too long, the climate card gives up width first. Measured, so any name and language fits. */
+  _fitGreet() {
+    const hd = this.shadowRoot && this.shadowRoot.querySelector(".hd.top");
+    const h1 = hd && hd.querySelector(".h1");
+    if (!h1 || !h1.clientWidth) return;
+    hd.classList.remove("tight"); // measured on every draw (the page redraw resets it), in the same frame: no flicker
+    let px = 18;
+    hd.style.setProperty("--dfm-greet", `${px}px`);
+    while (h1.scrollWidth > h1.clientWidth + 1 && px > 13) hd.style.setProperty("--dfm-greet", `${--px}px`);
+    if (h1.scrollWidth > h1.clientWidth + 1) hd.classList.add("tight");
+  },
 
   // ------------------------------------------------------------- shared pieces
   _stateTxt(x) {
@@ -13257,7 +13343,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #66: an AC that is off still says the room's temperature.
     if (x.lk === "climate" && st.state === "off" && num(st.attributes.current_temperature)) s += ` · ${Math.round(Number(st.attributes.current_temperature) * 10) / 10}°`;
     return s;
-  }
+  },
 
   /** #67: "13 minutes ago" in Home Assistant's language. */
   _ago(ts) {
@@ -13276,7 +13362,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (sec < 60) return this._rtf.format(0, "second");
     const [u, d] = sec < 3600 ? ["minute", 60] : sec < 86400 ? ["hour", 3600] : ["day", 86400];
     return this._rtf.format(-Math.floor(sec / d), u);
-  }
+  },
 
   /** #67: the icon of a row: the device's own, the entity's own, else by what it is and its state (open / closed …). */
   _iconOf(x) {
@@ -13311,7 +13397,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       default:
         return x.air.length && !x.temps.length ? "mdi:air-filter" : null; // the rest: Home Assistant's own icon
     }
-  }
+  },
 
   /** #68: the colour of a row's icon says its state. */
   _stCls(x) {
@@ -13323,7 +13409,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (x.on) return ["light", "switch"].includes(x.lk) ? "s-on" : "s-act";
     if (["motion", "opening", "lock", "cover"].includes(x.lk) && ["on", "open", "opening", "unlocked"].includes(st.state)) return "s-act";
     return "";
-  }
+  },
 
   _row(x, opts = {}) {
     const eid = x.lead;
@@ -13346,7 +13432,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       ${dim ? `<input type="range" class="bri" min="1" max="100" value="${Math.round((st.attributes.brightness || 255) / 2.55)}" data-a="bri" data-v="${cesc(eid)}" aria-label="${dfT("mob.brightness")}">` : ""}</span>
       ${extra}${tog ? `<button class="sw ${x.on || (st && st.state === "on") ? "on" : ""}" role="switch" aria-checked="${x.on}" data-a="tog" data-v="${cesc(eid)}" aria-label="${cesc(x.name)}"><i></i></button>` : ""}
     </div>`;
-  }
+  },
 
   /** #51: an air / climate sensor shows all its readings in one line ("20.6° · 63% · PM2.5 6 · VOC 178" + its air dot). */
   // #66: a device that measures the room shows all its readings, temperature first; #67: on / off things say since when.
@@ -13358,11 +13444,11 @@ class DeviceFloorplanMobile extends HTMLElement {
     const t = cesc(this._stateTxt(x));
     const ago = x.st && !x.offline && DFM_AGO.has(x.lk) ? this._ago(x.st.last_changed) : "";
     return ago ? `${t} · <span class="ago">${cesc(ago)}</span>` : t;
-  }
+  },
 
   _vals(r) {
     return [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", dfT("mob.n_devices", { n: r.items.length })].filter(Boolean).join(" · ");
-  }
+  },
 
   _roomSub(r) {
     const p = [];
@@ -13371,23 +13457,23 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (r.temp != null) p.push(`${r.temp}°`);
     if (r.people.length) p.push(r.people.map((pp) => this._pname(pp)).join(", "));
     return p.join(" · ") || dfT("mob.quiet");
-  }
+  },
 
   _pname(p) {
     const st = this._hass.states[p.entity];
     return ((st && st.attributes.friendly_name) || p.entity).split(" ")[0];
-  }
+  },
 
   _outside() {
     const w = Object.values(this._hass.states).find((s) => s.entity_id.startsWith("weather.") && num(s.attributes.temperature));
     return w ? `${Math.round(Number(w.attributes.temperature) * 10) / 10}${w.attributes.temperature_unit || "°"}` : null;
-  }
+  },
 
   /** The devices of an overlay: what the Floorplan card shows there, with the user's settings (#25). */
   _members(o, list) {
     if (o === "live") return list.filter((x) => x.now.has("live") || x.attention);
     return list.filter((x) => x.ovs.has(o) && !(o === "security" && x.camOnly));
-  }
+  },
 
   /** What an overlay has to say now for a set of devices (one line), or "" when there is nothing. */
   _sum(o, list, quiet = false) {
@@ -13430,7 +13516,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (o === "people") return dfT("mob.n_home", { n: m.people.filter((p) => p.home).length });
     const k = n((x) => x.now.has(o));
     return k ? dfT("mob.n_shown", { n: k }) : "";
-  }
+  },
 
   /** The devices an overlay lists in full, most important first. */
   _list(o, list) {
@@ -13440,14 +13526,14 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (o === "health") return mem.sort((a, b) => b.warn.length - a.warn.length || (a.battery ?? 101) - (b.battery ?? 101) || a.name.localeCompare(b.name));
     if (o === "energy") return mem.sort((a, b) => (b.power || 0) - (a.power || 0));
     return mem.sort(att);
-  }
+  },
 
   _listHtml(o, list, roomNames) {
     const rows = this._list(o, list);
     if (!rows.length) return `<div class="none">${dfT("mob.nothing")}</div>`;
     const val = (x) => (o === "health" ? `${Math.round(x.battery)}%` : o === "network" && x.sigEnt ? this._fmtE(x.sigEnt) : "");
     return rows.map((x) => this._row(x, { value: val(x), room: roomNames ? this._roomName(x) : "" })).join("");
-  }
+  },
 
   _fmtE(eid) {
     const st = this._hass.states[eid];
@@ -13457,12 +13543,12 @@ class DeviceFloorplanMobile extends HTMLElement {
     } catch (_e) {
       return st.state;
     }
-  }
+  },
 
   _roomName(x) {
     const r = this._m.rooms.find((q) => q.id === x.room && q.floor === x.floor);
     return r ? r.name : "";
-  }
+  },
 
   _peopleHtml(people) {
     if (!people.length) return `<div class="none">${dfT("mob.no_people")}</div>`;
@@ -13473,7 +13559,7 @@ class DeviceFloorplanMobile extends HTMLElement {
         <span class="txt"><span class="nm">${cesc(p.name)}</span><span class="sub">${cesc(where)}</span></span>
         ${p.room ? '<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon>' : ""}</div>`;
     }).join("");
-  }
+  },
 
   _thumb(f, room) {
     const ar = room && f.a.areas[room];
@@ -13481,7 +13567,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const ratio = f.a.image_width && f.a.image_height ? f.a.image_width / f.a.image_height : 1.6;
     const img = this._img(f);
     return `<span class="thumb" style="aspect-ratio:${ratio}" data-a="gohome" data-v="${cesc(f.id)}">${img ? `<img src="${cesc(img)}" alt="">` : ""}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${shape ? `<polygon points="${shape.map((p) => p.join(",")).join(" ")}"/>` : ar ? `<ellipse cx="${ar.x}" cy="${ar.y}" rx="6" ry="6"/>` : ""}</svg></span>`;
-  }
+  },
 
   /** The plan picture (signed once a day). */
   _img(f) {
@@ -13498,7 +13584,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       });
     }
     return this._imgs[url];
-  }
+  },
 
   // ------------------------------------------------------------- portrait
   _portHtml(m) {
@@ -13514,118 +13600,67 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #85: ☰ · the place you are in (opens the Navigator) · Control: a tab bar, always there.
     const f = m.floors.find((q) => q.id === s.floor);
     const r = s.page === "room" ? m.rooms.find((q) => q.id === s.room && q.floor === s.floor) : null;
-    const place = r ? r.name : m.floors.length > 1 && f ? f.name : this._homeName();
+    const place = r ? r.name : m.floors.length > 1 && f && s.page !== "house" ? f.name : this._homeName();
     const bar = `<div class="barwrap"><nav class="bar">${this._hdrOn ? `<button class="tb" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : ""}<span class="pill2"><button class="ph ${ctlOn ? "" : "on"}" data-a="home"><ha-icon icon="${cesc(r ? r.icon : "mdi:home-outline")}"></ha-icon><span class="pt">${cesc(place)}</span><ha-icon class="up" icon="mdi:chevron-up"></ha-icon></button><i class="sep"></i><button class="pl ${ctlOn ? "on" : ""}" data-a="tab" data-v="control" aria-label="${dfT("mob.control")}"><ha-icon icon="mdi:view-dashboard-outline"></ha-icon>${ctlOn ? `<span class="pt">${dfT("mob.control")}</span>` : ""}</button></span></nav></div>`;
     // #54: the bar, the sheets and their backdrop live in a layer of their own on the page (fixed = the screen).
     this._layerHtml = `${bar}${this._sheet ? this._sheetHtml(m) : ""}`;
     const inline = !this._useLayer();
     return `<div class="port"><div class="bgfix"></div><div class="pg" data-scroll="pg">${body}<div class="pad"></div></div>${inline ? this._layerHtml : ""}</div>`;
-  }
-
-  /** The page layer is used on a dashboard (not in the card editor's preview). */
-  _useLayer() {
-    return !!this._huiRoot() && !this._config.inline_bar;
-  }
-
-  _layerEl() {
-    if (!this._lay) {
-      const el = document.createElement("div");
-      el.setAttribute("data-dfm-layer", "");
-      const sr = el.attachShadow({ mode: "open" });
-      sr.innerHTML = `<style>${DFM_CSS}</style><div class="dfm lay"></div>`;
-      sr.addEventListener("click", (e) => this._click(e));
-      sr.addEventListener("change", (e) => this._change(e));
-      sr.addEventListener("input", (e) => this._input(e));
-      this._lay = el;
-    }
-    if (!this._lay.isConnected) document.body.appendChild(this._lay);
-    return this._lay;
-  }
-
-  _renderLayer(html) {
-    if (!html) {
-      if (this._lay) this._lay.remove();
-      return;
-    }
-    const el = this._layerEl();
-    el.toggleAttribute("dark", this.hasAttribute("dark"));
-    const host = el.shadowRoot.querySelector("div.lay");
-    if (html !== this._layHtml) {
-      this._layHtml = html;
-      const tpl = document.createElement("div");
-      tpl.innerHTML = html;
-      dfmMorph(host, tpl);
-    }
-    for (const x of el.shadowRoot.querySelectorAll("[data-ent]")) {
-      x.hass = this._hass;
-      x.stateObj = this._hass.states[x.dataset.ent];
-    }
-    this._camHydrate(el.shadowRoot);
-  }
-
-  /** #84: camera players: muted (phones then play at once), their own controls, a new state only when it changed. */
-  _camHydrate(root) {
-    for (const v of root.querySelectorAll("ha-camera-stream[data-cam]")) {
-      const st = this._hass.states[v.dataset.cam];
-      if (!st) continue;
-      if (!v._dfm) {
-        v._dfm = true;
-        v.muted = true;
-        v.controls = true;
-        v.allowExoPlayer = false;
-      }
-      v.hass = this._hass;
-      if (!v.stateObj || v.stateObj.last_updated !== st.last_updated) v.stateObj = st;
-    }
-  }
+  },
 
   /** #58: a section's title with its grid / row switch. */
   _secHead(key, icon, title, extra = "") {
     const grid = !!(lsGet("dfm_grid") || {})[key];
     return `<h2><ha-icon icon="${icon}"></ha-icon>${title}${extra}<button class="gt" data-a="grid" data-v="${key}" aria-label="${dfT(grid ? "mob.as_row" : "mob.as_grid")}"><ha-icon icon="${grid ? "mdi:view-carousel-outline" : "mdi:view-grid-outline"}"></ha-icon></button></h2>`;
-  }
+  },
 
   _secBody(key, html) {
     const grid = !!(lsGet("dfm_grid") || {})[key];
     return `<div class="${grid ? "gridw" : "hs"}" data-scroll="h${key}">${html}</div>`;
-  }
+  },
 
   /** #51: "Air good / moderate / poor" with its dot. */
   _airTxt(r) {
     return r == null ? "" : dfT(["mob.air_good", "mob.air_mod", "mob.air_poor"][r]);
-  }
+  },
 
   _airDot(r) {
     return r == null ? "" : `<i class="adot a${r}"></i>`;
-  }
+  },
 
   /** The real issues (open doors / windows, alarms, poor air), one entry each. */
   _issues(m) {
     const out = [];
     for (const x of m.items) {
-      for (const e of [...x.alarm, ...x.open]) out.push({ x, e, txt: x.name, st: this._fmtE(e) });
+      for (const e of x.alarm) out.push({ x, e, txt: x.name, st: this._fmtE(e), p: 0 });
+      for (const e of x.open) out.push({ x, e, txt: x.name, st: this._fmtE(e), p: 2 });
     }
     for (const r of m.rooms) if (r.airR === 2) {
       const worst = r.items.flatMap((x) => x.air).filter((q) => q.r === 2)[0];
-      out.push({ room: r, e: null, txt: dfT("mob.air_poor"), st: worst ? `${worst.label} ${worst.v}` : "" });
+      out.push({ room: r, e: null, txt: dfT("mob.air_poor"), st: worst ? `${worst.label} ${worst.v}` : "", p: 1 });
     }
-    return out;
-  }
+    // #92-3: the most important first (alarms, poor air, then open), the latest first inside each.
+    const t = (i) => Date.parse(((i.e && this._hass.states[i.e]) || {}).last_changed || "") || 0;
+    return out.sort((a, b) => a.p - b.p || t(b) - t(a));
+  },
 
   /** #64: a floor's devices for the bar under the plan: "open" = doors / windows, "cover" = shutters, "alarm" = alarms. */
   _floorItems(m, floor, kind) {
     const fi = m.items.filter((x) => x.floor === floor);
-    if (kind === "open") return fi.filter((x) => x.nOpen).sort((a, b) => b.open.length - a.open.length);
-    if (kind === "cover") return fi.filter((x) => x.ents.some((e) => domainOf(e) === "cover")).sort((a, b) => Number(b.on) - Number(a.on));
-    if (kind === "alarm") return fi.filter((x) => x.alarm.length);
+    // #87: the ones that are open first; inside each group the latest change first.
+    const t = (x) => Date.parse((x.st && x.st.last_changed) || "") || 0;
+    const by = (first) => (a, b) => Number(first(b)) - Number(first(a)) || t(b) - t(a);
+    if (kind === "open") return fi.filter((x) => x.nOpen).sort(by((x) => x.open.length > 0));
+    if (kind === "cover") return fi.filter((x) => x.ents.some((e) => domainOf(e) === "cover")).sort(by((x) => x.on));
+    if (kind === "alarm") return fi.filter((x) => x.alarm.length).sort(by(() => true));
     return [];
-  }
+  },
 
   /** #64: one full-width bar of equal segments (icon + value); a segment opens its list. */
   _segBar(segs, cls = "") {
     const on = segs.filter(Boolean);
     return on.length ? `<div class="segs ${cls}">${on.map((g) => `<button class="seg ${g.tone || ""}" data-a="${g.a}" data-v="${cesc(g.v || "")}" aria-label="${cesc(g.label)}"><ha-icon icon="${g.icon}"></ha-icon>${g.txt != null ? `<span>${cesc(String(g.txt))}</span>` : ""}</button>`).join("")}</div>` : "";
-  }
+  },
 
   _homePage(m) {
     const s = this._s;
@@ -13637,7 +13672,10 @@ class DeviceFloorplanMobile extends HTMLElement {
     const greet = dfT(hr < 12 ? "mob.morning" : hr < 18 ? "mob.afternoon" : "mob.evening") + (first ? `, ${first}` : "");
     const home = m.people.filter((p) => p.home).length;
     const iss = this._issues(m);
-    const sumLine = [m.people.length ? dfT("mob.k_of_n_home", { k: home, n: m.people.length }) : "", iss.length ? dfT("mob.n_attention", { n: iss.length }) : dfT("mob.all_good")].filter(Boolean).join(" · ");
+    // #92-3: what needs a look, led by the most important issue itself; a tap opens the list.
+    const lead = iss[0] ? (iss[0].x ? `${iss[0].txt} · ${iss[0].st}` : `${iss[0].txt} · ${iss[0].room.name}`) : "";
+    const sumLine = cesc(m.people.length ? dfT("mob.k_of_n_home", { k: home, n: m.people.length }) : "") + (m.people.length ? " · " : "")
+      + (iss.length ? `<button class="isslink" data-a="issues">${cesc(lead)}${iss.length > 1 ? ` <b>+${iss.length - 1}</b>` : ""}</button>` : cesc(dfT("mob.all_good")));
     // #65: the shown floor's climate (its rooms); a floor without any: the main floor's, named.
     const multi = m.floors.length > 1;
     const climOf = (fid) => {
@@ -13662,7 +13700,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const low = fi.filter((x) => x.battery != null && x.battery <= 15).length;
     const wn = fi.filter((x) => x.warn.length).length;
     const top = this._segBar([
-      lightsOn && { a: "ovs", v: "lights", icon: "mdi:lightbulb-group", txt: lightsOn, label: dfT("mob.lights_on", { n: lightsOn }), tone: "on" },
+      lightsOn && { a: "ovs", v: "lights", icon: "mdi:lightbulb-group", txt: lightsOn, label: dfT("mob.lights_on", { n: lightsOn }), tone: "lt" },
       off && { a: "ovs", v: "network", icon: "mdi:lan-disconnect", txt: off, label: dfT("mob.n_offline", { n: off }), tone: "warn" },
       low && { a: "ovs", v: "health", icon: "mdi:battery-alert-variant-outline", txt: low, label: dfT("mob.n_low", { n: low }), tone: "warn" },
       wn && { a: "ovs", v: "health", icon: "mdi:alert-outline", txt: wn, label: dfT("mob.n_warn", { n: wn }), tone: "warn" },
@@ -13679,7 +13717,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     const bottom = this._segBar([
       nAl && { a: "items", v: "alarm", icon: "mdi:alarm-light", txt: nAl, label: dfT("mob.alert"), tone: "att" },
       opDev.length && { a: "items", v: "open", icon: nOp ? "mdi:door-open" : "mdi:door-closed", txt: nOp ? dfT("mob.open_n", { n: nOp }) : dfT("mob.all_closed"), label: dfT("mob.openings"), tone: nOp ? "att" : "" },
-      covs.length && { a: "items", v: "cover", icon: nCv ? "mdi:window-shutter-open" : "mdi:window-shutter", txt: nCv ? dfT("mob.open_n", { n: nCv }) : dfT("mob.all_closed"), label: dfT("mob.shutters"), tone: nCv ? "act" : "" },
+      covs.length && { a: "items", v: "cover", icon: nCv ? "mdi:roller-shade" : "mdi:roller-shade-closed", txt: nCv ? dfT("mob.open_n", { n: nCv }) : dfT("mob.all_closed"), label: dfT("mob.shutters"), tone: nCv ? "act" : "" },
       ast && { a: "more", v: acp[0], icon: ast.state.startsWith("armed") || ast.state === "triggered" ? "mdi:shield-lock" : "mdi:shield-off-outline", txt: this._fmtE(acp[0]), label: dfT("mob.alarm_panel"), tone: aTone },
     ], "below");
     const rooms = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
@@ -13689,40 +13727,47 @@ class DeviceFloorplanMobile extends HTMLElement {
     const one = rooms.length === 1 ? rooms[0] : null;
     const see = (a, v = "") => `<button class="seeall" data-a="${a}" data-v="${cesc(v)}">${dfT("mob.see_all")}<ha-icon icon="mdi:chevron-right"></ha-icon></button>`;
     const avatar = me && me.pic ? `<span class="me"><img src="${cesc(me.pic)}" alt=""></span>` : "";
-    return `<header class="hd top">${avatar}<div class="grow"><div class="h1">${cesc(greet)}</div><div class="sub">${cesc(sumLine)}</div></div>${clim}</header>
+    // #96: the sections in the order (and only those) chosen in the editor.
+    const sec = {
+      rooms: one ? `<section class="oneroom"><h2 class="sh1"><span class="rtile"><ha-icon icon="${cesc(one.icon)}"></ha-icon></span>${cesc([one.name, this._vals(one)].filter(Boolean).join(" · "))}</h2>${this._roomGroups(one)}</section>`
+        : `<section>${this._secHead("rooms", "mdi:floor-plan", multi ? `${dfT("mob.rooms")} · ${cesc(f.name)}` : dfT("mob.rooms"), see("nav"))}${this._secBody("rooms", rooms.map((r) => this._tile(m, r)).join(""))}</section>`,
+      control: `<section>${this._secHead("ctl", "mdi:view-dashboard-outline", `${dfT("mob.home_control")}<small class="scope">${dfT("mob.whole_home")}</small>`, see("tab", "control"))}${this._secBody("ctl", this._ovTiles(m))}</section>`,
+      appliances: appls.length ? `<section>${this._secHead("appl", "mdi:washing-machine", dfT("mob.appliances"))}${this._secBody("appl", appls.map((x) => this._applTile(x)).join(""))}</section>` : "",
+      cameras: cams.length ? `<section>${this._secHead("cams", "mdi:cctv", dfT("mob.cameras"))}${this._secBody("cams", cams.map((c) => this._camTile(m, c)).join(""))}</section>` : "",
+    };
+    return `<header class="hd top">${avatar}<div class="grow"><div class="h1">${cesc(greet)}</div><div class="sub">${sumLine}</div></div>${clim}</header>
       ${top}
-      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "mini")}${this._planNav(m, f)}</div>
+      <div class="mini" data-swipe="floor">${this._slot(f.id, "live", "", "mini")}${this._planNav(m, f)}${rooms.length > 1 && !lsGet("dfm_hint_p") ? `<div class="phint">${dfT("mob.hint_port")}</div>` : ""}</div>
       ${bottom}
-      ${one ? `<section class="oneroom"><h2 class="sh1"><span class="rtile"><ha-icon icon="${cesc(one.icon)}"></ha-icon></span>${cesc([one.name, this._vals(one)].filter(Boolean).join(" · "))}</h2>${this._roomGroups(one)}</section>`
-        : `<section>${this._secHead("rooms", "mdi:floor-plan", multi ? `${dfT("mob.rooms")} · ${cesc(f.name)}` : dfT("mob.rooms"), see("nav"))}${this._secBody("rooms", rooms.map((r) => this._tile(m, r)).join(""))}</section>`}
-      <section>${this._secHead("ctl", "mdi:view-dashboard-outline", dfT("mob.home_control"), see("tab", "control"))}${this._secBody("ctl", this._ovTiles(m))}</section>
-      ${appls.length ? `<section>${this._secHead("appl", "mdi:washing-machine", dfT("mob.appliances"))}${this._secBody("appl", appls.map((x) => this._applTile(x)).join(""))}</section>` : ""}
-      ${cams.length ? `<section>${this._secHead("cams", "mdi:cctv", dfT("mob.cameras"))}${this._secBody("cams", cams.map((c) => this._camTile(m, c)).join(""))}</section>` : ""}`;
-  }
+      ${this._secOrder().map((k) => sec[k] || "").join("")}`;
+  },
 
   /** #48: the floor's name and ‹ › on the plan itself (no row); swipe does the same. */
   _planNav(m, f) {
     const multi = m.floors.length > 1;
     return `<span class="flabel">${cesc(f.name)}</span>${multi ? `<button class="nav l" data-a="fstep" data-v="1" aria-label="${dfT("mob.floor_up")}"><ha-icon icon="mdi:chevron-left"></ha-icon></button><button class="nav r" data-a="fstep" data-v="-1" aria-label="${dfT("mob.floor_down")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button>` : ""}`;
-  }
+  },
 
   /** #50: every placed device with a camera (its camera entity), robots' maps excepted. */
   _cams(m) {
     const out = [];
     for (const x of m.items) {
       if (x.ents.some((e) => domainOf(e) === "vacuum" || domainOf(e) === "lawn_mower")) continue;
-      const cam = x.ents.find((e) => domainOf(e) === "camera");
+      // #90 (as Dwains): hidden, unknown and unavailable cameras are left out.
+      const cam = x.ents.find((e) => domainOf(e) === "camera" && live(this._hass.states[e]) && !dfcHidden(e));
       if (cam) out.push({ x, cam });
     }
     return out;
-  }
+  },
 
   _camTile(m, c) {
     const st = this._hass.states[c.cam];
-    const pic = st && st.state !== "unavailable" && st.attributes.entity_picture;
+    // #90: the still picture, renewed whenever the camera updates; a tap opens HA's own camera window.
+    const pic0 = st && st.state !== "unavailable" && st.attributes.entity_picture;
+    const pic = pic0 ? `${pic0}${pic0.includes("?") ? "&" : "?"}dfm=${Date.parse(st.last_updated || st.last_changed) || 0}` : "";
     const nm = c.x.name || (st && st.attributes.friendly_name) || c.cam;
-    return `<button class="cam" data-a="cam" data-v="${cesc(c.cam)}">${pic ? `<img src="${cesc(pic)}" alt="">` : `<span class="noimg"><ha-icon icon="mdi:cctv-off"></ha-icon></span>`}<b>${cesc(nm)}</b><small>${cesc([this._roomName(c.x), this._fmtE(c.cam)].filter(Boolean).join(" · "))}</small></button>`;
-  }
+    return `<button class="cam" data-a="more" data-v="${cesc(c.cam)}">${pic ? `<img src="${cesc(pic)}" alt="">` : `<span class="noimg"><ha-icon icon="mdi:cctv-off"></ha-icon></span>`}<b>${cesc(nm)}</b><small>${cesc([this._roomName(c.x), this._fmtE(c.cam)].filter(Boolean).join(" · "))}</small></button>`;
+  },
 
   /** 0.13.9.18 Appliances: what it is doing, in one line (running: word · time left; idle: when it last ran). */
   _applLine(x, st) {
@@ -13733,12 +13778,12 @@ class DeviceFloorplanMobile extends HTMLElement {
       return src ? dfT("mob.last_run", { t: this._ago(src.last_changed) }) : st.word;
     }
     return st.word;
-  }
+  },
 
   _applPct(x, st) {
     const pr = x.ap.progress && this._hass.states[x.ap.progress];
     return st.active && pr && num(pr.state) ? Math.max(0, Math.min(100, Number(pr.state))) : null;
-  }
+  },
 
   _applTile(x) {
     const st = x.h._applState(x.ap);
@@ -13746,7 +13791,169 @@ class DeviceFloorplanMobile extends HTMLElement {
     const pct = this._applPct(x, st);
     const tone = ["done"].includes(st.phase) ? "done" : ["attention", "error"].includes(st.phase) ? "att" : st.active ? "run" : "";
     return `<button class="apt ${tone}" data-a="appl" data-v="${cesc(`${x.floor}|${x.item.id}`)}"${pct != null ? ` style="--p:${pct}"` : ""}><span class="api ${pct != null ? "ring" : ""}">${pic ? `<img src="${cesc(pic)}" alt="">` : `<ha-icon icon="${APPL_ICON[x.ap.type] || APPL_ICON.other}"></ha-icon>`}</span><b>${cesc(x.name)}</b><small>${cesc(this._applLine(x, st))}</small></button>`;
-  }
+  },
+
+  /** #77: the home's own name (HA → Settings → General), else "Home". */
+  _homeName() {
+    const n = String((this._hass.config && this._hass.config.location_name) || "").trim();
+    return n && n.toLowerCase() !== "home" ? n : dfT("mob.home");
+  },
+
+  /** #85: Control: every overlay as a rich tile (the same tiles as Home control), all devices, a 2-column grid. */
+  _ctlPage(m) {
+    const all = `<button class="ot" data-a="tab" data-v="devices" style="--c:#8a8f98"><span class="oti"><ha-icon icon="mdi:devices"></ha-icon></span><b>${dfT("mob.all_devices")}</b><small>${cesc(dfT("mob.n_devices", { n: m.items.length }))}</small></button>`;
+    const appls = m.items.filter((x) => x.ap);
+    const ap = appls.length ? `<button class="ot" data-a="ovs" data-v="appl" style="--c:#26a69a"><span class="oti"><ha-icon icon="mdi:washing-machine"></ha-icon></span><b>${dfT("mob.appliances")}</b><small>${cesc(appls.filter((x) => x.h._applState(x.ap).active).length ? dfT("mob.n_on", { n: appls.filter((x) => x.h._applState(x.ap).active).length }) : dfT("mob.quiet"))}</small></button>` : "";
+    return `<header class="hd"><div class="grow"><div class="h1">${dfT("mob.control")}</div><div class="sub">${cesc(this._homeName())}</div></div></header><div class="ctlgrid">${this._ovTiles(m)}${ap}${all}</div>`;
+  },
+
+  /** #56 / #57: a room tile: its icon, one badge per overlay with something to say (max 4 + "+n"), its name and values. */
+  _tile(m, r) {
+    const line = [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · ");
+    return `<button class="rt" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="bds">${this._badges(m, r)}</span><b>${cesc(r.name)}</b><small>${r.airR != null ? this._airDot(r.airR) : ""}${cesc(line || dfT("mob.n_devices", { n: r.items.length }))}</small></button>`;
+  },
+
+  /** #71: a room's overlay badges, built once for its tile and its row. */
+  _badges(m, r) {
+    const f = m.floors.find((q) => q.id === r.floor);
+    const bd = [];
+    for (const o of this._overlayList(f)) {
+      const mem = this._members(o, r.items);
+      let v = null;
+      if (o === "security") v = r.items.reduce((t, x) => t + x.open.length + x.alarm.length, 0) || null;
+      else if (o === "lights") v = mem.filter((x) => x.on).length || null;
+      else if (o === "comfort") v = mem.filter((x) => x.lk === "climate" && x.on).length || null;
+      else if (o === "energy") v = r.power >= 1 ? fmtW(r.power) : null;
+      else if (o === "network") v = r.offline || null;
+      else if (o === "health") v = r.low + r.warns || null;
+      else if (o === "cleaning") v = mem.filter((x) => x.on).length || null;
+      else if (o === "people") v = r.people.length || null;
+      else if (o !== "live" && o !== "plan") v = mem.filter((x) => x.now.has(o)).length || null;
+      if (v) bd.push([DFM_BPRIO[o] ?? 5, `<b class="tb2" style="--c:${DFM_OVC[o] || "#8a8f98"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon>${cesc(String(v))}</b>`]);
+    }
+    if (!bd.length && r.people.length) bd.push([6, `<b class="tb2" style="--c:${DFM_OVC.people}"><ha-icon icon="mdi:account"></ha-icon>${r.people.length}</b>`]);
+    // #92-13: no "+n": only the most important ones that fit (3), never over the room's name.
+    return bd.sort((a, b) => a[0] - b[0]).slice(0, 3).map((x) => x[1]).join("");
+  },
+
+  /** #60: "Home control": one big tile per overlay; a tap opens its sheet. */
+  _ovTiles(m) {
+    const f = m.floors.find((q) => q.id === this._s.floor);
+    const ovs = this._overlayList(f).filter((o) => o !== "live" && o !== "plan");
+    if (m.people.length && !ovs.includes("people")) ovs.unshift("people");
+    const tiles = ovs.map((o) => {
+      const t = o === "people" ? dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }) : this._sum(o, m.items, true);
+      let body = "";
+      if (o === "people") body = `<span class="pchips">${m.people.slice(0, 4).map((p) => `<span class="pc ${p.home ? "home" : ""}"><span class="av">${p.pic ? `<img src="${cesc(p.pic)}" alt="">` : cesc(p.name.slice(0, 1))}</span>${cesc(p.name.split(" ")[0])}</span>`).join("")}${m.people.length > 4 ? `<span class="pc">+${m.people.length - 4}</span>` : ""}</span>`;
+      if (o === "energy") {
+        const rs = m.rooms.filter((r) => r.power >= 1).sort((a, b) => b.power - a.power).slice(0, 3);
+        const max = rs.length ? rs[0].power : 1;
+        body = `<span class="bars">${rs.map((r) => `<span class="bar1"><span>${cesc(r.name)}</span><small>${cesc(fmtW(r.power))}</small><i style="width:${Math.max(4, (r.power / max) * 100).toFixed(0)}%"></i></span>`).join("")}</span>`;
+      }
+      const quiet = !t || [dfT("mob.all_off"), dfT("mob.all_closed"), dfT("mob.all_online"), dfT("mob.all_fine"), dfT("mob.quiet")].includes(t);
+      const att = o === "security" && /\d/.test(t);
+      return `<button class="ot ${quiet ? "quiet" : ""} ${att ? "att" : ""}" data-a="ovs" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "#8a8f98"}"><span class="oti"><ha-icon icon="${cesc(o === "people" ? OVERLAYS.people.icon : this._ovIcon(o, f))}"></ha-icon></span><b>${cesc(o === "people" ? OVERLAYS.people.label : this._ovLabel(o, f))}</b><small>${cesc(t || "")}</small>${body}</button>`;
+    });
+    return tiles.sort((a, b) => Number(a.includes(" quiet ")) - Number(b.includes(" quiet "))).join("");
+  },
+
+  /** #41 / #76: a room's devices by kind: one card per group (header inside, flat rows), each folds; Lights has
+   *  the room's master switch like the Lights sheet. */
+  _roomGroups(r) {
+    const gfold = lsGet("dfm_gfold") || {};
+    return DFM_GROUPS.map((g) => {
+      const list = r.items.filter((x) => x.g === g).sort((a, b) => b.attention - a.attention || Number(b.on) - Number(a.on) || a.name.localeCompare(b.name));
+      if (!list.length) return "";
+      const sum = g === "lights" ? "" : this._sum(DFM_GOV[g] === "live" ? "live" : DFM_GOV[g], list) || "";
+      const tg = g === "lights" ? list.filter((x) => x.st && DFM_TOGGLE.has(domainOf(x.lead)) && !x.offline) : [];
+      const onN = tg.filter((x) => x.on).length;
+      const master = tg.length ? `<button class="rmaster ${onN ? "on" : ""}" data-a="rmaster" data-v="${cesc(tg.map((x) => x.lead).join(","))}" data-on="${onN ? 1 : 0}">${onN}/${tg.length}<i></i></button>` : "";
+      const fo = !!gfold[g];
+      return `<section class="rcard gcard ${fo ? "folded" : ""}"><div class="rch" data-a="gfold" data-v="${g}"><span class="rtile gi g-${g}"><ha-icon icon="${DFM_GICON[g]}"></ha-icon></span><b>${dfmGroupLabel(g)}</b><span class="gs">${cesc(sum)}</span>${master}<span class="go"><ha-icon icon="mdi:chevron-${fo ? "right" : "down"}"></ha-icon></span></div>${fo ? "" : list.map((x) => this._row(x)).join("")}</section>`;
+    }).join("");
+  },
+
+  _roomPage(m) {
+    const s = this._s;
+    const f = m.floors.find((q) => q.id === s.floor);
+    const r = m.rooms.find((q) => q.id === s.room && q.floor === f.id);
+    const folded = !!lsGet("dfm_fold");
+    const groups = this._roomGroups(r);
+    // #33 / #42: one plan band (a third of the screen), the room centred, controls floating on it.
+    const foldBtn = `<button class="fold ${folded ? "off" : ""}" data-a="fold" aria-label="${folded ? dfT("mob.show_plan") : dfT("mob.hide")}"><ha-icon icon="mdi:chevron-${folded ? "down" : "up"}"></ha-icon></button>`;
+    const band = folded ? "" : `<div class="cut" data-swipe="room">${this._slot(f.id, "live", r.id, "room")}
+        <button class="nav l" data-a="step" data-z="room" data-v="-1" aria-label="${dfT("mob.prev_room")}"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
+        <button class="nav r" data-a="step" data-z="room" data-v="1" aria-label="${dfT("mob.next_room")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button>${foldBtn}</div>`;
+    return `<header class="hd room"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${cesc(r.name)}</div><div class="sub">${r.airR != null ? this._airDot(r.airR) : ""}${cesc([this._vals(r), r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · "))}</div></div>${this._thumb(f, r.id)}${folded ? foldBtn : ""}</header>
+      ${band}
+      ${groups || `<div class="none">${dfT("mob.nothing")}</div>`}`;
+  },
+
+  _devPage(m) {
+    const q = String(this._q || "").trim().toLowerCase();
+    const list = m.items.filter((x) => !q || x.name.toLowerCase().includes(q) || this._roomName(x).toLowerCase().includes(q));
+    const by = new Map();
+    for (const x of list) {
+      const k = x.room ? `${x.floor}|${x.room}` : `${x.floor}|`;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(x);
+    }
+    const sec = [...by.entries()].map(([k, xs]) => {
+      const [fid, rid] = k.split("|");
+      const f = m.floors.find((z) => z.id === fid);
+      const r = rid && m.rooms.find((z) => z.id === rid && z.floor === fid);
+      const title = r ? `${r.name}${m.floors.length > 1 ? ` · ${f.name}` : ""}` : `${dfT("mob.no_room")}${m.floors.length > 1 ? ` · ${f.name}` : ""}`;
+      return `<section><h2>${cesc(title)}<span class="gs">${xs.length}</span></h2>${xs.sort((a, b) => a.name.localeCompare(b.name)).map((x) => this._row(x)).join("")}</section>`;
+    }).join("");
+    return `<header class="hd"><button class="bk" data-a="tab" data-v="control" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${dfT("mob.devices")}</div><div class="sub">${dfT("mob.n_devices", { n: m.items.length })}</div></div></header>
+      <div class="search"><ha-icon icon="mdi:magnify"></ha-icon><input data-a="q" type="search" value="${cesc(this._q || "")}" placeholder="${dfT("mob.search")}"></div>${sec || `<div class="none">${dfT("mob.nothing")}</div>`}`;
+  },
+
+  _pplPage(m) {
+    return `<header class="hd"><button class="bk" data-a="tab" data-v="control" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${dfT("mob.people")}</div><div class="sub">${dfT("mob.n_home", { n: m.people.filter((p) => p.home).length })}</div></div></header><div class="list">${this._peopleHtml(m.people)}</div>`;
+  },
+});
+// Mobile card: the page layer and its sheets (Navigator, appliance, overlay, item and issue lists) (#86).
+Object.assign(DeviceFloorplanMobile.prototype, {
+  /** The page layer is used on a dashboard (not in the card editor's preview). */
+  _useLayer() {
+    return !!this._huiRoot() && !this._config.inline_bar;
+  },
+
+  _layerEl() {
+    if (!this._lay) {
+      const el = document.createElement("div");
+      el.setAttribute("data-dfm-layer", "");
+      const sr = el.attachShadow({ mode: "open" });
+      sr.innerHTML = `<style>${DFM_CSS}</style><div class="dfm lay"></div>`;
+      sr.addEventListener("click", (e) => this._click(e));
+      sr.addEventListener("change", (e) => this._change(e));
+      sr.addEventListener("input", (e) => this._input(e));
+      this._lay = el;
+    }
+    if (!this._lay.isConnected) document.body.appendChild(this._lay);
+    return this._lay;
+  },
+
+  _renderLayer(html) {
+    if (!html) {
+      if (this._lay) this._lay.remove();
+      return;
+    }
+    const el = this._layerEl();
+    el.toggleAttribute("dark", this.hasAttribute("dark"));
+    const host = el.shadowRoot.querySelector("div.lay");
+    if (html !== this._layHtml) {
+      this._layHtml = html;
+      const tpl = document.createElement("div");
+      tpl.innerHTML = html;
+      dfmMorph(host, tpl);
+    }
+    for (const x of el.shadowRoot.querySelectorAll("[data-ent]")) {
+      x.hass = this._hass;
+      x.stateObj = this._hass.states[x.dataset.ent];
+    }
+  },
 
   /** 0.13.9.18: an appliance's details: picture, status, program, progress, time, door, power, energy, last run. */
   _applSheet(m, key) {
@@ -13773,119 +13980,31 @@ class DeviceFloorplanMobile extends HTMLElement {
       <div class="sub center">${cesc([this._roomName(x), this._applLine(x, st)].filter(Boolean).join(" · "))}</div>
       ${done || plug ? `<div class="scenes">${done}${plug}</div>` : ""}<div class="rcard">${rows}</div>
       <button class="srow" data-a="more" data-v="${cesc(x.lead || x.item.main_entity || "")}"><span class="rtile"><ha-icon icon="mdi:information-outline"></ha-icon></span><span class="txt"><span class="nm">${dfT("mob.details")}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
-  }
-
-  /** #84: a camera, live at once (muted, so the phone lets it play), with a link to HA's own dialog. */
-  _camSheet(m, eid) {
-    const st = this._hass.states[eid];
-    const c = this._cams(m).find((q) => q.cam === eid);
-    const nm = (c && c.x.name) || (st && st.attributes.friendly_name) || eid;
-    return `<h3 class="sh"><span class="rtile"><ha-icon icon="mdi:cctv"></ha-icon></span>${cesc(nm)}<button class="x" data-a="close" aria-label="${dfT("close")}"><ha-icon icon="mdi:close"></ha-icon></button></h3>
-      <div class="camv"><ha-camera-stream data-cam="${cesc(eid)}"></ha-camera-stream></div>
-      <div class="sub center">${cesc([c ? this._roomName(c.x) : "", st ? this._fmtE(eid) : ""].filter(Boolean).join(" · "))}</div>
-      <button class="srow" data-a="more" data-v="${cesc(eid)}"><span class="rtile"><ha-icon icon="mdi:information-outline"></ha-icon></span><span class="txt"><span class="nm">${dfT("mob.details")}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
-  }
+  },
 
   /** #85: the Navigator (the place pill): Home, then every floor with its rooms; where you are is marked. */
   _navSheet(m) {
     const s = this._s;
     const bell = this._issues(m).length;
     const many = m.rooms.length > 12;
-    const homeRow = `<button class="srow nhome ${s.page !== "room" && m.floors.length < 2 ? "cur" : ""}" data-a="gohome"><span class="rtile"><ha-icon icon="mdi:home"></ha-icon></span><span class="txt"><span class="nm">${cesc(this._homeName())}</span><span class="sub">${cesc(m.people.length ? dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }) : "")}</span></span>${bell ? `<span class="bell"><ha-icon icon="mdi:bell-outline"></ha-icon><b>${bell}</b></span>` : ""}<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
+    const homeRow = `<button class="srow nhome ${s.page === "house" || (s.page !== "room" && m.floors.length < 2) ? "cur" : ""}" data-a="gohome"><span class="rtile"><ha-icon icon="mdi:home"></ha-icon></span><span class="txt"><span class="nm">${cesc(this._homeName())}</span><span class="sub">${cesc(m.people.length ? dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }) : "")}</span></span>${bell ? `<span class="bell"><ha-icon icon="mdi:bell-outline"></ha-icon><b>${bell}</b></span>` : ""}<ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
     const floors = m.floors.map((f) => {
       const rs = this._sortRooms(m.rooms.filter((r) => r.floor === f.id));
       const curF = f.id === s.floor;
       const open = curF || !many;
-      const head = m.floors.length > 1 || rs.length < 2 ? `<button class="nfloor ${curF && s.page !== "room" ? "cur" : ""}" data-a="sheet-floor" data-v="${cesc(f.id)}"><span>${cesc(f.name)}</span><small>${cesc(dfT("mob.n_rooms", { n: rs.length }))}</small><ha-icon icon="mdi:chevron-right"></ha-icon></button>` : "";
+      const head = m.floors.length > 1 || rs.length < 2 ? `<button class="nfloor ${curF && !["room", "house"].includes(s.page) ? "cur" : ""}" data-a="sheet-floor" data-v="${cesc(f.id)}"><span>${cesc(f.name)}</span><small>${cesc(dfT("mob.n_rooms", { n: rs.length }))}</small><ha-icon icon="mdi:chevron-right"></ha-icon></button>` : "";
       const rows = open && rs.length > 1 ? rs.map((r) => `<button class="srow nroom ${s.page === "room" && s.room === r.id && curF ? "cur" : ""}" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rtile"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="txt"><span class="nm">${cesc(r.name)}</span><span class="sub">${cesc(this._vals(r))}</span></span><span class="bds inl">${this._badges(m, r)}</span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`).join("") : "";
       return `${head}${rows}`;
     }).join("");
     return `${homeRow}${floors}`;
-  }
-
-  /** #77: the home's own name (HA → Settings → General), else "Home". */
-  _homeName() {
-    const n = String((this._hass.config && this._hass.config.location_name) || "").trim();
-    return n && n.toLowerCase() !== "home" ? n : dfT("mob.home");
-  }
-
-  /** #85: Control: every overlay as a rich tile (the same tiles as Home control), all devices, a 2-column grid. */
-  _ctlPage(m) {
-    const all = `<button class="ot" data-a="tab" data-v="devices" style="--c:#8a8f98"><span class="oti"><ha-icon icon="mdi:devices"></ha-icon></span><b>${dfT("mob.all_devices")}</b><small>${cesc(dfT("mob.n_devices", { n: m.items.length }))}</small></button>`;
-    const appls = m.items.filter((x) => x.ap);
-    const ap = appls.length ? `<button class="ot" data-a="ovs" data-v="appl" style="--c:#26a69a"><span class="oti"><ha-icon icon="mdi:washing-machine"></ha-icon></span><b>${dfT("mob.appliances")}</b><small>${cesc(appls.filter((x) => x.h._applState(x.ap).active).length ? dfT("mob.n_on", { n: appls.filter((x) => x.h._applState(x.ap).active).length }) : dfT("mob.quiet"))}</small></button>` : "";
-    return `<header class="hd"><div class="grow"><div class="h1">${dfT("mob.control")}</div><div class="sub">${cesc(this._homeName())}</div></div></header><div class="ctlgrid">${this._ovTiles(m)}${ap}${all}</div>`;
-  }
-
-  /** #56 / #57: a room tile: its icon, one badge per overlay with something to say (max 4 + "+n"), its name and values. */
-  _tile(m, r) {
-    const line = [r.temp != null ? `${r.temp}°` : "", r.hum != null ? `${Math.round(r.hum)}%` : "", r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · ");
-    return `<button class="rt" data-a="room" data-v="${cesc(`${r.floor}|${r.id}`)}"><span class="rti"><ha-icon icon="${cesc(r.icon)}"></ha-icon></span><span class="bds">${this._badges(m, r)}</span><b>${cesc(r.name)}</b><small>${r.airR != null ? this._airDot(r.airR) : ""}${cesc(line || dfT("mob.n_devices", { n: r.items.length }))}</small></button>`;
-  }
-
-  /** #71: a room's overlay badges, built once for its tile and its row. */
-  _badges(m, r) {
-    const f = m.floors.find((q) => q.id === r.floor);
-    const bd = [];
-    for (const o of this._overlayList(f)) {
-      const mem = this._members(o, r.items);
-      let v = null;
-      if (o === "security") v = r.items.reduce((t, x) => t + x.open.length + x.alarm.length, 0) || null;
-      else if (o === "lights") v = mem.filter((x) => x.on).length || null;
-      else if (o === "comfort") v = mem.filter((x) => x.lk === "climate" && x.on).length || null;
-      else if (o === "energy") v = r.power >= 1 ? fmtW(r.power) : null;
-      else if (o === "network") v = r.offline || null;
-      else if (o === "health") v = r.low + r.warns || null;
-      else if (o === "cleaning") v = mem.filter((x) => x.on).length || null;
-      else if (o === "people") v = r.people.length || null;
-      else if (o !== "live" && o !== "plan") v = mem.filter((x) => x.now.has(o)).length || null;
-      if (v) bd.push(`<b class="tb2" style="--c:${DFM_OVC[o] || "#8a8f98"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon>${cesc(String(v))}</b>`);
-    }
-    if (!bd.length && r.people.length) bd.push(`<b class="tb2" style="--c:${DFM_OVC.people}"><ha-icon icon="mdi:account"></ha-icon>${r.people.length}</b>`);
-    const more = bd.length > 4 ? `<b class="tb2 more">+${bd.length - 3}</b>` : "";
-    return bd.length > 4 ? bd.slice(0, 3).join("") + more : bd.join("");
-  }
-
-  /** #60: "Home control": one big tile per overlay; a tap opens its sheet. */
-  _ovTiles(m) {
-    const f = m.floors.find((q) => q.id === this._s.floor);
-    const ovs = this._overlayList(f).filter((o) => o !== "live" && o !== "plan");
-    if (m.people.length && !ovs.includes("people")) ovs.unshift("people");
-    const tiles = ovs.map((o) => {
-      const t = o === "people" ? dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }) : this._sum(o, m.items, true);
-      let body = "";
-      if (o === "people") body = `<span class="pchips">${m.people.slice(0, 4).map((p) => `<span class="pc ${p.home ? "home" : ""}"><span class="av">${p.pic ? `<img src="${cesc(p.pic)}" alt="">` : cesc(p.name.slice(0, 1))}</span>${cesc(p.name.split(" ")[0])}</span>`).join("")}${m.people.length > 4 ? `<span class="pc">+${m.people.length - 4}</span>` : ""}</span>`;
-      if (o === "energy") {
-        const rs = m.rooms.filter((r) => r.power >= 1).sort((a, b) => b.power - a.power).slice(0, 3);
-        const max = rs.length ? rs[0].power : 1;
-        body = `<span class="bars">${rs.map((r) => `<span class="bar1"><span>${cesc(r.name)}</span><small>${cesc(fmtW(r.power))}</small><i style="width:${Math.max(4, (r.power / max) * 100).toFixed(0)}%"></i></span>`).join("")}</span>`;
-      }
-      const quiet = !t || [dfT("mob.all_off"), dfT("mob.all_closed"), dfT("mob.all_online"), dfT("mob.all_fine"), dfT("mob.quiet")].includes(t);
-      const att = o === "security" && /\d/.test(t);
-      return `<button class="ot ${quiet ? "quiet" : ""} ${att ? "att" : ""}" data-a="ovs" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "#8a8f98"}"><span class="oti"><ha-icon icon="${cesc(o === "people" ? OVERLAYS.people.icon : this._ovIcon(o, f))}"></ha-icon></span><b>${cesc(o === "people" ? OVERLAYS.people.label : this._ovLabel(o, f))}</b><small>${cesc(t || "")}</small>${body}</button>`;
-    });
-    return tiles.sort((a, b) => Number(a.includes(" quiet ")) - Number(b.includes(" quiet "))).join("");
-  }
+  },
 
   _sheetHtml(m) {
     const sh = this._sheet;
     let body = "";
-    const item = (p, icon, label, sub) => `<button class="srow" data-a="tab" data-v="${p}"><span class="rtile"><ha-icon icon="${icon}"></ha-icon></span><span class="txt"><span class="nm"><span class="t">${label}</span></span><span class="sub">${cesc(sub)}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
     if (sh.step === "nav") body = this._navSheet(m);
     else if (sh.step === "appl") body = this._applSheet(m, sh.key);
-    else if (sh.step === "cam") body = this._camSheet(m, sh.eid);
-    else if (sh.step === "list") {
-      body = `${item("devices", "mdi:devices", dfT("mob.devices"), dfT("mob.n_devices", { n: m.items.length }))}${item("people", "mdi:account-group-outline", dfT("mob.people"), dfT("mob.k_of_n_home", { k: m.people.filter((p) => p.home).length, n: m.people.length }))}`;
-    } else if (sh.step === "floors") {
-      body = `<h3>${dfT("mob.floors")}</h3>${m.floors.map((f) => {
-        const rs = m.rooms.filter((r) => r.floor === f.id);
-        const on = rs.reduce((n, r) => n + r.on, 0);
-        const att = rs.reduce((n, r) => n + r.attention, 0);
-        const sub = [dfT("mob.n_rooms", { n: rs.length }), att ? dfT("mob.n_attention", { n: att }) : "", on ? dfT("mob.n_on", { n: on }) : ""].filter(Boolean).join(" · ");
-        const img = this._img(f);
-        return `<button class="srow" data-a="sheet-floor" data-v="${cesc(f.id)}"><span class="fthumb">${img ? `<img src="${cesc(img)}" alt="">` : `<ha-icon icon="mdi:floor-plan"></ha-icon>`}</span><span class="txt"><span class="nm">${cesc(f.name)}</span><span class="sub">${cesc(sub)}</span></span><ha-icon class="chev" icon="mdi:chevron-right"></ha-icon></button>`;
-      }).join("")}`;
-    } else if (sh.step === "issues") {
+    else if (sh.step === "issues") {
       body = `<h3>${dfT("mob.needs_look")}</h3>${this._issues(m).map((i) => i.x ? this._row(i.x, { room: this._roomName(i.x) }) : `<button class="srow" data-a="room" data-v="${cesc(`${i.room.floor}|${i.room.id}`)}"><span class="rtile"><ha-icon icon="mdi:air-filter"></ha-icon></span><span class="txt"><span class="nm">${cesc(`${i.txt} · ${i.room.name}`)}</span><span class="sub">${cesc(i.st)}</span></span></button>`).join("")}`;
     } else if (sh.step === "ov") {
       body = this._ovSheet(m, sh.ov);
@@ -13895,7 +14014,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       body = `<h3>${cesc(sh.title || "")}</h3>${list.map((x) => this._row(x, { room: this._roomName(x) })).join("") || `<p class="empty">${dfT("mob.quiet")}</p>`}`;
     }
     return `<div class="scrim" data-a="close"></div><div class="sheet" data-scroll="sheet"><i class="grab"></i>${body}</div>`;
-  }
+  },
 
   /** #49 / #60: an overlay as controls (no plan): its scenes and actions from the main card, then its devices by room. */
   _ovSheet(m, o) {
@@ -13943,70 +14062,16 @@ class DeviceFloorplanMobile extends HTMLElement {
       }).join("") || `<div class="none">${dfT("mob.nothing")}</div>`;
     }
     return `<h3 class="sh"><span class="rtile" style="color:${DFM_OVC[o] || "inherit"}"><ha-icon icon="${cesc(icon)}"></ha-icon></span>${cesc(title)}<button class="x" data-a="close" aria-label="${dfT("close")}"><ha-icon icon="mdi:close"></ha-icon></button></h3>${top || acts ? `<div class="scenes">${top}${acts}</div>` : ""}${list}`;
-  }
-
-  /** #41 / #76: a room's devices by kind: one card per group (header inside, flat rows), each folds; Lights has
-   *  the room's master switch like the Lights sheet. */
-  _roomGroups(r) {
-    const gfold = lsGet("dfm_gfold") || {};
-    return DFM_GROUPS.map((g) => {
-      const list = r.items.filter((x) => x.g === g).sort((a, b) => b.attention - a.attention || Number(b.on) - Number(a.on) || a.name.localeCompare(b.name));
-      if (!list.length) return "";
-      const sum = g === "lights" ? "" : this._sum(DFM_GOV[g] === "live" ? "live" : DFM_GOV[g], list) || "";
-      const tg = g === "lights" ? list.filter((x) => x.st && DFM_TOGGLE.has(domainOf(x.lead)) && !x.offline) : [];
-      const onN = tg.filter((x) => x.on).length;
-      const master = tg.length ? `<button class="rmaster ${onN ? "on" : ""}" data-a="rmaster" data-v="${cesc(tg.map((x) => x.lead).join(","))}" data-on="${onN ? 1 : 0}">${onN}/${tg.length}<i></i></button>` : "";
-      const fo = !!gfold[g];
-      return `<section class="rcard gcard ${fo ? "folded" : ""}"><div class="rch" data-a="gfold" data-v="${g}"><span class="rtile gi g-${g}"><ha-icon icon="${DFM_GICON[g]}"></ha-icon></span><b>${dfmGroupLabel(g)}</b><span class="gs">${cesc(sum)}</span>${master}<span class="go"><ha-icon icon="mdi:chevron-${fo ? "right" : "down"}"></ha-icon></span></div>${fo ? "" : list.map((x) => this._row(x)).join("")}</section>`;
-    }).join("");
-  }
-
-  _roomPage(m) {
-    const s = this._s;
-    const f = m.floors.find((q) => q.id === s.floor);
-    const r = m.rooms.find((q) => q.id === s.room && q.floor === f.id);
-    const folded = !!lsGet("dfm_fold");
-    const groups = this._roomGroups(r);
-    // #33 / #42: one plan band (a third of the screen), the room centred, controls floating on it.
-    const foldBtn = `<button class="fold ${folded ? "off" : ""}" data-a="fold" aria-label="${folded ? dfT("mob.show_plan") : dfT("mob.hide")}"><ha-icon icon="mdi:chevron-${folded ? "down" : "up"}"></ha-icon></button>`;
-    const band = folded ? "" : `<div class="cut" data-swipe="room">${this._slot(f.id, "live", r.id, "room")}
-        <button class="nav l" data-a="step" data-z="room" data-v="-1" aria-label="${dfT("mob.prev_room")}"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
-        <button class="nav r" data-a="step" data-z="room" data-v="1" aria-label="${dfT("mob.next_room")}"><ha-icon icon="mdi:chevron-right"></ha-icon></button>${foldBtn}</div>`;
-    return `<header class="hd room"><button class="bk" data-a="back" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${cesc(r.name)}</div><div class="sub">${r.airR != null ? this._airDot(r.airR) : ""}${cesc([this._vals(r), r.airR != null ? this._airTxt(r.airR) : ""].filter(Boolean).join(" · "))}</div></div>${this._thumb(f, r.id)}${folded ? foldBtn : ""}</header>
-      ${band}
-      ${groups || `<div class="none">${dfT("mob.nothing")}</div>`}`;
-  }
-
-  _devPage(m) {
-    const q = String(this._q || "").trim().toLowerCase();
-    const list = m.items.filter((x) => !q || x.name.toLowerCase().includes(q) || this._roomName(x).toLowerCase().includes(q));
-    const by = new Map();
-    for (const x of list) {
-      const k = x.room ? `${x.floor}|${x.room}` : `${x.floor}|`;
-      if (!by.has(k)) by.set(k, []);
-      by.get(k).push(x);
-    }
-    const sec = [...by.entries()].map(([k, xs]) => {
-      const [fid, rid] = k.split("|");
-      const f = m.floors.find((z) => z.id === fid);
-      const r = rid && m.rooms.find((z) => z.id === rid && z.floor === fid);
-      const title = r ? `${r.name}${m.floors.length > 1 ? ` · ${f.name}` : ""}` : `${dfT("mob.no_room")}${m.floors.length > 1 ? ` · ${f.name}` : ""}`;
-      return `<section><h2>${cesc(title)}<span class="gs">${xs.length}</span></h2>${xs.sort((a, b) => a.name.localeCompare(b.name)).map((x) => this._row(x)).join("")}</section>`;
-    }).join("");
-    return `<header class="hd"><button class="bk" data-a="tab" data-v="control" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${dfT("mob.devices")}</div><div class="sub">${dfT("mob.n_devices", { n: m.items.length })}</div></div></header>
-      <div class="search"><ha-icon icon="mdi:magnify"></ha-icon><input data-a="q" type="search" value="${cesc(this._q || "")}" placeholder="${dfT("mob.search")}"></div>${sec || `<div class="none">${dfT("mob.nothing")}</div>`}`;
-  }
-
-  _pplPage(m) {
-    return `<header class="hd"><button class="bk" data-a="tab" data-v="control" aria-label="${dfT("mob.back")}">‹</button><div class="grow"><div class="h1">${dfT("mob.people")}</div><div class="sub">${dfT("mob.n_home", { n: m.people.filter((p) => p.home).length })}</div></div></header><div class="list">${this._peopleHtml(m.people)}</div>`;
-  }
-
+  },
+});
+// Mobile card, landscape: the 3D home, the floor / room plan and the overlay rail (#86).
+Object.assign(DeviceFloorplanMobile.prototype, {
   // ------------------------------------------------------------- landscape: the house explorer
   _landHtml(m) {
     const s = this._s;
     const multi = m.levels.length > 1;
-    // #27 / #83: landscape is the big plan with its overlays. The House is the 3D building (several levels); a
-    // floor and a room are the Floorplan card itself, with its overlay rail on the right and Home Replay.
+    // #27 / #83 / #93: landscape is the big plan with its overlays. The House is the 3D building (several levels);
+    // a floor and a room are the Floorplan card; the overlay rail is the mobile card's own (never redrawn by the card).
     const one = (fid) => m.rooms.filter((q) => q.floor === fid).length < 2;
     const scope = s.page === "room" && s.room && !one(s.floor) ? "room" : s.page === "house" && multi ? "house" : "floor";
     const f = m.floors.find((q) => q.id === s.floor);
@@ -14014,6 +14079,10 @@ class DeviceFloorplanMobile extends HTMLElement {
     const items = scope === "room" ? r.items : scope === "floor" ? m.items.filter((x) => x.floor === f.id) : m.items;
     const gone = this._hdrHidden ? "gone" : "";
     const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
+    // #92-12: one pill naming where you are, ▾ lists the others (floors, or the floor's rooms).
+    const pick = (label, list, act) => (list.length > 1 ? `<div class="float sw pick">${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}<button class="fpill" data-a="fmenu"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "down" : "up"}"></ha-icon></button></div>` : "");
+    // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
+    const hint = scope !== "house" && !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
     let body = "";
     if (scope === "house") {
       body = `${this._houseHtml(m)}
@@ -14022,15 +14091,25 @@ class DeviceFloorplanMobile extends HTMLElement {
     } else if (scope === "floor") {
       body = `${this._slot(f.id, "live", "", "land", "lplan")}
         <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}<div class="h1">${cesc(f.name)}</div><div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>
-        ${m.floors.length > 1 ? `<div class="float sw ${gone}"><button data-a="step" data-z="floor" data-v="-1">‹</button><span>${cesc(f.name)}</span><button data-a="step" data-z="floor" data-v="1">›</button></div>` : ""}`;
+        ${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}${hint}`;
     } else {
+      const rs = this._sortRooms(m.rooms.filter((q) => q.floor === f.id));
       body = `${this._slot(f.id, "live", r.id, "landroom", "lplan")}
         <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button><div class="h1">${cesc(r.name)}</div><div class="sub">${cesc(this._vals(r))}</div></div></div>
-        <div class="float sw ${gone}"><button data-a="step" data-z="room" data-v="-1">‹</button><span>${cesc(r.name)}</span><button data-a="step" data-z="room" data-v="1">›</button></div>`;
+        ${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}${hint}`;
     }
     const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
-    return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div></div>`;
-  }
+    return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
+  },
+
+  /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole, Home
+   *  Replay last; the mobile card's own element, so a state change never rebuilds it (its scroll stays). */
+  _railHtml(m, f) {
+    const ovs = this._overlayList(f).filter((o) => o !== "plan");
+    const cur = ovs.includes(this._lov) ? this._lov : ovs.includes("live") ? "live" : ovs[0];
+    this._lov = cur;
+    return `<nav class="lrail" data-scroll="lrail">${ovs.map((o) => `<button class="lr ${o === cur ? "on" : ""}" data-a="lov" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "var(--dfm-acc)"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon><span>${cesc(this._ovLabel(o, f))}</span></button>`).join("")}<button class="lr rp" data-a="rp"><ha-icon icon="mdi:history"></ha-icon><span>${dfT("rp.name")}</span></button></nav>`;
+  },
 
   /** #26: the House: all levels stacked on one footprint, one tilt for the whole building, sized to fit. */
   _houseHtml(m) {
@@ -14059,7 +14138,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       return { html: `<div class="lvl" style="transform:translateZ(${z.toFixed(1)}px)">${plans}</div>`, label: `<button class="hl" data-a="floor" data-v="${cesc(l.plans[0].id)}" style="top:calc(50% + ${y.toFixed(1)}px)"><b>${cesc(l.plans.map((f) => f.name).join(" · "))}</b><small>${cesc(lab)}</small></button>` };
     });
     return `<div class="house"><div class="stage" style="width:${w.toFixed(0)}px;height:${h.toFixed(0)}px;--th:${(th * 180) / Math.PI}deg;--ph:${(ph * 180) / Math.PI}deg">${levels.map((x) => x.html).join("")}</div>${levels.map((x) => x.label).join("")}</div>`;
-  }
+  },
 
   _housePlan(m, f, pct) {
     const img = this._img(f);
@@ -14072,9 +14151,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     }).join("");
     const avs = m.people.filter((p) => p.room && p.room.floor === f.id).map((p) => `<span class="hav" style="left:${p.room.ar.x}%;top:${p.room.ar.y}%">${p.pic ? `<img src="${cesc(p.pic)}" alt="">` : cesc(p.name.slice(0, 1))}</span>`).join("");
     return `<button class="plane" data-a="floor" data-v="${cesc(f.id)}" style="width:${pct.toFixed(2)}%">${img ? `<img src="${cesc(img)}" alt="">` : ""}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${polys}</svg>${avs}</button>`;
-  }
-}
-
+  },
+});
+// Mobile card: its styles, registration and dashboard strategy (#86).
 const DFM_CSS = `
 :host { display:block; /* 0.13.9.17 #69: the HA theme as it is: page, cards, sheets, lines and text from its own variables. */ --dfm-g1: var(--dfm-bg-top, var(--primary-background-color, #f3f5f9)); --dfm-g2: var(--dfm-bg-bottom, color-mix(in srgb, var(--primary-background-color, #f3f5f9) 94%, #000)); --dfm-bg: var(--dfm-g2); --dfm-card: var(--ha-card-background, var(--card-background-color, #fff)); --dfm-sheet: var(--secondary-background-color, var(--dfm-card)); --dfm-fg: var(--primary-text-color, #222); --dfm-sub: var(--secondary-text-color, #777); --dfm-acc: var(--primary-color, #03a9f4); --dfm-red: var(--error-color, #db4437); --dfm-amber: var(--warning-color, #f4b400); --dfm-div: var(--divider-color, rgba(0,0,0,.08)); color: var(--dfm-fg); font-family: var(--paper-font-body1_-_font-family, inherit); }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
@@ -14090,7 +14169,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .h1 { font-size: 18px; font-weight: 700; line-height:1.2; letter-spacing:-.01em; }
 .hd.room .h1 { font-size: 20px; }
 .sub { font-size: 12.5px; color: var(--dfm-sub); }
-.hd.top .me { width: 44px; height: 44px; flex: none; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px var(--dfm-card); }
+/* #91: a smaller avatar; the greeting always one line, its size fitted to the space */
+.isslink { display:inline; padding: 0; font: inherit; color: var(--dfm-red); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--dfm-red) 40%, transparent); text-underline-offset: 2px; }
+.isslink b { font-weight: 700; }
+.hd.top .h1 { white-space: nowrap; font-size: var(--dfm-greet, 18px); }
+.hd.top.tight .clim { max-width: 40%; }
+.hd.top .me { width: 38px; height: 38px; flex: none; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px var(--dfm-card); }
 .hd.top .me img { width: 100%; height: 100%; object-fit: cover; }
 .hd.room { position: relative; }
 .fold { position: absolute; right: 2px; bottom: -14px; z-index: 3; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 70%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 1px 4px rgba(0,0,0,.15); color: var(--dfm-fg); }
@@ -14109,7 +14193,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .mini .nav { opacity: .55; width: 34px; height: 34px; }
 .mini .nav.l { left: -4px; } .mini .nav.r { right: -4px; }
 /* #53: small pills that wrap: what is on above the plan, what needs a look under it */
-.pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
 /* #64: the climate card (top right) and the two segment bars (house above the plan, floor under it) */
 .clim { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 7px 10px; border-radius: 14px; background: var(--dfm-card); box-shadow: 0 1px 4px rgba(0,0,0,.07); font-size: 12px; text-align: left; max-width: 52%; }
 .clim .cl { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; }
@@ -14124,11 +14207,33 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg span { overflow: hidden; text-overflow: ellipsis; }
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
+/* #93: the landscape overlay rail: its own element, no background, labels whole */
+.land { padding-right: var(--dfm-rail-w, 92px); box-sizing: border-box; }
+.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.lrail::-webkit-scrollbar { display: none; }
+.lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
+.lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
+.lr span { max-width: 100%; overflow-wrap: anywhere; }
+.lr.on { color: var(--dfm-fg); }
+.lr.on ha-icon { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+.lr:active ha-icon { background: color-mix(in srgb, var(--dfm-fg) 10%, transparent); }
+.lr.rp { margin-top: 6px; box-shadow: inset 0 1px 0 var(--dfm-div); border-radius: 0; padding-top: 10px; }
+/* #92-12: one place pill with its list */
+.float.sw.pick { display:flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; background: none; box-shadow: none; }
+.fpill { display:flex; align-items:center; gap: 6px; padding: 8px 12px 8px 16px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 85%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.12); font-weight: 650; color: var(--dfm-fg); }
+.fmenu { display:flex; flex-direction: column; min-width: 170px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-card) 94%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.fmenu button { text-align: left; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--dfm-fg); }
+.fmenu button.on { background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); font-weight: 650; }
+/* #92-6: one-time hints */
+.phint, .hint2 { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, var(--dfm-card) 88%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); pointer-events: none; white-space: nowrap; z-index: 3; }
+.hint2 { bottom: 14px; }
+.mini { position: relative; }
+h2 .scope { font-size: 12px; font-weight: 500; color: var(--dfm-sub); margin-left: 6px; }
+.seg.lt ha-icon { color: #e8b923; } /* #92-10: lights on is normal life: a yellow bulb, a neutral number */
 .seg.warn { color: var(--dfm-amber); }
 .seg.att { color: var(--dfm-red); }
 .seg.act { color: var(--dfm-acc); }
 .seg:active { background: color-mix(in srgb, var(--dfm-fg) 8%, transparent); }
-.pills.iss { margin: 4px 0 8px; max-height: 60px; overflow: hidden; }
 .pi { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 999px; background: var(--dfm-card); font-size: 12px; white-space: nowrap; max-width: 100%; box-sizing: border-box; overflow: hidden; }
 .pi ha-icon, .pi ha-state-icon { --mdc-icon-size: 14px; color: var(--dfm-acc); flex: none; }
 .pi .t { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
@@ -14186,7 +14291,9 @@ section.folded { margin-bottom: 0; }
 /* #56 / #57: room tiles: icon, overlay badges (top right), name, values */
 .rt { position: relative; width: 150px; min-height: 150px; justify-content: flex-end; }
 .rt .rti { position: absolute; left: 12px; top: 12px; }
-.rt .bds { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rt .bds { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-height: calc(100% - 66px); overflow: hidden; }
+/* #92-1: the room's name has its own line: badges never reach it */
+.rt b { position: relative; z-index: 1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bds.inl { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
 .tb2 { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
 .tb2 ha-icon { --mdc-icon-size: 13px !important; color: inherit !important; }
@@ -14282,9 +14389,6 @@ button.sw.on i { left: 21px; }
 .pill2 .up { --mdc-icon-size: 18px; }
 .tb { width:48px; height:48px; border-radius:50%; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 4px 16px rgba(0,0,0,.14); display:flex; align-items:center; justify-content:center; }
 .tb.on { color: var(--dfm-acc); }
-.pill { height:48px; padding: 0 18px; border-radius: 999px; background: var(--dfm-card); box-shadow: 0 4px 16px rgba(0,0,0,.14); display:flex; align-items:center; gap:8px; font-weight:650; font-size: 15px; }
-.pill.on { color: var(--dfm-acc); }
-.pill .up { --mdc-icon-size: 18px; }
 .scrim { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.25); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; max-height: 78vh; overflow-y: auto; background: var(--dfm-sheet); border-radius: 22px 22px 0 0; padding: 8px 14px calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:8px; box-shadow: 0 -6px 30px rgba(0,0,0,.18); }
 .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--dfm-sub) 40%, transparent); margin: 2px auto 6px; }
@@ -14309,6 +14413,9 @@ button.sw.on i { left: 21px; }
 .bd { flex: none; white-space: nowrap; }
 .float { position:absolute; z-index: 3; transition: opacity .5s; text-shadow: 0 1px 6px var(--dfm-bg), 0 0 2px var(--dfm-bg); }
 .float.gone { opacity: 0; pointer-events: none; }
+/* #92-11: in landscape the ‹ back stays; only the big title fades */
+.float.hdr.chip.gone { opacity: 1; pointer-events: auto; padding-bottom: 6px; }
+.float.hdr.chip.gone .h1, .float.hdr.chip.gone .sub { display: none; }
 .float.hdr { top: 10px; left: 16px; }
 /* #80: the title on a soft chip, readable on any plan */
 .float.hdr.chip { display:flex; align-items:flex-start; gap: 8px; padding: 6px 12px 7px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-g1) 72%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,.12); text-shadow: none; max-width: 45%; }
@@ -14339,8 +14446,6 @@ button.sw.on i { left: 21px; }
 .drow ha-icon { --mdc-icon-size: 20px; color: var(--dfm-sub); }
 .drow span { flex: 1; color: var(--dfm-sub); }
 .drow b { font-weight: 600; }
-.camv { margin: 4px 0 8px; border-radius: 16px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
-.camv ha-camera-stream { display:block; width: 100%; height: 100%; }
 .nfloor { display:flex; align-items:center; gap: 8px; width: 100%; padding: 14px 4px 6px; font-weight: 700; font-size: 15px; color: var(--dfm-fg); }
 .nfloor small { color: var(--dfm-sub); font-weight: 500; font-size: 12px; margin-left: auto; }
 .nfloor ha-icon { --mdc-icon-size: 18px; color: var(--dfm-sub); }
@@ -14362,22 +14467,6 @@ button.sw.on i { left: 21px; }
 .float.sw { bottom: 12px; left: 16px; background: color-mix(in srgb, var(--dfm-card) 80%, transparent); border-radius: 999px; padding: 4px; box-shadow: 0 2px 10px rgba(0,0,0,.1); text-shadow:none; color: var(--dfm-fg); font-weight: 600; }
 .float.sw button { width:30px; height:30px; }
 .float.hint { bottom: 14px; left: 16px; font-size: 13px; color: var(--dfm-sub); }
-.right { flex: 1; min-width: 0; height: 100%; display:flex; flex-direction:column; background: color-mix(in srgb, var(--dfm-card) 72%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: -1px 0 0 var(--dfm-div); z-index: 2; }
-.tabs { display:flex; gap: 4px; overflow-x: auto; padding: 10px 12px 6px; scrollbar-width: none; flex: none; }
-.tabs::-webkit-scrollbar { display:none; }
-.lt { flex:none; padding: 7px 12px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: var(--dfm-sub); }
-.lt.on { background: var(--dfm-fg); color: var(--dfm-bg); }
-.rbody { flex:1; overflow-y:auto; padding: 4px 12px 16px; display:flex; flex-direction:column; gap: 6px; }
-.rsum { font-size: 13px; color: var(--dfm-sub); padding: 2px 4px 4px; }
-.right .row { box-shadow: none; background: transparent; border-radius: 0; border-bottom: 1px solid var(--dfm-div); padding: 9px 4px; }
-.right .row.att { box-shadow: none; }
-.right .row.att .nm { color: var(--dfm-red); }
-.others { margin-top: 10px; display:flex; flex-direction:column; }
-.one { display:flex; align-items:center; gap: 10px; padding: 11px 4px; border-top: 1px solid var(--dfm-div); font-size: 14px; }
-.one span { font-weight: 600; }
-.one small { margin-left:auto; color: var(--dfm-sub); font-size: 13px; }
-.one.att small { color: var(--dfm-red); font-weight: 600; }
-.one ha-icon { --mdc-icon-size: 19px; color: var(--dfm-sub); }
 .house { position:absolute; inset: 0; perspective: 1800px; overflow: hidden; }
 .stage { position:absolute; left: 44%; top: 54%; transform-style: preserve-3d; transform: translate(-50%, -50%) rotateX(var(--ph)) rotateZ(calc(-1 * var(--th))); }
 .lvl { position:absolute; inset: 0; display:flex; justify-content:center; transform-style: preserve-3d; pointer-events: none; }
