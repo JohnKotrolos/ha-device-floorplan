@@ -253,6 +253,12 @@ button.sw.on i { left: 21px; }
 .left.full { flex: 1 1 100%; }
 .lplan { position:absolute; inset: 6px 0 6px 6px; }
 .lplan device-floorplan-card { display:block; height: 100%; }
+/* #122: a tall plan in landscape: full width, scrolls up / down (left / right still changes floor); a soft fade at the
+   edges shows there is more. */
+.left.tall { touch-action: pan-y; }
+.lplan.tall { left: -48px; padding-left: 48px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%); }
+.lplan.tall::-webkit-scrollbar { display: none; } /* the box reaches into the navigation strip (under it), so the side tools that hang there are not clipped */
+.lplan.tall device-floorplan-card { height: auto; }
 .lmenu { flex:none; width: 34px; height: 34px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color: var(--dfm-fg); }
 .row, .srow, .one { flex-shrink: 0; }
 .nm { flex-wrap: nowrap; min-width: 0; }

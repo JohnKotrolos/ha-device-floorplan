@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.27";
+const CARD_VERSION = "0.13.9.28";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -1333,6 +1333,7 @@ ha-card { position:relative; overflow:hidden; height:100%; display:flex; flex-di
 /* #111: "tools: side" (the mobile card in landscape): the overlay's controls as one icon column in the strip left of
    the plan (under the floors), its legends in a popover; nothing under the plan. */
 ha-card.tsd { overflow: visible; }
+ha-card.tsd .tside, ha-card.tsd .tinfo, ha-card.tsd .lcorner { translate: 0 var(--dfc-scroll, 0px); } /* #122: fixed over a scrolling tall plan */
 .tside { position:absolute; left: var(--dfc-tools-left, -48px); top: var(--dfc-tools-top, 120px); width:36px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:4px; padding:3px 0; border-radius:18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow:0 2px 10px rgba(0,0,0,.2); z-index:6; max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow-y:auto; scrollbar-width:none; }
 .tside::-webkit-scrollbar { display:none; }
 .tside .bar { display: contents; }
@@ -1351,6 +1352,7 @@ ha-card.dock-right { flex-direction: row; }
 .hdr { position:absolute; left:14px; top:12px; z-index:4; font-size:15px; font-weight:500; padding:4px 10px; border-radius:10px; background: color-mix(in srgb, var(--card-background-color, #fff) 75%, transparent); backdrop-filter: blur(6px); }
 .wrap { position:relative; flex:1; display:flex; align-items:flex-start; justify-content:center; padding: 8px 8px 0; min-height:120px; }
 .fr { position:relative; width: min(100%, calc(var(--dfc-fit-h, calc(100vh - var(--dfc-chrome, 170px))) * var(--fratio))); aspect-ratio: var(--fratio); }
+:host([fw]) .fr { width: 100%; } /* #122: drawn at the full width (its container scrolls) */
 .fr.crop { overflow:hidden; border-radius: 4px; }
 .box { position:relative; width: 100%; aspect-ratio: var(--ratio); }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
@@ -12580,6 +12582,12 @@ function dfmRoomIcon(name) {
 
 /** #23: bring `to` in line with `from` in place: same nodes stay (and keep what is inside a plan slot), so nothing
  *  jumps, reloads or loses its scroll; only changed texts and attributes are touched. */
+/** A room's place on its plan (x / y in %), from the plan's sensor. */
+function f0(m, plan, roomId) {
+  const f = m.floors.find((q) => q.id === plan);
+  return (f && f.a && f.a.areas && f.a.areas[roomId]) || null;
+}
+
 function dfmMorph(to, from) {
   const a = [...to.childNodes];
   const b = [...from.childNodes];
@@ -13087,6 +13095,18 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (dbg && this._tapAt) this._timeTap(land ? `landscape ${s.page}` : `portrait ${s.page}`);
   }
 
+  /** #122: is this plan clearly taller than the landscape space beside the navigation and the rail? */
+  _tall(planId) {
+    const f = this._m && this._m.floors.find((q) => q.id === planId);
+    const a = f && f.a;
+    if (!a || !a.image_width || !a.image_height) return false;
+    const fr = a.frame && a.frame.x2 > a.frame.x1 && a.frame.y2 > a.frame.y1 ? a.frame : { x1: 0, y1: 0, x2: 100, y2: 100 };
+    const ratio = (a.image_width * (fr.x2 - fr.x1)) / (a.image_height * (fr.y2 - fr.y1)); // width / height as drawn
+    const W = window.innerWidth - 48 - 92 - 12;
+    const H = window.innerHeight - (this._top || 0) - 12;
+    return W > 0 && H > 0 && W / ratio > H * 1.3;
+  }
+
   /** #110: timing as felt, from the finger (tap, swipe, turn): when the page is on the screen and when its plan is
    *  ready (its picture loaded and drawn). */
   _timeTap(what) {
@@ -13117,7 +13137,8 @@ class DeviceFloorplanMobile extends HTMLElement {
       const card = (el.shadowRoot && el.shadowRoot.querySelector("ha-card")) || el;
       const n = nav.getBoundingClientRect();
       const r = card.getBoundingClientRect();
-      const top = Math.round(n.bottom - r.top + 10);
+      const st = el.parentElement && el.parentElement.classList.contains("tall") ? el.parentElement.scrollTop : 0;
+      const top = Math.round(n.bottom - r.top + 10 - st); // #122: on a scrolled tall plan, from its top
       const left = Math.round(n.left - r.left);
       if (el.style.getPropertyValue("--dfc-tools-top") !== `${top}px`) el.style.setProperty("--dfc-tools-top", `${top}px`);
       if (el.style.getPropertyValue("--dfc-tools-left") !== `${left}px`) el.style.setProperty("--dfc-tools-left", `${left}px`); // under the floors, exactly
@@ -13212,7 +13233,22 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     el._dfmMode = mode;
     el._dfmFloor = plan;
-    el._fitHost = land;
+    // #122: a plan much taller than the landscape space is drawn at the full width and scrolls up / down.
+    const tall = land && this._tall(plan);
+    el._fitHost = land && !tall;
+    el.style.height = tall ? "auto" : "";
+    el.toggleAttribute("fw", tall);
+    slot.classList.toggle("tall", tall);
+    if (tall && !slot._dfmOnScroll) {
+      // #122: what sits on the plan's frame (Replay button, the side tools and their popover) stays in place while
+      // the tall plan scrolls under it.
+      slot._dfmOnScroll = () => {
+        el.style.setProperty("--dfc-scroll", `${slot.scrollTop}px`);
+        this._toolsTop();
+      };
+      slot.addEventListener("scroll", slot._dfmOnScroll, { passive: true });
+    }
+    if (slot.parentElement) slot.parentElement.classList.toggle("tall", tall);
     const fresh = el.parentNode !== slot;
     if (fresh) slot.appendChild(el);
     if (this._hass) this._feed(el, fresh); // #103: a plan just shown is up to date at once
@@ -13223,6 +13259,12 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (land && el.dfOutlineRoom && this._m) {
       const sel = this._landSel(this._m); // #107: the chosen room outlined
       el.dfOutlineRoom(sel ? sel.id : null, sel ? this._vals(sel) : "");
+      // #122: on a tall plan, a room arrived at (a turned room page) is scrolled into view once.
+      if (tall && sel && slot._dfmScrolled !== sel.id) {
+        slot._dfmScrolled = sel.id;
+        const ar = f0(this._m, plan, sel.id);
+        if (ar) requestAnimationFrame(() => requestAnimationFrame(() => (slot.scrollTop = Math.max(0, (ar.y / 100) * slot.scrollHeight - slot.clientHeight / 2))));
+      }
     }
   }
 
@@ -14724,6 +14766,12 @@ button.sw.on i { left: 21px; }
 .left.full { flex: 1 1 100%; }
 .lplan { position:absolute; inset: 6px 0 6px 6px; }
 .lplan device-floorplan-card { display:block; height: 100%; }
+/* #122: a tall plan in landscape: full width, scrolls up / down (left / right still changes floor); a soft fade at the
+   edges shows there is more. */
+.left.tall { touch-action: pan-y; }
+.lplan.tall { left: -48px; padding-left: 48px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%); }
+.lplan.tall::-webkit-scrollbar { display: none; } /* the box reaches into the navigation strip (under it), so the side tools that hang there are not clipped */
+.lplan.tall device-floorplan-card { height: auto; }
 .lmenu { flex:none; width: 34px; height: 34px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color: var(--dfm-fg); }
 .row, .srow, .one { flex-shrink: 0; }
 .nm { flex-wrap: nowrap; min-width: 0; }

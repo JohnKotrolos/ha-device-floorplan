@@ -753,6 +753,7 @@ ha-card { position:relative; overflow:hidden; height:100%; display:flex; flex-di
 /* #111: "tools: side" (the mobile card in landscape): the overlay's controls as one icon column in the strip left of
    the plan (under the floors), its legends in a popover; nothing under the plan. */
 ha-card.tsd { overflow: visible; }
+ha-card.tsd .tside, ha-card.tsd .tinfo, ha-card.tsd .lcorner { translate: 0 var(--dfc-scroll, 0px); } /* #122: fixed over a scrolling tall plan */
 .tside { position:absolute; left: var(--dfc-tools-left, -48px); top: var(--dfc-tools-top, 120px); width:36px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:4px; padding:3px 0; border-radius:18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow:0 2px 10px rgba(0,0,0,.2); z-index:6; max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow-y:auto; scrollbar-width:none; }
 .tside::-webkit-scrollbar { display:none; }
 .tside .bar { display: contents; }
@@ -771,6 +772,7 @@ ha-card.dock-right { flex-direction: row; }
 .hdr { position:absolute; left:14px; top:12px; z-index:4; font-size:15px; font-weight:500; padding:4px 10px; border-radius:10px; background: color-mix(in srgb, var(--card-background-color, #fff) 75%, transparent); backdrop-filter: blur(6px); }
 .wrap { position:relative; flex:1; display:flex; align-items:flex-start; justify-content:center; padding: 8px 8px 0; min-height:120px; }
 .fr { position:relative; width: min(100%, calc(var(--dfc-fit-h, calc(100vh - var(--dfc-chrome, 170px))) * var(--fratio))); aspect-ratio: var(--fratio); }
+:host([fw]) .fr { width: 100%; } /* #122: drawn at the full width (its container scrolls) */
 .fr.crop { overflow:hidden; border-radius: 4px; }
 .box { position:relative; width: 100%; aspect-ratio: var(--ratio); }
 .night, .ntint, .nglow, .nglow2 { position:absolute; inset:0; pointer-events:none; }
