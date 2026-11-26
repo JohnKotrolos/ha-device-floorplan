@@ -11,7 +11,7 @@
   <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/hero.webp" width="100%" alt="Device Floorplan with Home Replay: Live, Cleaning, Comfort, Energy and Network on one floorplan, replayed at Yesterday 20:30">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/overview.webp" width="100%" alt="All overlays: Live, Comfort, Energy, Home Replay, Security, Network, Device Health and Cleaning">
+  <img src="https://raw.githubusercontent.com/JohnKotrolos/ha-device-floorplan/main/docs/public/readme/overview.webp" width="100%" alt="Device Floorplan 0.14.0: all overlays (Live, Comfort, Energy, Home Replay, Security, Network, Device Health, Cleaning), the new mobile dashboard, Christmas lights and trees, and the floorplan for AI assistants and automations">
 </p>
 
 Put your Home Assistant devices on **your own floorplan** and see your home alive:
