@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.14.0 · Ho-Ho-Home in Your Pocket (Rudolph Found Every Room)
+
+Santa came early this year: over a hundred gifts since 0.13.0. The big one is a dashboard made for your phone. There are Christmas lights and trees for the plan, and a floorplan that AI assistants and automations can finally read.
+
+### 📱 The mobile card and dashboard (new)
+
+- **A dashboard for your phone**, built only from your floorplans: Floorplan Editor → **⋮ → Create a new mobile dashboard…**. Everything is filled in (name *Mobile*, its own icon `dfp:mobile`, the Floorplan card it takes its settings from). Press **Create**, and in the Home Assistant app choose it as the dashboard the phone opens with. **⋮ → Create a new dashboard…** does the same for a desktop dashboard with all your floors.
+- **Portrait: what is happening at home now.**
+  - A greeting, who's home, and the first thing that needs a look.
+  - A climate card and the floor's plan.
+  - A bar on top **only for what needs a look** (offline, low battery, warnings). Each tile opens exactly those devices.
+  - A bar under the plan for the floor's state: lights, openings, shutters, alarm.
+  - Rooms by activity, Home control, appliances and cameras. Cameras open Home Assistant's own window.
+- **Room pages**: the room cut out of the plan and every device below it, grouped by what it is, with switches and sliders. Swipe for the next room.
+- **Landscape: the house explorer.**
+  - The whole plan, edge to edge, beside the phone's notch.
+  - The floors and **⌂ Home** (all levels stacked in 3D) on the left.
+  - The overlays on the right.
+  - Each overlay's tools under the floors: scenes, network filters (Zigbee / Wi-Fi / Bluetooth / Matter), cleaning actions, and ⓘ for the legend.
+  - Tap a room to choose it; turn the phone back to open its page.
+  - A tall, narrow plan scrolls.
+- **Home Replay on the phone**: one round button. Replay stays on as you move between overlays; press it again for Now.
+- **Edit dashboard** opens its settings: Settings from, Layout, Room order, Home sections, Household, Hide Home Assistant's top bar.
+- Also as a card on its own: **Add card → Device Floorplan (mobile)**.
+- **Appliances**: give a device its type (washer, dryer, dishwasher, oven, fridge, coffee, air purifier, dehumidifier, printer…) in the Floorplan Editor and it shows as one: running, program, time left, done.
+
+### 🎄 Christmas lights and trees (new)
+
+- **Christmas lights**: a light shape for any light or plug. **Line** (railings, windows), **Rings** or **Spiral** (trees, wreaths).
+  - Multicolour, warm to cool white, or the light's own colour.
+  - Steady / Twinkle / Chase / Flash at three speeds, and still with "reduce motion".
+  - Bulbs stay inside their room, sized in cm.
+  - Drawn on the card, in the Editor preview and in Home Replay.
+- **Christmas trees**: 8 new pictures. **🎄 Add lights on the tree** wraps a spiral of bulbs around one.
+- **Sparkle** and **Spin** highlights for pictures (a ceiling fan that really turns). Animations no longer restart when the plan redraws.
+
+### 🦌 Your floorplan for AI assistants and automations (new)
+
+- **Actions** `device_floorplan.get_layout`, `locate`, `nearest` and `between`. They know rooms, walls, doors and distances: "which lights are near the sofa?", "where is the robot?", "what is between the kitchen and the hallway?".
+- **AI assistants** (Assist, local or cloud LLMs) get the same answers as tools. You switch this on and off in the Floorplan Editor (**⋮ → AI assistants**), which also exports a plain description of your home.
+- Mounting height per spot, left / right at openings, bonds as one thing.
+
+### 🧭 Floorplan Editor
+
+- **Turn picture left / right (90°)** in every plan's ⋮ menu. Everything placed on the plan turns with it.
+- **Zoom** in the Align, Frame and robot-map windows (buttons, Ctrl / ⌘ + wheel, pinch). Arrow keys move a floor while aligning.
+- **Phantoms** get pictures and touch areas.
+- **Press a button** as a tap action (asks first, by default).
+
+### 🌍 In your language
+
+- The card speaks **Greek** and **German** when that is your Home Assistant language, with English for everything else. The integration's own texts are translated too.
+
+### 🛠️ Smaller gifts and fixes
+
+- Hidden entities never lead a device. A thermometer leads with its temperature.
+- One room-climate rule everywhere: no chip or diagnostic temperatures, no impossible zeros.
+- **Energy** has no Replay button (it is built from statistics, not states). Scenes are hidden while you replay.
+- Themes with a bottom navigation bar (e.g. Material You) no longer cover the Overlay Bar.
+- Bond counts, marker search, the room of a device standing on a wall, and a picture counted as "on" because of a setting entity are all fixed.
+
+### ⚠️ Changes you may notice
+
+- **Hidden entities**: a device whose main entity is hidden in Home Assistant now leads with a visible one. Pick its main entity in the Floorplan Editor if you want the hidden one.
+- **Energy**: no Replay button on the Energy overlay.
+
 ## 0.13.0 · You asked, we drew it
 
 ### 🖼️ Device pictures (new)
