@@ -708,11 +708,51 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #92-2: back to portrait = the portrait page as it was (its scroll place), never a leftover landscape layout.
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
+      this._bleed();
       this._scaleAll();
       this._toolsTop();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
     if (dbg && this._tapAt) this._timeTap(land ? `landscape ${s.page}` : `portrait ${s.page}`);
+  }
+
+  /** #123: landscape end to end. Home Assistant keeps its page out of the phone's notch zones (plain strips at
+   *  both sides); the landscape page reaches back to the screen's edges, and only the controls keep clear: of the
+   *  notch on the side where it is, of the rounded corners (8 px) on the other. */
+  _bleed() {
+    const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
+    if (!host) return;
+    const props = ["--dfm-bl", "--dfm-br", "--dfm-il", "--dfm-ir"];
+    if (!this._wasLand) {
+      for (const p of props) host.style.removeProperty(p);
+      return;
+    }
+    for (const p of props) host.style.removeProperty(p);
+    const r = this.getBoundingClientRect();
+    const gl = Math.round(r.left);
+    const gr = Math.round(window.innerWidth - r.right);
+    if (gl < 0 || gr < 0 || gl > 80 || gr > 80) return; // a desktop beside a sidebar, or something else: as it is
+    const ins = this._insets();
+    const so = window.screen && window.screen.orientation;
+    const ang = so && typeof so.angle === "number" ? so.angle : typeof window.orientation === "number" ? (window.orientation + 360) % 360 : null;
+    // The notch is on the left when the phone is turned to the left (90°), on the right at 270°; unknown: both.
+    const il = ang === 90 || ang === null ? ins.l : Math.min(ins.l, 8);
+    const ir = ang === 270 || ang === null ? ins.r : Math.min(ins.r, 8);
+    host.style.setProperty("--dfm-bl", `${gl}px`);
+    host.style.setProperty("--dfm-br", `${gr}px`);
+    host.style.setProperty("--dfm-il", `${Math.max(0, il)}px`);
+    host.style.setProperty("--dfm-ir", `${Math.max(0, ir)}px`);
+  }
+
+  /** The phone's safe-area insets (notch / rounded corners), measured. */
+  _insets() {
+    const p = document.createElement("div");
+    p.style.cssText = "position:fixed;visibility:hidden;padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)";
+    document.body.appendChild(p);
+    const cs = getComputedStyle(p);
+    const out = { l: parseFloat(cs.paddingLeft) || 0, r: parseFloat(cs.paddingRight) || 0 };
+    p.remove();
+    return out;
   }
 
   /** #122: is this plan clearly taller than the landscape space beside the navigation and the rail? */
@@ -722,7 +762,8 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (!a || !a.image_width || !a.image_height) return false;
     const fr = a.frame && a.frame.x2 > a.frame.x1 && a.frame.y2 > a.frame.y1 ? a.frame : { x1: 0, y1: 0, x2: 100, y2: 100 };
     const ratio = (a.image_width * (fr.x2 - fr.x1)) / (a.image_height * (fr.y2 - fr.y1)); // width / height as drawn
-    const W = window.innerWidth - 48 - 92 - 12;
+    const left = this.shadowRoot && this.shadowRoot.querySelector(".land .left");
+    const W = left && left.clientWidth ? left.clientWidth - 6 : window.innerWidth - 48 - 92 - 12;
     const H = window.innerHeight - (this._top || 0) - 12;
     return W > 0 && H > 0 && W / ratio > H * 1.3;
   }

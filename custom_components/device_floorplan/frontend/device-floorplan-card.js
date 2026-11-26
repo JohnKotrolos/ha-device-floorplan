@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.28";
+const CARD_VERSION = "0.13.9.29";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -13088,11 +13088,51 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #92-2: back to portrait = the portrait page as it was (its scroll place), never a leftover landscape layout.
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
+      this._bleed();
       this._scaleAll();
       this._toolsTop();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
     if (dbg && this._tapAt) this._timeTap(land ? `landscape ${s.page}` : `portrait ${s.page}`);
+  }
+
+  /** #123: landscape end to end. Home Assistant keeps its page out of the phone's notch zones (plain strips at
+   *  both sides); the landscape page reaches back to the screen's edges, and only the controls keep clear: of the
+   *  notch on the side where it is, of the rounded corners (8 px) on the other. */
+  _bleed() {
+    const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
+    if (!host) return;
+    const props = ["--dfm-bl", "--dfm-br", "--dfm-il", "--dfm-ir"];
+    if (!this._wasLand) {
+      for (const p of props) host.style.removeProperty(p);
+      return;
+    }
+    for (const p of props) host.style.removeProperty(p);
+    const r = this.getBoundingClientRect();
+    const gl = Math.round(r.left);
+    const gr = Math.round(window.innerWidth - r.right);
+    if (gl < 0 || gr < 0 || gl > 80 || gr > 80) return; // a desktop beside a sidebar, or something else: as it is
+    const ins = this._insets();
+    const so = window.screen && window.screen.orientation;
+    const ang = so && typeof so.angle === "number" ? so.angle : typeof window.orientation === "number" ? (window.orientation + 360) % 360 : null;
+    // The notch is on the left when the phone is turned to the left (90°), on the right at 270°; unknown: both.
+    const il = ang === 90 || ang === null ? ins.l : Math.min(ins.l, 8);
+    const ir = ang === 270 || ang === null ? ins.r : Math.min(ins.r, 8);
+    host.style.setProperty("--dfm-bl", `${gl}px`);
+    host.style.setProperty("--dfm-br", `${gr}px`);
+    host.style.setProperty("--dfm-il", `${Math.max(0, il)}px`);
+    host.style.setProperty("--dfm-ir", `${Math.max(0, ir)}px`);
+  }
+
+  /** The phone's safe-area insets (notch / rounded corners), measured. */
+  _insets() {
+    const p = document.createElement("div");
+    p.style.cssText = "position:fixed;visibility:hidden;padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)";
+    document.body.appendChild(p);
+    const cs = getComputedStyle(p);
+    const out = { l: parseFloat(cs.paddingLeft) || 0, r: parseFloat(cs.paddingRight) || 0 };
+    p.remove();
+    return out;
   }
 
   /** #122: is this plan clearly taller than the landscape space beside the navigation and the rail? */
@@ -13102,7 +13142,8 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (!a || !a.image_width || !a.image_height) return false;
     const fr = a.frame && a.frame.x2 > a.frame.x1 && a.frame.y2 > a.frame.y1 ? a.frame : { x1: 0, y1: 0, x2: 100, y2: 100 };
     const ratio = (a.image_width * (fr.x2 - fr.x1)) / (a.image_height * (fr.y2 - fr.y1)); // width / height as drawn
-    const W = window.innerWidth - 48 - 92 - 12;
+    const left = this.shadowRoot && this.shadowRoot.querySelector(".land .left");
+    const W = left && left.clientWidth ? left.clientWidth - 6 : window.innerWidth - 48 - 92 - 12;
     const H = window.innerHeight - (this._top || 0) - 12;
     return W > 0 && H > 0 && W / ratio > H * 1.3;
   }
@@ -14566,15 +14607,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
 /* #93: the landscape overlay rail: its own element, no background, labels whole */
-.land { padding-right: var(--dfm-rail-w, 92px); padding-left: 48px; box-sizing: border-box; }
+.land { padding-right: calc(var(--dfm-rail-w, 92px) + var(--dfm-ir, 0px)); padding-left: calc(48px + var(--dfm-il, 0px)); box-sizing: border-box; margin-left: calc(-1 * var(--dfm-bl, 0px)); margin-right: calc(-1 * var(--dfm-br, 0px)); } /* #123: to the screen's edges, controls clear of the notch */
 /* #108 / #109: navigation in the Floorplan card's floor-rail look (same sizes / colours), top left, beside the plan. */
-.lnav { position: absolute; top: 6px; left: 6px; width: 36px; display:flex; flex-direction:column; align-items:center; gap: 8px; z-index: 4; }
+.lnav { position: absolute; top: 6px; left: calc(6px + var(--dfm-il, 0px)); width: 36px; display:flex; flex-direction:column; align-items:center; gap: 8px; z-index: 4; }
 .lnm { width: 36px; height: 32px; border-radius: 8px; display:flex; align-items:center; justify-content:center; color: var(--dfm-acc); background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); --mdc-icon-size: 22px; }
 .lcap { width: 36px; box-sizing: border-box; display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 3px 0; border-radius: 18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.2); }
 .lcap .fl { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--divider-color, rgba(0,0,0,.12)); background: var(--card-background-color, #fff); color: var(--primary-text-color); font-size: 13px; font-weight: 600; display:flex; align-items:center; justify-content:center; padding: 0; --mdc-icon-size: 18px; text-align: center; }
 .lcap .fl.on { background: var(--dfm-acc); border-color: var(--dfm-acc); color: #fff; }
 .lcap .div { width: 22px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.12)); margin: 1px 0; }
-.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.lrail { position: absolute; top: 0; right: var(--dfm-ir, 0px); bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
 .lrail::-webkit-scrollbar { display: none; }
 .lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
 .lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }

@@ -53,15 +53,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
 /* #93: the landscape overlay rail: its own element, no background, labels whole */
-.land { padding-right: var(--dfm-rail-w, 92px); padding-left: 48px; box-sizing: border-box; }
+.land { padding-right: calc(var(--dfm-rail-w, 92px) + var(--dfm-ir, 0px)); padding-left: calc(48px + var(--dfm-il, 0px)); box-sizing: border-box; margin-left: calc(-1 * var(--dfm-bl, 0px)); margin-right: calc(-1 * var(--dfm-br, 0px)); } /* #123: to the screen's edges, controls clear of the notch */
 /* #108 / #109: navigation in the Floorplan card's floor-rail look (same sizes / colours), top left, beside the plan. */
-.lnav { position: absolute; top: 6px; left: 6px; width: 36px; display:flex; flex-direction:column; align-items:center; gap: 8px; z-index: 4; }
+.lnav { position: absolute; top: 6px; left: calc(6px + var(--dfm-il, 0px)); width: 36px; display:flex; flex-direction:column; align-items:center; gap: 8px; z-index: 4; }
 .lnm { width: 36px; height: 32px; border-radius: 8px; display:flex; align-items:center; justify-content:center; color: var(--dfm-acc); background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); --mdc-icon-size: 22px; }
 .lcap { width: 36px; box-sizing: border-box; display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 3px 0; border-radius: 18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.2); }
 .lcap .fl { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--divider-color, rgba(0,0,0,.12)); background: var(--card-background-color, #fff); color: var(--primary-text-color); font-size: 13px; font-weight: 600; display:flex; align-items:center; justify-content:center; padding: 0; --mdc-icon-size: 18px; text-align: center; }
 .lcap .fl.on { background: var(--dfm-acc); border-color: var(--dfm-acc); color: #fff; }
 .lcap .div { width: 22px; border-top: 1px solid var(--divider-color, rgba(0,0,0,.12)); margin: 1px 0; }
-.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.lrail { position: absolute; top: 0; right: var(--dfm-ir, 0px); bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
 .lrail::-webkit-scrollbar { display: none; }
 .lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
 .lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
