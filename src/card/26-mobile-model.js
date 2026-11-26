@@ -814,7 +814,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, embedded: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.

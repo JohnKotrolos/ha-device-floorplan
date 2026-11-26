@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.25";
+const CARD_VERSION = "0.13.9.26";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -7431,7 +7431,7 @@ ${reset}
   /** 0.13.2: "New in <version>" pill for admins (card setting release_tips: false hides it), until closed (✕). */
   _tipHtml() {
     const h = this._hass;
-    if (!RELEASE_TIP || this.preview || this._config.release_tips === false || !h || !h.user || !h.user.is_admin) return "";
+    if (!RELEASE_TIP || this.preview || this._config.release_tips === false || this._config.embedded || !h || !h.user || !h.user.is_admin) return "";
     if (window.__dfcTipSeen === undefined) {
       window.__dfcTipSeen = null; // asked once per page
       Promise.resolve(h.callWS({ type: "frontend/get_user_data", key: TIP_KEY }))
@@ -7453,6 +7453,8 @@ ${reset}
   /** 0.11: a card that lists its own overlays doesn't get new ones by itself: admins see a tip, once per overlay. */
   _newOvHtml() {
     const raw = this._raw || {};
+    // #120: a plan inside another card (the mobile card) has no settings of its own to add to or dismiss in.
+    if (this._config.embedded) return "";
     if (!this._hass || !this._hass.user || !this._hass.user.is_admin || !Array.isArray(raw.overlays) || !raw.overlays.length) return "";
     const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
@@ -13190,7 +13192,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, embedded: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.

@@ -526,7 +526,7 @@ ${reset}
   /** 0.13.2: "New in <version>" pill for admins (card setting release_tips: false hides it), until closed (✕). */
   _tipHtml() {
     const h = this._hass;
-    if (!RELEASE_TIP || this.preview || this._config.release_tips === false || !h || !h.user || !h.user.is_admin) return "";
+    if (!RELEASE_TIP || this.preview || this._config.release_tips === false || this._config.embedded || !h || !h.user || !h.user.is_admin) return "";
     if (window.__dfcTipSeen === undefined) {
       window.__dfcTipSeen = null; // asked once per page
       Promise.resolve(h.callWS({ type: "frontend/get_user_data", key: TIP_KEY }))
@@ -548,6 +548,8 @@ ${reset}
   /** 0.11: a card that lists its own overlays doesn't get new ones by itself: admins see a tip, once per overlay. */
   _newOvHtml() {
     const raw = this._raw || {};
+    // #120: a plan inside another card (the mobile card) has no settings of its own to add to or dismiss in.
+    if (this._config.embedded) return "";
     if (!this._hass || !this._hass.user || !this._hass.user.is_admin || !Array.isArray(raw.overlays) || !raw.overlays.length) return "";
     const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
