@@ -51,7 +51,7 @@ Santa came early this year: over a hundred gifts since 0.13.0. The big one is a 
 
 ### 🌍 In your language
 
-- The card speaks **Greek** and **German** when that is your Home Assistant language, with English for everything else. The integration's own texts are translated too.
+- **The dashboard cards** (the Floorplan card and the mobile card) speak **Greek** and **German** when that is your Home Assistant language, English otherwise; so do the integration's own texts in Home Assistant (setup, options). The Floorplan Editor is still in English: it comes next.
 
 ### 🛠️ Smaller gifts and fixes
 
