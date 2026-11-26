@@ -113,11 +113,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         }
         this._render();
         break;
+      case "pturn":
       case "alturn": {
         // 0.13.2 (#21): the picture is turned here and saved as this floor's picture; Home Assistant turns
-        // everything placed on it the same way, so nothing moves on the floor.
-        const d = s.dialog;
-        const p = d && this.plans.find((x) => x.id === d.plan);
+        // everything placed on it the same way, so nothing moves on the floor. #119: also from the plan's ⋮ menu.
+        const d = act === "alturn" ? s.dialog : null;
+        const p = this.plans.find((x) => x.id === (d ? d.plan : el.dataset.id));
+        if (act === "pturn") s.menu = null;
         if (!p) break;
         const q = Number(el.dataset.q) === 3 ? 3 : 1;
         try {
@@ -128,7 +130,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
           if (!res) break;
           if (this.s.planId === p.id) this._openPlan(p.id);
           this._signImage(p);
-          s.dialog = this._alignDialog(p);
+          if (d) s.dialog = this._alignDialog(p);
           this._toast(`${p.name} turned ${q === 1 ? "right" : "left"}; everything on it turned too`, false);
         } catch (err) {
           this._saveError(err);

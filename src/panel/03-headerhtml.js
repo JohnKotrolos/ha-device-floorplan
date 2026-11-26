@@ -55,6 +55,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     return `<div class="menu" style="${style}" role="menu" aria-label="Floor options">
       <button data-act="settings" role="menuitem">${SVG.gear}${isView ? "Plan" : "Floor"} settings</button>
       <button data-act="rename" role="menuitem">${SVG.edit}Rename</button>
+      ${p.image_url ? `<button data-act="pturn" data-id="${esc(p.id)}" data-q="3" role="menuitem">${SVG.undo}Turn picture left (90°)</button><button data-act="pturn" data-id="${esc(p.id)}" data-q="1" role="menuitem">${SVG.redo}Turn picture right (90°)</button>` : ""}
       ${p.image_url ? (this._laterFloor(p) ? `<button data-act="alignplan" role="menuitem">${SVG.glue}Align with ${esc(this._laterFloor(p).name)}…</button>` : `<button data-act="frameplan" role="menuitem">${SVG.glue}${p.kind === "floor" ? "Frame the house…" : "Frame the plan…"}</button>`) : ""}
       ${p.image_url && this._rbVacuums().length ? `<button data-act="robotdlg" role="menuitem">${SVG.robot}Robot vacuum…</button>` : ""}
       <button data-act="replaceimg" role="menuitem">${SVG.image}Replace image</button>

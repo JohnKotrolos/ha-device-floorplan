@@ -358,6 +358,10 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     if (kind === "open") return fi.filter((x) => x.nOpen).sort(by((x) => x.open.length > 0));
     if (kind === "cover") return fi.filter((x) => x.ents.some((e) => domainOf(e) === "cover")).sort(by((x) => x.on));
     if (kind === "alarm") return fi.filter((x) => x.alarm.length).sort(by(() => true));
+    // #117: the top bar's lists, by the same rules as its numbers.
+    if (kind === "offline") return fi.filter((x) => x.offline).sort(by(() => true));
+    if (kind === "low") return fi.filter((x) => x.battery != null && x.battery <= 15).sort((a, b) => a.battery - b.battery);
+    if (kind === "warn") return fi.filter((x) => x.warn.length).sort(by(() => true));
     return [];
   },
 
@@ -400,15 +404,16 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const clim = out || inLine || cl.air != null ? `<button class="clim" data-a="ovs" data-v="comfort">${out ? `<span class="cl"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><b>${cesc(out)}</b><small>${dfT("mob.outside")}</small></span>` : ""}${inLine ? `<span class="cl"><ha-icon icon="mdi:home-thermometer-outline"></ha-icon><b>${cesc(inLine)}</b>${cfName ? `<small>${cesc(cfName)}</small>` : ""}</span>` : ""}${cl.air != null ? `<span class="cl"><ha-icon icon="mdi:air-filter"></ha-icon>${this._airDot(cl.air)}<b>${cesc(this._airTxt(cl.air))}</b></span>` : ""}</button>` : "";
     // #64 / #74: what is going on on the shown floor: icon + number, zero hidden.
     const fi = m.items.filter((x) => x.floor === f.id);
-    const lightsOn = this._members("lights", fi).filter((x) => x.on).length;
+    const lightsAll = this._members("lights", fi);
+    const lightsOn = lightsAll.filter((x) => x.on).length;
     const off = fi.filter((x) => x.offline).length;
     const low = fi.filter((x) => x.battery != null && x.battery <= 15).length;
     const wn = fi.filter((x) => x.warn.length).length;
+    // #116: the top bar is only what needs a look (gone when nothing does); #117: each opens exactly what it counts.
     const top = this._segBar([
-      lightsOn && { a: "ovs", v: "lights", icon: "mdi:lightbulb-group", txt: lightsOn, label: dfT("mob.lights_on", { n: lightsOn }), tone: "lt" },
-      off && { a: "ovs", v: "network", icon: "mdi:lan-disconnect", txt: off, label: dfT("mob.n_offline", { n: off }), tone: "warn" },
-      low && { a: "ovs", v: "health", icon: "mdi:battery-alert-variant-outline", txt: low, label: dfT("mob.n_low", { n: low }), tone: "warn" },
-      wn && { a: "ovs", v: "health", icon: "mdi:alert-outline", txt: wn, label: dfT("mob.n_warn", { n: wn }), tone: "warn" },
+      off && { a: "items", v: "offline", icon: "mdi:lan-disconnect", txt: off, label: dfT("mob.n_offline", { n: off }), tone: "warn" },
+      low && { a: "items", v: "low", icon: "mdi:battery-alert-variant-outline", txt: low, label: dfT("mob.n_low", { n: low }), tone: "warn" },
+      wn && { a: "items", v: "warn", icon: "mdi:alert-outline", txt: wn, label: dfT("mob.n_warn", { n: wn }), tone: "warn" },
     ]);
     // #64: under the plan, like the Wallpanel's row: this floor's openings and shutters, the house's alarm.
     const nAl = fi.reduce((t, x) => t + x.alarm.length, 0);
@@ -420,6 +425,8 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const ast = acp.length ? this._hass.states[acp[0]] : null;
     const aTone = !ast ? "" : ast.state === "triggered" ? "att" : ["arming", "pending"].includes(ast.state) ? "warn" : ast.state.startsWith("armed") ? "act" : "";
     const bottom = this._segBar([
+      // #116: lights belong to the floor's state, under its plan (first: the one used most).
+      lightsAll.length && { a: "ovs", v: "lights", icon: lightsOn ? "mdi:lightbulb-group" : "mdi:lightbulb-group-off-outline", txt: lightsOn || dfT("scene.all_off"), label: dfT("mob.lights_on", { n: lightsOn }), tone: lightsOn ? "lt" : "" },
       nAl && { a: "items", v: "alarm", icon: "mdi:alarm-light", txt: nAl, label: dfT("mob.alert"), tone: "att" },
       opDev.length && { a: "items", v: "open", icon: nOp ? "mdi:door-open" : "mdi:door-closed", txt: nOp ? dfT("mob.open_n", { n: nOp }) : dfT("mob.all_closed"), label: dfT("mob.openings"), tone: nOp ? "att" : "" },
       covs.length && { a: "items", v: "cover", icon: nCv ? "mdi:roller-shade" : "mdi:roller-shade-closed", txt: nCv ? dfT("mob.open_n", { n: nCv }) : dfT("mob.all_closed"), label: dfT("mob.shutters"), tone: nCv ? "act" : "" },

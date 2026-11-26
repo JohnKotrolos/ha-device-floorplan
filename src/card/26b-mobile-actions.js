@@ -200,7 +200,8 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       return this._go({ page: "home", floor: v, room: null });
     }
     if (a === "items") {
-      this._sheet = { step: "items", floor: s.floor, kind: v, title: { open: dfT("mob.openings"), cover: dfT("mob.shutters"), alarm: dfT("mob.alert") }[v] || "" };
+      const n = this._m ? this._floorItems(this._m, s.floor, v).length : 0;
+      this._sheet = { step: "items", floor: s.floor, kind: v, title: { open: dfT("mob.openings"), cover: dfT("mob.shutters"), alarm: dfT("mob.alert"), offline: dfT("mob.n_offline", { n }), low: dfT("mob.n_low", { n }), warn: dfT("mob.n_warn", { n }) }[v] || "" };
       this._freeze = true;
       this._frozen = null;
       return this._kick(true);

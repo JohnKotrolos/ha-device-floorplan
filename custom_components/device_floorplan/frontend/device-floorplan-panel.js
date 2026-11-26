@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.24";
+const VERSION = "0.13.9.25";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -1972,6 +1972,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     return `<div class="menu" style="${style}" role="menu" aria-label="Floor options">
       <button data-act="settings" role="menuitem">${SVG.gear}${isView ? "Plan" : "Floor"} settings</button>
       <button data-act="rename" role="menuitem">${SVG.edit}Rename</button>
+      ${p.image_url ? `<button data-act="pturn" data-id="${esc(p.id)}" data-q="3" role="menuitem">${SVG.undo}Turn picture left (90°)</button><button data-act="pturn" data-id="${esc(p.id)}" data-q="1" role="menuitem">${SVG.redo}Turn picture right (90°)</button>` : ""}
       ${p.image_url ? (this._laterFloor(p) ? `<button data-act="alignplan" role="menuitem">${SVG.glue}Align with ${esc(this._laterFloor(p).name)}…</button>` : `<button data-act="frameplan" role="menuitem">${SVG.glue}${p.kind === "floor" ? "Frame the house…" : "Frame the plan…"}</button>`) : ""}
       ${p.image_url && this._rbVacuums().length ? `<button data-act="robotdlg" role="menuitem">${SVG.robot}Robot vacuum…</button>` : ""}
       <button data-act="replaceimg" role="menuitem">${SVG.image}Replace image</button>
@@ -5556,11 +5557,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         }
         this._render();
         break;
+      case "pturn":
       case "alturn": {
         // 0.13.2 (#21): the picture is turned here and saved as this floor's picture; Home Assistant turns
-        // everything placed on it the same way, so nothing moves on the floor.
-        const d = s.dialog;
-        const p = d && this.plans.find((x) => x.id === d.plan);
+        // everything placed on it the same way, so nothing moves on the floor. #119: also from the plan's ⋮ menu.
+        const d = act === "alturn" ? s.dialog : null;
+        const p = this.plans.find((x) => x.id === (d ? d.plan : el.dataset.id));
+        if (act === "pturn") s.menu = null;
         if (!p) break;
         const q = Number(el.dataset.q) === 3 ? 3 : 1;
         try {
@@ -5571,7 +5574,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
           if (!res) break;
           if (this.s.planId === p.id) this._openPlan(p.id);
           this._signImage(p);
-          s.dialog = this._alignDialog(p);
+          if (d) s.dialog = this._alignDialog(p);
           this._toast(`${p.name} turned ${q === 1 ? "right" : "left"}; everything on it turned too`, false);
         } catch (err) {
           this._saveError(err);
