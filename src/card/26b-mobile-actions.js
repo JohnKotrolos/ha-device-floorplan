@@ -9,13 +9,12 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const inBox = path.some((n) => n && n.classList && n.classList.contains("box"));
     if (!inBox) return; // the card's own buttons and menus
     if (path.some((n) => n && n.classList && n.classList.contains("pop"))) return; // #63: the card's own popup (Press? · Cancel)
-    // #83: landscape is the detailed view: a device acts by its own tap settings (the card does it); an empty
-    // spot of a floor opens its room (#75: not on a floor with one room); in a room it does nothing.
-    if (mode === "land" || mode === "landroom") {
+    // #83: landscape is the detailed view: a device acts by its own tap settings (the card does it); #107: an
+    // empty spot chooses its room (outlined, a chip), again or outside any room clears it.
+    if (mode === "land") {
       if (!lsGet("dfm_hint_l")) lsSet("dfm_hint_l", 1); // #92-6: the landscape hint has done its job
       if (path.find((n) => n && n.dataset && (n.dataset.k || n.dataset.touch))) return;
       this._stop(e);
-      if (mode === "landroom") return;
     } else if (mode === "room") {
       const k = path.find((n) => n && n.dataset && n.dataset.k);
       this._stop(e);
@@ -39,7 +38,14 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       const near = Object.entries(areas).map(([id, ar]) => [id, Math.hypot(ar.x - x, ar.y - y)]).sort((p, q) => p[1] - q[1])[0];
       if (near && near[1] < 10) hit = near[0];
     }
-    if (hit && this._m.rooms.some((q) => q.id === hit && q.floor === f.id)) this._go({ page: "room", floor: f.id, room: hit });
+    const ok = hit && this._m.rooms.some((q) => q.id === hit && q.floor === f.id);
+    if (mode === "land") {
+      const s = this._s;
+      if (ok && !(s.page === "room" && s.room === hit)) Object.assign(s, { page: "room", floor: f.id, room: hit });
+      else Object.assign(s, { page: "home", room: null });
+      return this._kick(true);
+    }
+    if (ok) this._go({ page: "room", floor: f.id, room: hit });
   },
 
   _stop(e) {
@@ -117,8 +123,8 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _back() {
     const s = this._s;
     if (this._land()) {
-      // Landscape: one level out (room → floor → house).
-      if (s.page === "room") Object.assign(s, { page: "rooms", room: null });
+      // Landscape: the chosen room off, then the 3D Home (#107).
+      if (s.page === "room") Object.assign(s, { page: "home", room: null });
       else if (this._m.levels.length > 1) Object.assign(s, { page: "house", room: null });
       this._kick(true);
       return;
@@ -202,8 +208,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       this._freeze = false;
       return this._kick(true);
     }
-    this._fmenu = false;
-    if (a === "floor") return this._go({ page: this._land() ? "rooms" : "home", floor: v, room: null });
+    if (a === "floor") return this._go({ page: "home", floor: v, room: null }); // #107: landscape: that floor's plan
+    if (a === "unsel") {
+      Object.assign(this._s, { page: "home", room: null });
+      return this._kick(true);
+    }
     if (a === "room") {
       const [f, r] = v.split("|");
       this._sheet = null;
@@ -252,15 +261,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       for (const b of this.shadowRoot.querySelectorAll(".lrail .lr")) b.classList.toggle("on", b.dataset.v === v);
       requestAnimationFrame(() => setTimeout(() => {
         const t0 = performance.now();
-        for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
+        for (const el of (this._plans || new Map()).values()) if (el.isConnected && el._dfmMode === "land" && el.dfSetOverlay) el.dfSetOverlay(v);
         this._dbg(`plan → ${v}: ${(performance.now() - t0).toFixed(0)} ms`);
         this._kick(true);
       }, 0));
       return;
-    }
-    if (a === "fmenu") {
-      this._fmenu = !this._fmenu;
-      return this._kick(true);
     }
     if (a === "step") return this._step(Number(v), t.dataset.z);
     if (a === "fstep") return this._step(Number(v), "floor");

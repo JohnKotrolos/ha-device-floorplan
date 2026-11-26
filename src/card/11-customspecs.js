@@ -202,6 +202,20 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
+  /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
+  dfOutlineRoom(id) {
+    if ((this._olRoom || null) === (id || null)) return;
+    this._olRoom = id || null;
+    if (this._config) this._update(true);
+  },
+
+  _olRoomSvg(a) {
+    const ar = this._olRoom && a && a.areas && a.areas[this._olRoom];
+    if (!ar) return "";
+    const shape = Array.isArray(ar.shape) && ar.shape.length >= 3 ? `<polygon points="${ar.shape.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>` : `<ellipse cx="${ar.x}" cy="${ar.y}" rx="7" ry="9"/>`;
+    return `<svg class="olroom" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${shape}</svg>`;
+  },
+
   dfSetOverlay(ov) {
     if (!ov || ov === this._overlay || !this._config || !this._overlays().includes(ov)) return;
     if (this._rp && RP_SKIP.has(ov)) {
@@ -444,7 +458,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._focusHtml(a)}${this._tapLayer(pulseH, airH)}${this._picHtml(a)}${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${pulseH}${this._xmasHtml(a)}${this._picHtml(a, "hl")}${this._touchHtml(a)}${this._tvHtml(a)}${airH}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
-          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
+          ${this._olRoomSvg(a)}${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
         ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);

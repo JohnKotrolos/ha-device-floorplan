@@ -4,37 +4,40 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _landHtml(m) {
     const s = this._s;
     const multi = m.levels.length > 1;
-    // #27 / #83 / #93: landscape is the big plan with its overlays. The House is the 3D building (several levels);
-    // a floor and a room are the Floorplan card; the overlay rail is the mobile card's own (never redrawn by the card).
-    const one = (fid) => m.rooms.filter((q) => q.floor === fid).length < 2;
-    const scope = s.page === "room" && s.room && !one(s.floor) ? "room" : s.page === "house" && multi ? "house" : "floor";
+    // #107: landscape shows floors (and the 3D Home), never one room: the portrait room page is the room view. A
+    // room can be chosen on the plan (outlined, a chip); turning the phone back opens its page.
+    const scope = s.page === "house" && multi ? "house" : "floor";
     const f = m.floors.find((q) => q.id === s.floor);
-    const r = scope === "room" ? m.rooms.find((q) => q.id === s.room && q.floor === f.id) : null;
-    const items = scope === "room" ? r.items : scope === "floor" ? m.items.filter((x) => x.floor === f.id) : m.items;
+    const sel = scope === "floor" ? this._landSel(m) : null;
     const gone = this._hdrHidden ? "gone" : "";
-    const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
-    // #100: the title is the picker (▾ lists the floors, or the floor's rooms), in the top-left chip with ‹ back:
-    // one place to navigate (no second pill at the bottom).
-    const pick = (label, list, act) => (list.length > 1
-      ? `<button class="h1 tpick" data-a="fmenu" aria-expanded="${this._fmenu ? "true" : "false"}"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "up" : "down"}"></ha-icon></button>${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}`
-      : `<div class="h1">${cesc(label)}</div>`);
-    // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
-    const hint = scope !== "house" && !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
     let body = "";
     if (scope === "house") {
       body = `${this._houseHtml(m)}
-        <div class="float hdr chip ${gone}">${menu}<div><div class="h1">${cesc(this._homeName())}</div><div class="sub">${cesc([dfT("mob.n_floors", { n: m.levels.length }), m.people.length ? dfT("mob.n_home", { n: m.people.filter((p) => p.home).length }) : "", this._outside() ? `${this._outside()} ${dfT("mob.outside")}` : ""].filter(Boolean).join(" · "))}</div></div></div>
+        <div class="float hdr chip ${gone}"><div><div class="h1">${cesc(this._homeName())}</div><div class="sub">${cesc([dfT("mob.n_floors", { n: m.levels.length }), m.people.length ? dfT("mob.n_home", { n: m.people.filter((p) => p.home).length }) : "", this._outside() ? `${this._outside()} ${dfT("mob.outside")}` : ""].filter(Boolean).join(" · "))}</div></div></div>
         <div class="float hint ${gone}">${dfT("mob.house_hint")}</div>`;
-    } else if (scope === "floor") {
-      body = `${this._slot(f.id, "live", "", "land", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}<div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>${hint}`;
     } else {
-      const rs = this._sortRooms(m.rooms.filter((q) => q.floor === f.id));
-      body = `${this._slot(f.id, "live", r.id, "landroom", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button>${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}<div class="sub">${cesc(this._vals(r))}</div></div></div>${hint}`;
+      // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
+      const hint = !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
+      const chip = sel ? `<button class="float selchip" data-a="unsel"><b>${cesc(sel.name)}</b>${this._vals(sel) ? `<span>${cesc(this._vals(sel))}</span>` : ""}<ha-icon icon="mdi:close"></ha-icon></button>` : hint;
+      body = `${this._slot(f.id, "live", "", "land", "lplan")}${chip}`;
     }
-    const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
-    return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
+    return `<div class="land">${this._navHtml(m, f, scope)}<div class="left full" ${scope === "floor" ? 'data-swipe="floor"' : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
+  },
+
+  /** #107: the room chosen on the landscape plan (or the room page the phone was turned on). */
+  _landSel(m) {
+    const s = this._s;
+    return s.page === "room" && s.room ? m.rooms.find((q) => q.id === s.room && q.floor === s.floor) || null : null;
+  },
+
+  /** #108: landscape navigation in its own strip on the left, beside the plan (never over it): ☰, the floors
+   *  (highest first, by level), Home (the 3D home). */
+  _navHtml(m, f, scope) {
+    const menu = this._hdrOn ? `<button class="ln menu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
+    const short = (q) => (Number.isFinite(q.level) ? String(q.level) : (q.name || "?").trim().charAt(0).toUpperCase());
+    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="ln fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
+    const home = m.levels.length > 1 ? `<button class="ln home ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
+    return `<nav class="lnav">${menu}<div class="lfl">${fl}${home}</div></nav>`;
   },
 
   /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:

@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.21";
+const CARD_VERSION = "0.13.9.22";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -974,6 +974,8 @@ const PIC_CSS = `
 .pic .ptint { position:absolute; inset:0; mix-blend-mode:multiply; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
 .pic.faint .ptint { opacity:.38; }
 .pic svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.olroom { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:visible; }
+.olroom polygon, .olroom ellipse { fill: color-mix(in srgb, var(--primary-color, #03a9f4) 10%, transparent); stroke: var(--primary-color, #03a9f4); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pic svg polygon { fill:none; stroke: var(--dfc-accent, var(--primary-color, #03a9f4)); stroke-width:1.6; vector-effect: non-scaling-stroke; }
 .pic svg polygon.dot { stroke: var(--secondary-text-color, #8a8f98); stroke-dasharray: 3 3; }
 .pic.busy { animation: dfbusy 1s ease-in-out infinite; }
@@ -6374,6 +6376,20 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
+  /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
+  dfOutlineRoom(id) {
+    if ((this._olRoom || null) === (id || null)) return;
+    this._olRoom = id || null;
+    if (this._config) this._update(true);
+  },
+
+  _olRoomSvg(a) {
+    const ar = this._olRoom && a && a.areas && a.areas[this._olRoom];
+    if (!ar) return "";
+    const shape = Array.isArray(ar.shape) && ar.shape.length >= 3 ? `<polygon points="${ar.shape.map((q) => `${q[0]},${q[1]}`).join(" ")}"/>` : `<ellipse cx="${ar.x}" cy="${ar.y}" rx="7" ry="9"/>`;
+    return `<svg class="olroom" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${shape}</svg>`;
+  },
+
   dfSetOverlay(ov) {
     if (!ov || ov === this._overlay || !this._config || !this._overlays().includes(ov)) return;
     if (this._rp && RP_SKIP.has(ov)) {
@@ -6616,7 +6632,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._focusHtml(a)}${this._tapLayer(pulseH, airH)}${this._picHtml(a)}${this._heat ? `<canvas class="heat"></canvas>` : ""}${this._nightHtml(a)}${pulseH}${this._xmasHtml(a)}${this._picHtml(a, "hl")}${this._touchHtml(a)}${this._tvHtml(a)}${airH}${this._barsHtml(a)}${this._applHtml(a)}
           ${this._roomsHtml(a)}
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
-          ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
+          ${this._olRoomSvg(a)}${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
         ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
@@ -12982,7 +12998,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (!box && this.shadowRoot) {
       box = document.createElement("pre");
       box.id = "dfmdbg";
-      box.style.cssText = "position:fixed;left:6px;bottom:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
+      box.style.cssText = "position:fixed;left:64px;top:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
       this.shadowRoot.appendChild(box);
     }
     if (box) box.textContent = this._dbgL.join("\n");
@@ -13037,7 +13053,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     const b = this._base || {};
     const full = mode === "full";
-    const land = mode === "land" || mode === "landroom";
+    const land = mode === "land";
     const cfg = {
       // #79: its own storage key per kind of plan (layers, replay…): the mobile card never changes the dashboard
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
@@ -13045,7 +13061,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
       replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
-      ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
+      ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
       ...(["mini", "floor", "room"].includes(mode) ? { room_values: true } : {}),
     };
@@ -13064,13 +13080,17 @@ class DeviceFloorplanMobile extends HTMLElement {
     const want = land ? this._lov || ov : ov;
     if (el.dfSetOverlay && el._dfmOv !== want) el.dfSetOverlay(want);
     el._dfmOv = want;
+    if (land && el.dfOutlineRoom && this._m) {
+      const sel = this._landSel(this._m); // #107: the chosen room outlined
+      el.dfOutlineRoom(sel ? sel.id : null);
+    }
   }
 
   /** #33: the room band's shape: the screen's width × a third of its height (portrait); the left area (landscape). */
-  _bandAspect(mode) {
+  _bandAspect() {
     const w = window.innerWidth || 390;
     const h = window.innerHeight || 844;
-    const a = mode === "landroom" ? (w - 120) / Math.max(200, h - (this._top || 0) - 24) : w / (h / 3); // #83: the room fills the screen beside the rail
+    const a = w / (h / 3);
     return Math.round(a * 100) / 100;
   }
 
@@ -13107,13 +13127,12 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const inBox = path.some((n) => n && n.classList && n.classList.contains("box"));
     if (!inBox) return; // the card's own buttons and menus
     if (path.some((n) => n && n.classList && n.classList.contains("pop"))) return; // #63: the card's own popup (Press? · Cancel)
-    // #83: landscape is the detailed view: a device acts by its own tap settings (the card does it); an empty
-    // spot of a floor opens its room (#75: not on a floor with one room); in a room it does nothing.
-    if (mode === "land" || mode === "landroom") {
+    // #83: landscape is the detailed view: a device acts by its own tap settings (the card does it); #107: an
+    // empty spot chooses its room (outlined, a chip), again or outside any room clears it.
+    if (mode === "land") {
       if (!lsGet("dfm_hint_l")) lsSet("dfm_hint_l", 1); // #92-6: the landscape hint has done its job
       if (path.find((n) => n && n.dataset && (n.dataset.k || n.dataset.touch))) return;
       this._stop(e);
-      if (mode === "landroom") return;
     } else if (mode === "room") {
       const k = path.find((n) => n && n.dataset && n.dataset.k);
       this._stop(e);
@@ -13137,7 +13156,14 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       const near = Object.entries(areas).map(([id, ar]) => [id, Math.hypot(ar.x - x, ar.y - y)]).sort((p, q) => p[1] - q[1])[0];
       if (near && near[1] < 10) hit = near[0];
     }
-    if (hit && this._m.rooms.some((q) => q.id === hit && q.floor === f.id)) this._go({ page: "room", floor: f.id, room: hit });
+    const ok = hit && this._m.rooms.some((q) => q.id === hit && q.floor === f.id);
+    if (mode === "land") {
+      const s = this._s;
+      if (ok && !(s.page === "room" && s.room === hit)) Object.assign(s, { page: "room", floor: f.id, room: hit });
+      else Object.assign(s, { page: "home", room: null });
+      return this._kick(true);
+    }
+    if (ok) this._go({ page: "room", floor: f.id, room: hit });
   },
 
   _stop(e) {
@@ -13215,8 +13241,8 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _back() {
     const s = this._s;
     if (this._land()) {
-      // Landscape: one level out (room → floor → house).
-      if (s.page === "room") Object.assign(s, { page: "rooms", room: null });
+      // Landscape: the chosen room off, then the 3D Home (#107).
+      if (s.page === "room") Object.assign(s, { page: "home", room: null });
       else if (this._m.levels.length > 1) Object.assign(s, { page: "house", room: null });
       this._kick(true);
       return;
@@ -13300,8 +13326,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       this._freeze = false;
       return this._kick(true);
     }
-    this._fmenu = false;
-    if (a === "floor") return this._go({ page: this._land() ? "rooms" : "home", floor: v, room: null });
+    if (a === "floor") return this._go({ page: "home", floor: v, room: null }); // #107: landscape: that floor's plan
+    if (a === "unsel") {
+      Object.assign(this._s, { page: "home", room: null });
+      return this._kick(true);
+    }
     if (a === "room") {
       const [f, r] = v.split("|");
       this._sheet = null;
@@ -13350,15 +13379,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       for (const b of this.shadowRoot.querySelectorAll(".lrail .lr")) b.classList.toggle("on", b.dataset.v === v);
       requestAnimationFrame(() => setTimeout(() => {
         const t0 = performance.now();
-        for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
+        for (const el of (this._plans || new Map()).values()) if (el.isConnected && el._dfmMode === "land" && el.dfSetOverlay) el.dfSetOverlay(v);
         this._dbg(`plan → ${v}: ${(performance.now() - t0).toFixed(0)} ms`);
         this._kick(true);
       }, 0));
       return;
-    }
-    if (a === "fmenu") {
-      this._fmenu = !this._fmenu;
-      return this._kick(true);
     }
     if (a === "step") return this._step(Number(v), t.dataset.z);
     if (a === "fstep") return this._step(Number(v), "floor");
@@ -14211,37 +14236,40 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _landHtml(m) {
     const s = this._s;
     const multi = m.levels.length > 1;
-    // #27 / #83 / #93: landscape is the big plan with its overlays. The House is the 3D building (several levels);
-    // a floor and a room are the Floorplan card; the overlay rail is the mobile card's own (never redrawn by the card).
-    const one = (fid) => m.rooms.filter((q) => q.floor === fid).length < 2;
-    const scope = s.page === "room" && s.room && !one(s.floor) ? "room" : s.page === "house" && multi ? "house" : "floor";
+    // #107: landscape shows floors (and the 3D Home), never one room: the portrait room page is the room view. A
+    // room can be chosen on the plan (outlined, a chip); turning the phone back opens its page.
+    const scope = s.page === "house" && multi ? "house" : "floor";
     const f = m.floors.find((q) => q.id === s.floor);
-    const r = scope === "room" ? m.rooms.find((q) => q.id === s.room && q.floor === f.id) : null;
-    const items = scope === "room" ? r.items : scope === "floor" ? m.items.filter((x) => x.floor === f.id) : m.items;
+    const sel = scope === "floor" ? this._landSel(m) : null;
     const gone = this._hdrHidden ? "gone" : "";
-    const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
-    // #100: the title is the picker (▾ lists the floors, or the floor's rooms), in the top-left chip with ‹ back:
-    // one place to navigate (no second pill at the bottom).
-    const pick = (label, list, act) => (list.length > 1
-      ? `<button class="h1 tpick" data-a="fmenu" aria-expanded="${this._fmenu ? "true" : "false"}"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "up" : "down"}"></ha-icon></button>${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}`
-      : `<div class="h1">${cesc(label)}</div>`);
-    // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
-    const hint = scope !== "house" && !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
     let body = "";
     if (scope === "house") {
       body = `${this._houseHtml(m)}
-        <div class="float hdr chip ${gone}">${menu}<div><div class="h1">${cesc(this._homeName())}</div><div class="sub">${cesc([dfT("mob.n_floors", { n: m.levels.length }), m.people.length ? dfT("mob.n_home", { n: m.people.filter((p) => p.home).length }) : "", this._outside() ? `${this._outside()} ${dfT("mob.outside")}` : ""].filter(Boolean).join(" · "))}</div></div></div>
+        <div class="float hdr chip ${gone}"><div><div class="h1">${cesc(this._homeName())}</div><div class="sub">${cesc([dfT("mob.n_floors", { n: m.levels.length }), m.people.length ? dfT("mob.n_home", { n: m.people.filter((p) => p.home).length }) : "", this._outside() ? `${this._outside()} ${dfT("mob.outside")}` : ""].filter(Boolean).join(" · "))}</div></div></div>
         <div class="float hint ${gone}">${dfT("mob.house_hint")}</div>`;
-    } else if (scope === "floor") {
-      body = `${this._slot(f.id, "live", "", "land", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}<div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>${hint}`;
     } else {
-      const rs = this._sortRooms(m.rooms.filter((q) => q.floor === f.id));
-      body = `${this._slot(f.id, "live", r.id, "landroom", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button>${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}<div class="sub">${cesc(this._vals(r))}</div></div></div>${hint}`;
+      // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
+      const hint = !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
+      const chip = sel ? `<button class="float selchip" data-a="unsel"><b>${cesc(sel.name)}</b>${this._vals(sel) ? `<span>${cesc(this._vals(sel))}</span>` : ""}<ha-icon icon="mdi:close"></ha-icon></button>` : hint;
+      body = `${this._slot(f.id, "live", "", "land", "lplan")}${chip}`;
     }
-    const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
-    return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
+    return `<div class="land">${this._navHtml(m, f, scope)}<div class="left full" ${scope === "floor" ? 'data-swipe="floor"' : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
+  },
+
+  /** #107: the room chosen on the landscape plan (or the room page the phone was turned on). */
+  _landSel(m) {
+    const s = this._s;
+    return s.page === "room" && s.room ? m.rooms.find((q) => q.id === s.room && q.floor === s.floor) || null : null;
+  },
+
+  /** #108: landscape navigation in its own strip on the left, beside the plan (never over it): ☰, the floors
+   *  (highest first, by level), Home (the 3D home). */
+  _navHtml(m, f, scope) {
+    const menu = this._hdrOn ? `<button class="ln menu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
+    const short = (q) => (Number.isFinite(q.level) ? String(q.level) : (q.name || "?").trim().charAt(0).toUpperCase());
+    const fl = m.floors.length > 1 ? m.floors.map((q) => `<button class="ln fl ${scope === "floor" && q.id === f.id ? "on" : ""}" data-a="floor" data-v="${cesc(q.id)}" title="${cesc(q.name)}" aria-label="${cesc(q.name)}">${cesc(short(q))}</button>`).join("") : "";
+    const home = m.levels.length > 1 ? `<button class="ln home ${scope === "house" ? "on" : ""}" data-a="gohome" title="${cesc(this._homeName())}" aria-label="${cesc(this._homeName())}"><ha-icon icon="mdi:home-outline"></ha-icon></button>` : "";
+    return `<nav class="lnav">${menu}<div class="lfl">${fl}${home}</div></nav>`;
   },
 
   /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:
@@ -14350,8 +14378,20 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
 /* #93: the landscape overlay rail: its own element, no background, labels whole */
-.land { padding-right: var(--dfm-rail-w, 92px); box-sizing: border-box; }
-.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.land { padding-right: calc(var(--dfm-rail-w, 92px) + env(safe-area-inset-right, 0px)); padding-left: calc(var(--dfm-nav-w, 54px) + env(safe-area-inset-left, 0px)); box-sizing: border-box; }
+/* #108: the landscape navigation strip on the left, beside the plan: ☰ on top, floors and Home in the middle. */
+.lnav { position: absolute; top: 0; bottom: 0; left: env(safe-area-inset-left, 0px); width: var(--dfm-nav-w, 54px); display:flex; flex-direction:column; align-items:center; padding: 8px 0; box-sizing: border-box; z-index: 4; }
+.lnav .lfl { display:flex; flex-direction:column; align-items:center; gap: 8px; margin: auto 0; }
+.ln { width: 40px; height: 40px; border-radius: 50%; display:flex; align-items:center; justify-content:center; flex:none; text-align:center; font-weight: 700; font-size: 16px; color: var(--dfm-fg); background: color-mix(in srgb, var(--dfm-card) 80%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.ln ha-icon { --mdc-icon-size: 22px; }
+.ln.on { background: var(--dfm-acc); color: #fff; }
+.ln.menu { background: none; box-shadow: none; color: var(--dfm-sub); }
+.ln.home { margin-top: 6px; }
+/* #107: the room chosen on the landscape plan */
+.float.selchip { left: 12px; bottom: 12px; display:flex; align-items:center; gap: 8px; padding: 7px 10px 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); font-size: 14px; text-shadow: none; max-width: 70%; }
+.float.selchip span { color: var(--dfm-sub); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.float.selchip ha-icon { --mdc-icon-size: 16px; color: var(--dfm-sub); flex: none; }
+.lrail { position: absolute; top: 0; right: env(safe-area-inset-right, 0px); bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
 .lrail::-webkit-scrollbar { display: none; }
 .lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
 .lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
@@ -14360,12 +14400,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .lr.on ha-icon { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
 .lr:active ha-icon { background: color-mix(in srgb, var(--dfm-fg) 10%, transparent); }
 /* #92-12: one place pill with its list */
-.float.hdr .tpick { display:flex; align-items:center; gap: 2px; padding: 0; width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; color: var(--dfm-fg); font-weight: 700; line-height: 1.15; text-align: left; transition: font-size .3s; }
-.float.hdr .tpick ha-icon { --mdc-icon-size: 22px; color: var(--dfm-sub); flex: none; }
-.float.hdr .fmenu { margin: 6px 0 2px; }
-.fmenu { display:flex; flex-direction: column; min-width: 170px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-card) 94%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
-.fmenu button { text-align: left; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--dfm-fg); }
-.fmenu button.on { background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); font-weight: 650; }
 /* #92-6: one-time hints */
 .phint, .hint2 { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, var(--dfm-card) 88%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); pointer-events: none; white-space: nowrap; z-index: 3; }
 .hint2 { bottom: 14px; }
@@ -14539,7 +14573,7 @@ button.sw.on i { left: 21px; }
 .fthumb { width: 56px; height: 40px; flex:none; border-radius: 8px; overflow:hidden; background: color-mix(in srgb, var(--dfm-sub) 12%, transparent); display:flex; align-items:center; justify-content:center; }
 .fthumb img { width:100%; height:100%; object-fit: contain; }
 /* landscape: one surface, the plan on the left 2/3, the overlays on the right */
-.land { position: relative; display:flex; height: calc(100dvh - var(--dfm-top, 56px)); background: linear-gradient(180deg, var(--dfm-g1), var(--dfm-g2)); overflow: hidden; }
+.land { position: relative; display:flex; height: calc(100dvh - var(--dfm-top, 56px)); background: transparent; overflow: hidden; } /* #108: one colour with HA's page, edge to edge */
 .left { position: relative; flex: 0 0 66%; height: 100%; }
 .left { touch-action: none; }
 [data-swipe] { touch-action: pan-y; }
@@ -14560,7 +14594,6 @@ button.sw.on i { left: 21px; }
 .dfm.turning { opacity: 0; transition: none; }
 /* #92-11: in landscape the ‹ back stays; only the big title fades */
 .float.hdr.chip.gone { opacity: 1; pointer-events: auto; padding-bottom: 6px; }
-/* #100: the title is the picker, so it stays; after a while it shrinks and only the sub line goes. */
 .float.hdr.chip.gone .h1 { font-size: 17px; }
 .float.hdr.chip.gone .sub { display: none; }
 .float.hdr { top: 10px; left: 16px; }

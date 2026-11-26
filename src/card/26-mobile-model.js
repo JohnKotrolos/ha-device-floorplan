@@ -698,7 +698,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (!box && this.shadowRoot) {
       box = document.createElement("pre");
       box.id = "dfmdbg";
-      box.style.cssText = "position:fixed;left:6px;bottom:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
+      box.style.cssText = "position:fixed;left:64px;top:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
       this.shadowRoot.appendChild(box);
     }
     if (box) box.textContent = this._dbgL.join("\n");
@@ -753,7 +753,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     const b = this._base || {};
     const full = mode === "full";
-    const land = mode === "land" || mode === "landroom";
+    const land = mode === "land";
     const cfg = {
       // #79: its own storage key per kind of plan (layers, replay…): the mobile card never changes the dashboard
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
@@ -761,7 +761,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
       replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
-      ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
+      ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
       ...(["mini", "floor", "room"].includes(mode) ? { room_values: true } : {}),
     };
@@ -780,13 +780,17 @@ class DeviceFloorplanMobile extends HTMLElement {
     const want = land ? this._lov || ov : ov;
     if (el.dfSetOverlay && el._dfmOv !== want) el.dfSetOverlay(want);
     el._dfmOv = want;
+    if (land && el.dfOutlineRoom && this._m) {
+      const sel = this._landSel(this._m); // #107: the chosen room outlined
+      el.dfOutlineRoom(sel ? sel.id : null);
+    }
   }
 
   /** #33: the room band's shape: the screen's width × a third of its height (portrait); the left area (landscape). */
-  _bandAspect(mode) {
+  _bandAspect() {
     const w = window.innerWidth || 390;
     const h = window.innerHeight || 844;
-    const a = mode === "landroom" ? (w - 120) / Math.max(200, h - (this._top || 0) - 24) : w / (h / 3); // #83: the room fills the screen beside the rail
+    const a = w / (h / 3);
     return Math.round(a * 100) / 100;
   }
 

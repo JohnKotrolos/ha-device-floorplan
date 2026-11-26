@@ -53,8 +53,20 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seg ha-icon { --mdc-icon-size: 18px; flex: none; }
 .seg.on { color: #e8b923; }
 /* #93: the landscape overlay rail: its own element, no background, labels whole */
-.land { padding-right: var(--dfm-rail-w, 92px); box-sizing: border-box; }
-.lrail { position: absolute; top: 0; right: 0; bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
+.land { padding-right: calc(var(--dfm-rail-w, 92px) + env(safe-area-inset-right, 0px)); padding-left: calc(var(--dfm-nav-w, 54px) + env(safe-area-inset-left, 0px)); box-sizing: border-box; }
+/* #108: the landscape navigation strip on the left, beside the plan: ☰ on top, floors and Home in the middle. */
+.lnav { position: absolute; top: 0; bottom: 0; left: env(safe-area-inset-left, 0px); width: var(--dfm-nav-w, 54px); display:flex; flex-direction:column; align-items:center; padding: 8px 0; box-sizing: border-box; z-index: 4; }
+.lnav .lfl { display:flex; flex-direction:column; align-items:center; gap: 8px; margin: auto 0; }
+.ln { width: 40px; height: 40px; border-radius: 50%; display:flex; align-items:center; justify-content:center; flex:none; text-align:center; font-weight: 700; font-size: 16px; color: var(--dfm-fg); background: color-mix(in srgb, var(--dfm-card) 80%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.ln ha-icon { --mdc-icon-size: 22px; }
+.ln.on { background: var(--dfm-acc); color: #fff; }
+.ln.menu { background: none; box-shadow: none; color: var(--dfm-sub); }
+.ln.home { margin-top: 6px; }
+/* #107: the room chosen on the landscape plan */
+.float.selchip { left: 12px; bottom: 12px; display:flex; align-items:center; gap: 8px; padding: 7px 10px 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 92%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); font-size: 14px; text-shadow: none; max-width: 70%; }
+.float.selchip span { color: var(--dfm-sub); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.float.selchip ha-icon { --mdc-icon-size: 16px; color: var(--dfm-sub); flex: none; }
+.lrail { position: absolute; top: 0; right: env(safe-area-inset-right, 0px); bottom: 0; width: var(--dfm-rail-w, 92px); display:flex; flex-direction:column; align-items:center; gap: 4px; padding: 8px 4px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 4; scrollbar-width: none; }
 .lrail::-webkit-scrollbar { display: none; }
 .lr { width: 100%; display:flex; flex-direction:column; align-items:center; gap: 2px; padding: 7px 2px; border-radius: 16px; color: var(--dfm-sub); font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; flex: none; }
 .lr ha-icon { --mdc-icon-size: 22px; width: 40px; height: 32px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
@@ -63,12 +75,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .lr.on ha-icon { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
 .lr:active ha-icon { background: color-mix(in srgb, var(--dfm-fg) 10%, transparent); }
 /* #92-12: one place pill with its list */
-.float.hdr .tpick { display:flex; align-items:center; gap: 2px; padding: 0; width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; color: var(--dfm-fg); font-weight: 700; line-height: 1.15; text-align: left; transition: font-size .3s; }
-.float.hdr .tpick ha-icon { --mdc-icon-size: 22px; color: var(--dfm-sub); flex: none; }
-.float.hdr .fmenu { margin: 6px 0 2px; }
-.fmenu { display:flex; flex-direction: column; min-width: 170px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-card) 94%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
-.fmenu button { text-align: left; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--dfm-fg); }
-.fmenu button.on { background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); font-weight: 650; }
 /* #92-6: one-time hints */
 .phint, .hint2 { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, var(--dfm-card) 88%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.14); color: var(--dfm-fg); pointer-events: none; white-space: nowrap; z-index: 3; }
 .hint2 { bottom: 14px; }
@@ -242,7 +248,7 @@ button.sw.on i { left: 21px; }
 .fthumb { width: 56px; height: 40px; flex:none; border-radius: 8px; overflow:hidden; background: color-mix(in srgb, var(--dfm-sub) 12%, transparent); display:flex; align-items:center; justify-content:center; }
 .fthumb img { width:100%; height:100%; object-fit: contain; }
 /* landscape: one surface, the plan on the left 2/3, the overlays on the right */
-.land { position: relative; display:flex; height: calc(100dvh - var(--dfm-top, 56px)); background: linear-gradient(180deg, var(--dfm-g1), var(--dfm-g2)); overflow: hidden; }
+.land { position: relative; display:flex; height: calc(100dvh - var(--dfm-top, 56px)); background: transparent; overflow: hidden; } /* #108: one colour with HA's page, edge to edge */
 .left { position: relative; flex: 0 0 66%; height: 100%; }
 .left { touch-action: none; }
 [data-swipe] { touch-action: pan-y; }
@@ -263,7 +269,6 @@ button.sw.on i { left: 21px; }
 .dfm.turning { opacity: 0; transition: none; }
 /* #92-11: in landscape the ‹ back stays; only the big title fades */
 .float.hdr.chip.gone { opacity: 1; pointer-events: auto; padding-bottom: 6px; }
-/* #100: the title is the picker, so it stays; after a while it shrinks and only the sub line goes. */
 .float.hdr.chip.gone .h1 { font-size: 17px; }
 .float.hdr.chip.gone .sub { display: none; }
 .float.hdr { top: 10px; left: 16px; }

@@ -394,6 +394,8 @@ const PIC_CSS = `
 .pic .ptint { position:absolute; inset:0; mix-blend-mode:multiply; -webkit-mask-size:100% 100%; mask-size:100% 100%; pointer-events:none; }
 .pic.faint .ptint { opacity:.38; }
 .pic svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.olroom { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:visible; }
+.olroom polygon, .olroom ellipse { fill: color-mix(in srgb, var(--primary-color, #03a9f4) 10%, transparent); stroke: var(--primary-color, #03a9f4); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pic svg polygon { fill:none; stroke: var(--dfc-accent, var(--primary-color, #03a9f4)); stroke-width:1.6; vector-effect: non-scaling-stroke; }
 .pic svg polygon.dot { stroke: var(--secondary-text-color, #8a8f98); stroke-dasharray: 3 3; }
 .pic.busy { animation: dfbusy 1s ease-in-out infinite; }
