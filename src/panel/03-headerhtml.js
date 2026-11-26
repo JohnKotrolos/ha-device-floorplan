@@ -42,6 +42,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         ${this.plans.length ? `<button data-act="guide" role="menuitem">${SVG.eye}${this.s.guide ? "Hide" : "Show"} step-by-step guide</button>` : ""}
         ${this.plans.length && this.setupDone ? `<button data-act="resetsetup" role="menuitem">${SVG.skip}Choose devices again…</button>` : ""}
         ${this.plans.length ? `<button data-act="aidlg" role="menuitem">${SVG.info}AI assistants: ${this.aiShare ? "on" : "off"}…</button>` : ""}
+        ${this.plans.length ? `<hr><button data-act="newdash" role="menuitem">${SVG.newdash}Create a new dashboard…</button><button data-act="newmob" role="menuitem">${SVG.phone}Create a new mobile dashboard…</button>` : ""}
         <hr><button disabled role="menuitem" style="font-size:12px">Device Floorplan v${VERSION}</button></div>`;
     }
     const p = this.plans.find((x) => x.id === m.id);

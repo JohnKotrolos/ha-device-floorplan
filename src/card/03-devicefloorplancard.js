@@ -584,7 +584,8 @@ class DeviceFloorplanCard extends HTMLElement {
    *  Overlay Bar's last button) or "hidden". Without a bar it is beside Layers, so it can't get lost. */
   _rpBtnPos(dockShown) {
     const c = this._config;
-    if (c.replay === false || c.replay_button === "hidden" || !this._rpOvs().length) return "hidden";
+    // #101: an overlay whose values are not recorded states (Energy: long-term statistics) has no Replay button.
+    if (c.replay === false || c.replay_button === "hidden" || !this._rpOvs().length || RP_SKIP.has(this._overlay)) return "hidden";
     return c.replay_button === "bar" && dockShown ? "bar" : "layers";
   }
 

@@ -52,6 +52,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     if (dlg.type === "ready") return wrap(this._readyHtml(), 580);
     if (dlg.type === "added") return wrap(this._addedHtml(), 520);
     if (dlg.type === "adddash") return wrap(this._addDashHtml(), 560);
+    if (dlg.type === "newdash") return wrap(this._newDashHtml(), 520);
+    if (dlg.type === "newdone") {
+      return wrap(`<h2 class="okttl">${SVG.okcircle}“${esc(dlg.title)}” is ready</h2>
+        <p>${dlg.mobile ? "Your mobile dashboard is in the sidebar. It shows your floorplans, rooms and devices, made for the phone." : "Your new dashboard is in the sidebar, with all your floorplans."} It updates by itself when you change things here.</p>
+        ${dlg.mobile ? `<p style="font-size:13px;opacity:.8">Tip: in the Home Assistant app on your phone, open Settings → Companion app and choose this dashboard as the one the app opens with.</p>` : ""}
+        <div class="acts"><button class="btn" data-act="closedlg">Close</button><button class="btn primary" data-act="opendash" data-path="${esc(dlg.path)}">Open dashboard</button></div>`, 520);
+    }
     if (dlg.type === "preview") {
       return `<div class="modal" data-act="modalbg"><div class="dialog" role="dialog" aria-modal="true" style="max-width:1000px;width:100%"><h2 class="okttl">Live view · ${esc(p.name)} <span class="live"><i></i>LIVE</span></h2>
         <p>This is your plan, live. Try it: tap a sensor or a light to open its details and controls. This is the default style; you can adjust what the card shows and how it looks in the card's settings.</p>
@@ -117,6 +124,24 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       <p>The ${esc(this._plan().name)} plan is now on your dashboard, in ${d.viewNew ? "a new view" : "the view"} <b>“${esc(d.view)}”</b>.${d.newDash ? ` A new dashboard <b>“${esc(d.title)}”</b> was added to your sidebar.` : ""}</p>
       <p>It updates by itself: when you add, move or remove devices here, the dashboard follows.</p>
       <div class="acts"><button class="btn" data-act="closedlg">Close</button><button class="btn primary" data-act="opendash" data-path="${esc(d.path)}">Open dashboard</button></div>`;
+  },
+
+  /** #98: the window behind ⋮ → Create a new (mobile) dashboard: everything pre-filled. */
+  _newDashHtml() {
+    const d = this.s.dialog;
+    const row = (lab, inner) => `<label style="display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px"><span style="opacity:.8">${lab}</span>${inner}</label>`;
+    const inp = (id, v) => `<input id="${id}" value="${esc(v)}" style="padding:8px 10px;border-radius:8px;border:1px solid var(--df-line, #ccc);font:inherit;background:transparent;color:inherit">`;
+    const src = d.cards == null
+      ? `<span style="opacity:.7">Looking for your Floorplan cards…</span>`
+      : `<select id="nd_src" style="padding:8px 10px;border-radius:8px;font:inherit"><option value="">${d.cards.length ? "The first Floorplan card found" : "The plan's own settings"}</option>${d.cards.map((c) => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join("")}</select>`;
+    return `<h2>${d.mobile ? "Create a new mobile dashboard" : "Create a new dashboard"}</h2>
+      <p style="margin-top:0">${d.mobile ? "A dashboard made for the phone, built from your floorplans. The floors come from the Floorplan card you pick below: its look, rooms and overlays." : "A new dashboard with one Floorplan card showing all your floorplans."}</p>
+      ${row("Name", inp("nd_name", d.name))}
+      ${row(`Icon <ha-icon icon="${esc(d.icon)}" style="--mdc-icon-size:18px;vertical-align:middle"></ha-icon>`, inp("nd_icon", d.icon))}
+      ${d.mobile ? row("Settings from", src) : ""}
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin:12px 0"><input type="checkbox" id="nd_side" checked> Show in sidebar</label>
+      ${d.err ? `<p style="color:var(--df-err, #c62828)">${esc(d.err)}</p>` : ""}
+      <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="donewdash" ${d.busy || (d.mobile && d.cards == null) ? "disabled" : ""}>${d.busy ? "Creating…" : "Create"}</button></div>`;
   },
 
   _addDashHtml() {

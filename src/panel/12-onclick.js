@@ -283,6 +283,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         s.dialog = s.dialog && s.dialog.from ? s.dialog.from : null;
         this._render();
         break;
+      case "newdash":
+      case "newmob":
+        await this._openNewDash(act === "newmob");
+        break;
+      case "donewdash":
+        await this._createDash();
+        break;
       case "doadddash":
         await this._addToDashboard();
         break;

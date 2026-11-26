@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.19";
+const VERSION = "0.13.9.20";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -241,6 +241,8 @@ const SVG = {
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>',
   dash: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
   ha: '<svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
+  newdash: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v6M9 12h6"/></svg>',
+  phone: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M6.5 10H11V2.5M13 13h4.5"/></svg>',
 };
 
 /** Signed URLs for plan images (they are served only to logged-in users). */

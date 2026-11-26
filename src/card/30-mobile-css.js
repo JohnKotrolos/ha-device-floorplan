@@ -62,10 +62,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .lr.on { color: var(--dfm-fg); }
 .lr.on ha-icon { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
 .lr:active ha-icon { background: color-mix(in srgb, var(--dfm-fg) 10%, transparent); }
-.lr.rp { margin-top: 6px; box-shadow: inset 0 1px 0 var(--dfm-div); border-radius: 0; padding-top: 10px; }
 /* #92-12: one place pill with its list */
-.float.sw.pick { display:flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; background: none; box-shadow: none; }
-.fpill { display:flex; align-items:center; gap: 6px; padding: 8px 12px 8px 16px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 85%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.12); font-weight: 650; color: var(--dfm-fg); }
+.float.hdr .tpick { display:flex; align-items:center; gap: 2px; padding: 0; width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; color: var(--dfm-fg); font-weight: 700; line-height: 1.15; text-align: left; transition: font-size .3s; }
+.float.hdr .tpick ha-icon { --mdc-icon-size: 22px; color: var(--dfm-sub); flex: none; }
+.float.hdr .fmenu { margin: 6px 0 2px; }
 .fmenu { display:flex; flex-direction: column; min-width: 170px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-card) 94%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
 .fmenu button { text-align: left; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--dfm-fg); }
 .fmenu button.on { background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); font-weight: 650; }
@@ -258,9 +258,14 @@ button.sw.on i { left: 21px; }
 .bd { flex: none; white-space: nowrap; }
 .float { position:absolute; z-index: 3; transition: opacity .5s; text-shadow: 0 1px 6px var(--dfm-bg), 0 0 2px var(--dfm-bg); }
 .float.gone { opacity: 0; pointer-events: none; }
+/* #102: while the phone turns, the old layout is not shown stretched (a very short fade). */
+.dfm { transition: opacity .12s; }
+.dfm.turning { opacity: 0; transition: none; }
 /* #92-11: in landscape the ‹ back stays; only the big title fades */
 .float.hdr.chip.gone { opacity: 1; pointer-events: auto; padding-bottom: 6px; }
-.float.hdr.chip.gone .h1, .float.hdr.chip.gone .sub { display: none; }
+/* #100: the title is the picker, so it stays; after a while it shrinks and only the sub line goes. */
+.float.hdr.chip.gone .h1 { font-size: 17px; }
+.float.hdr.chip.gone .sub { display: none; }
 .float.hdr { top: 10px; left: 16px; }
 /* #80: the title on a soft chip, readable on any plan */
 .float.hdr.chip { display:flex; align-items:flex-start; gap: 8px; padding: 6px 12px 7px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-g1) 72%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,.12); text-shadow: none; max-width: 45%; }
@@ -334,8 +339,10 @@ if (!window.customCards.some((c) => c.type === "device-floorplan-mobile")) {
 
 /** Add dashboard → "Device Floorplan (mobile)": one panel view with the mobile card. */
 class DeviceFloorplanMobileStrategy extends HTMLElement {
-  static async generate() {
-    return { views: [{ title: dfT("mob.home"), path: "home", icon: "mdi:floor-plan", type: "panel", cards: [{ type: "custom:device-floorplan-mobile" }] }] };
+  static async generate(config = {}) {
+    // #98: the Editor's "Create a new mobile dashboard" stores the chosen Floorplan card as the strategy's source.
+    const card = { type: "custom:device-floorplan-mobile", ...(config.source ? { source: config.source } : {}) };
+    return { views: [{ title: dfT("mob.home"), path: "home", icon: "dfp:mobile", type: "panel", cards: [card] }] };
   }
 }
 if (!customElements.get("ll-strategy-dashboard-device-floorplan-mobile")) customElements.define("ll-strategy-dashboard-device-floorplan-mobile", DeviceFloorplanMobileStrategy);

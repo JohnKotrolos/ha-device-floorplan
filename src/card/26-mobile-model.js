@@ -271,10 +271,22 @@ class DeviceFloorplanMobile extends HTMLElement {
     dfLangOf(hass);
     if (hass && hass.entities) dfcReg = hass.entities;
     this.toggleAttribute("dark", !!(hass.themes && hass.themes.darkMode));
-    const first = !this._hass;
+    const prev = this._hass;
     this._hass = hass;
-    if (first) this._loadBase();
-    for (const el of (this._plans || new Map()).values()) el.hass = hass;
+    if (!prev) this._loadBase();
+    // #102: only the plans on screen follow Home Assistant (a cached one gets it again when it is shown).
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) el.hass = hass;
+    // #102: no redraw when nothing the card shows has changed (the minute tick still refreshes everything).
+    if (prev && this._watch && prev.entities === hass.entities && prev.areas === hass.areas && prev.language === hass.language && prev.themes === hass.themes) {
+      let same = true;
+      for (const e of this._watch) {
+        if (prev.states[e] !== hass.states[e]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
     this._kick();
   }
 
@@ -301,11 +313,31 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     this._onScroll = this._onScroll || (() => {
       this._scrollAt = Date.now();
-      if (!this._wasLand) this._pY = window.scrollY || 0; // #92-2: the portrait page's place, kept for the way back
+      // #92-2: the portrait page's place, kept for the way back (not the jumps a turn of the phone causes, #102).
+      if (!this._wasLand && Date.now() - (this._rotAt || 0) > 1500 && this._land() === this._wasLand) this._pY = window.scrollY || 0;
     });
     window.addEventListener("scroll", this._onScroll, { passive: true, capture: true });
-    this._onRot = this._onRot || (() => this._kick(true));
+    // #102: a turn of the phone is drawn at once (not held back by the scroll guard) and checked again once the
+    // viewport has settled: real phones often report the new size only after the first resize event.
+    this._onRot = this._onRot || (() => {
+      const land = this._land();
+      if (land !== this._wasLand) {
+        this._rotAt = Date.now();
+        const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
+        if (host) {
+          host.classList.add("turning");
+          setTimeout(() => host.classList.remove("turning"), 1200); // never left hidden
+        }
+      }
+      this._kick(true);
+      clearTimeout(this._rotT);
+      this._rotT = setTimeout(() => this._land() !== this._wasLand && this._kick(true), 250);
+      clearTimeout(this._rotT2);
+      this._rotT2 = setTimeout(() => this._land() !== this._wasLand && this._kick(true), 700);
+    });
     window.addEventListener("resize", this._onRot);
+    if (!this._mq && window.matchMedia) this._mq = window.matchMedia("(orientation: landscape)");
+    if (this._mq && this._mq.addEventListener) this._mq.addEventListener("change", this._onRot);
     this._kick(true);
   }
 
@@ -313,6 +345,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     clearInterval(this._tick);
     this._tick = null;
     window.removeEventListener("resize", this._onRot);
+    if (this._mq && this._mq.removeEventListener) this._mq.removeEventListener("change", this._onRot);
+    clearTimeout(this._rotT);
+    clearTimeout(this._rotT2);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
     this._hideHdr(true);
     if (this._lay) this._lay.remove();
@@ -364,6 +399,16 @@ class DeviceFloorplanMobile extends HTMLElement {
     const rooms = [];
     const items = [];
     const seen = new Set();
+    // #102: a device's info (overlays it is in, what it shows) is kept while its states and the settings are the
+    // same; at most 30 s, so anything else it reads is never stale for long.
+    const ep = this._ep || {};
+    if (ep.b !== this._base || ep.e !== hass.entities || ep.ar !== hass.areas || ep.c !== this._config || ep.l !== hass.language) {
+      this._ep = { b: this._base, e: hass.entities, ar: hass.areas, c: this._config, l: hass.language };
+      this._ic = new Map();
+    }
+    const ic = this._ic;
+    const now = Date.now();
+    const watch = new Set(sens.map((s) => s.entity_id));
     for (const f of floors) {
       const order = Object.keys(f.a.areas || {});
       const byRoom = new Map(order.map((id) => [id, []]));
@@ -373,6 +418,16 @@ class DeviceFloorplanMobile extends HTMLElement {
         const key = item.id.startsWith("bond:") ? `${f.id}|${item.id}` : item.id;
         if (seen.has(key) && !item.x && !item.px) continue;
         seen.add(key);
+        const ents = [item.main_entity, ...(item.allEntities || item.entities || [])].filter(Boolean);
+        for (const e of ents) watch.add(e);
+        const refs = ents.map((e) => hass.states[e]);
+        const ck = `${f.id}|${item.id}`;
+        const hit = ic.get(ck);
+        if (hit && hit.a === f.a && now - hit.at < 30000 && hit.refs.length === refs.length && hit.refs.every((r, i) => r === refs[i])) {
+          items.push(hit.info);
+          if (hit.info.room) byRoom.get(hit.info.room).push(hit.info);
+          continue;
+        }
         const akind = h._applKind(item);
         const info = dfmInfo(hass, item, { comfort: h._dev(item.id).comfort === true, appl: !!akind });
         info.floor = f.id;
@@ -401,6 +456,7 @@ class DeviceFloorplanMobile extends HTMLElement {
         // #29: what the card shows in Lights is a light here too (a switch / plug used as a light).
         if (info.ovs.has("lights") && info.g !== "lights" && !h._applOf(item)) info.g = "lights";
         info.room = h._roomOf(item, f.a) || (item.area_id && byRoom.has(item.area_id) ? item.area_id : null);
+        ic.set(ck, { a: f.a, at: now, refs, info });
         items.push(info);
         if (info.room) byRoom.get(info.room).push(info);
       }
@@ -426,7 +482,13 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     // People: the main card's list, else every person.
     const ppl = this._peopleList();
+    const wx = Object.keys(hass.states).find((e) => e.startsWith("weather."));
+    if (wx) watch.add(wx);
+    if (hass.states["sun.sun"]) watch.add("sun.sun");
+    this._watch = watch;
     const people = ppl.map((p) => {
+      watch.add(p.entity);
+      for (const v of Object.values(p)) if (typeof v === "string" && /^[a-z_]+\.[a-z0-9_]+$/.test(v)) watch.add(v); // its room sensors etc.
       const st = hass.states[p.entity];
       let room = null;
       for (const f of floors) {
@@ -530,19 +592,30 @@ class DeviceFloorplanMobile extends HTMLElement {
     const l = this._config.layout;
     if (l === "landscape") return true;
     if (l === "portrait") return false;
-    return window.innerWidth > window.innerHeight && window.innerHeight <= 600;
+    // #102: the orientation from the media query (right at once on phones), a phone by its short side (true
+    // whichever way round the size is reported).
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const wide = this._mq ? this._mq.matches : w > h;
+    return wide && Math.min(w, h) <= 600;
   }
 
   _render() {
     if (!this._hass || !this.shadowRoot || !this.isConnected) return;
-    // #23: never while a finger is on the screen or the page is scrolling; right after.
-    if (this._ptr || Date.now() - (this._scrollAt || 0) < 450) {
+    // #23: never while a finger is on the screen or the page is scrolling; right after. #102: a turn of the
+    // phone is never held back (turning moves the page, which looks like scrolling).
+    const turning = this._land() !== this._wasLand;
+    if (!turning && (this._ptr || Date.now() - (this._scrollAt || 0) < 450)) {
       clearTimeout(this._t);
       this._t = setTimeout(() => this._render(), 300);
       return;
     }
     this._last = Date.now();
+    // #102: timing, to measure on a real phone: the card option "debug: true" or "?dfm_debug=1" in the address.
+    const dbg = this._config.debug === true || /[?&]dfm_debug=1/.test(location.search);
+    const t0 = dbg ? performance.now() : 0;
     const m = (this._m = this._model());
+    const t1 = dbg ? performance.now() : 0;
     const s = this._s;
     const root = this.shadowRoot;
     if (!root.querySelector("style#dfm")) root.innerHTML = `<style id="dfm">${DFM_CSS}</style><div class="dfm"></div>`;
@@ -588,7 +661,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
       this._scaleAll();
+      if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
+    if (dbg) console.info(`[device-floorplan-mobile] ${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms, draw ${(performance.now() - t1).toFixed(0)} ms, ${m.items.length} devices`);
   }
 
   /** #20: Home Assistant's top bar hidden on this dashboard, on phones, while the card is open (option). Only a
@@ -646,7 +721,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.

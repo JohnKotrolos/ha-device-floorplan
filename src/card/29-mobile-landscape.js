@@ -13,8 +13,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const items = scope === "room" ? r.items : scope === "floor" ? m.items.filter((x) => x.floor === f.id) : m.items;
     const gone = this._hdrHidden ? "gone" : "";
     const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
-    // #92-12: one pill naming where you are, ▾ lists the others (floors, or the floor's rooms).
-    const pick = (label, list, act) => (list.length > 1 ? `<div class="float sw pick">${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}<button class="fpill" data-a="fmenu"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "down" : "up"}"></ha-icon></button></div>` : "");
+    // #100: the title is the picker (▾ lists the floors, or the floor's rooms), in the top-left chip with ‹ back:
+    // one place to navigate (no second pill at the bottom).
+    const pick = (label, list, act) => (list.length > 1
+      ? `<button class="h1 tpick" data-a="fmenu" aria-expanded="${this._fmenu ? "true" : "false"}"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "up" : "down"}"></ha-icon></button>${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}`
+      : `<div class="h1">${cesc(label)}</div>`);
     // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
     const hint = scope !== "house" && !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
     let body = "";
@@ -24,25 +27,23 @@ Object.assign(DeviceFloorplanMobile.prototype, {
         <div class="float hint ${gone}">${dfT("mob.house_hint")}</div>`;
     } else if (scope === "floor") {
       body = `${this._slot(f.id, "live", "", "land", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}<div class="h1">${cesc(f.name)}</div><div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>
-        ${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}${hint}`;
+        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}<div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>${hint}`;
     } else {
       const rs = this._sortRooms(m.rooms.filter((q) => q.floor === f.id));
       body = `${this._slot(f.id, "live", r.id, "landroom", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button><div class="h1">${cesc(r.name)}</div><div class="sub">${cesc(this._vals(r))}</div></div></div>
-        ${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}${hint}`;
+        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button>${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}<div class="sub">${cesc(this._vals(r))}</div></div></div>${hint}`;
     }
     const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
     return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
   },
 
-  /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole, Home
-   *  Replay last; the mobile card's own element, so a state change never rebuilds it (its scroll stays). */
+  /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:
+   *  no Home Replay here, the plan's round Replay button is the one switch); the mobile card's own element, so a state change never rebuilds it (its scroll stays). */
   _railHtml(m, f) {
     const ovs = this._overlayList(f).filter((o) => o !== "plan");
     const cur = ovs.includes(this._lov) ? this._lov : ovs.includes("live") ? "live" : ovs[0];
     this._lov = cur;
-    return `<nav class="lrail" data-scroll="lrail">${ovs.map((o) => `<button class="lr ${o === cur ? "on" : ""}" data-a="lov" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "var(--dfm-acc)"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon><span>${cesc(this._ovLabel(o, f))}</span></button>`).join("")}<button class="lr rp" data-a="rp"><ha-icon icon="mdi:history"></ha-icon><span>${dfT("rp.name")}</span></button></nav>`;
+    return `<nav class="lrail" data-scroll="lrail">${ovs.map((o) => `<button class="lr ${o === cur ? "on" : ""}" data-a="lov" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "var(--dfm-acc)"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon><span>${cesc(this._ovLabel(o, f))}</span></button>`).join("")}</nav>`;
   },
 
   /** #26: the House: all levels stacked on one footprint, one tilt for the whole building, sized to fit. */

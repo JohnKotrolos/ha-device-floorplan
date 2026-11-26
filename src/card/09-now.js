@@ -629,7 +629,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
    *  replay is picked beside Layers; the time is the pill on the plan (and on the thumb while it moves). */
   _rpRail(vert) {
     const rp = this._rpState();
-    const now = `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
+    const now = this._config.replay_now === false ? "" : `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
     const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? dfT("rp.pause") : dfT("rp.play")}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
     const pn = `<span class="rppn"><button data-rp="prev" aria-label="${dfT("rp.prev")}"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="${dfT("rp.next")}"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
     const speed = `<select class="rpspeed" aria-label="${dfT("rp.speed")}">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;

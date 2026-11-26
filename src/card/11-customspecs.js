@@ -204,6 +204,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
   dfSetOverlay(ov) {
     if (!ov || ov === this._overlay || !this._config || !this._overlays().includes(ov)) return;
+    if (this._rp && RP_SKIP.has(ov)) {
+      this._rp.mode = false; // #101: Energy can't be replayed: back to Now, never a silent replay of Live
+      this._rpLive(false);
+    }
     this._overlay = ov;
     this._popup = null;
     this._menu = false;
@@ -436,7 +440,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();

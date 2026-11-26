@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.19";
+const CARD_VERSION = "0.13.9.20";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -2582,7 +2582,8 @@ class DeviceFloorplanCard extends HTMLElement {
    *  Overlay Bar's last button) or "hidden". Without a bar it is beside Layers, so it can't get lost. */
   _rpBtnPos(dockShown) {
     const c = this._config;
-    if (c.replay === false || c.replay_button === "hidden" || !this._rpOvs().length) return "hidden";
+    // #101: an overlay whose values are not recorded states (Energy: long-term statistics) has no Replay button.
+    if (c.replay === false || c.replay_button === "hidden" || !this._rpOvs().length || RP_SKIP.has(this._overlay)) return "hidden";
     return c.replay_button === "bar" && dockShown ? "bar" : "layers";
   }
 
@@ -5893,7 +5894,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
    *  replay is picked beside Layers; the time is the pill on the plan (and on the thumb while it moves). */
   _rpRail(vert) {
     const rp = this._rpState();
-    const now = `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
+    const now = this._config.replay_now === false ? "" : `<button class="rpnow" data-rp="exit" title="${dfT("rp.back_now")}"><ha-icon icon="mdi:arrow-left"></ha-icon><span>${dfT("rp.now")}</span></button>`;
     const play = `<button class="rpplay" data-rp="play" aria-label="${rp.play ? dfT("rp.pause") : dfT("rp.play")}"><ha-icon icon="mdi:${rp.play ? "pause" : "play"}"></ha-icon></button>`;
     const pn = `<span class="rppn"><button data-rp="prev" aria-label="${dfT("rp.prev")}"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button data-rp="next" aria-label="${dfT("rp.next")}"><ha-icon icon="mdi:skip-next"></ha-icon></button></span>`;
     const speed = `<select class="rpspeed" aria-label="${dfT("rp.speed")}">${[60, 300, 900, 3600].map((v) => `<option value="${v}" ${v === rp.speed ? "selected" : ""}>${v}×</option>`).join("")}</select>`;
@@ -6374,6 +6375,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
   dfSetOverlay(ov) {
     if (!ov || ov === this._overlay || !this._config || !this._overlays().includes(ov)) return;
+    if (this._rp && RP_SKIP.has(ov)) {
+      this._rp.mode = false; // #101: Energy can't be replayed: back to Now, never a silent replay of Live
+      this._rpLive(false);
+    }
     this._overlay = ov;
     this._popup = null;
     this._menu = false;
@@ -6606,7 +6611,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
@@ -12543,10 +12548,22 @@ class DeviceFloorplanMobile extends HTMLElement {
     dfLangOf(hass);
     if (hass && hass.entities) dfcReg = hass.entities;
     this.toggleAttribute("dark", !!(hass.themes && hass.themes.darkMode));
-    const first = !this._hass;
+    const prev = this._hass;
     this._hass = hass;
-    if (first) this._loadBase();
-    for (const el of (this._plans || new Map()).values()) el.hass = hass;
+    if (!prev) this._loadBase();
+    // #102: only the plans on screen follow Home Assistant (a cached one gets it again when it is shown).
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) el.hass = hass;
+    // #102: no redraw when nothing the card shows has changed (the minute tick still refreshes everything).
+    if (prev && this._watch && prev.entities === hass.entities && prev.areas === hass.areas && prev.language === hass.language && prev.themes === hass.themes) {
+      let same = true;
+      for (const e of this._watch) {
+        if (prev.states[e] !== hass.states[e]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
     this._kick();
   }
 
@@ -12573,11 +12590,31 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     this._onScroll = this._onScroll || (() => {
       this._scrollAt = Date.now();
-      if (!this._wasLand) this._pY = window.scrollY || 0; // #92-2: the portrait page's place, kept for the way back
+      // #92-2: the portrait page's place, kept for the way back (not the jumps a turn of the phone causes, #102).
+      if (!this._wasLand && Date.now() - (this._rotAt || 0) > 1500 && this._land() === this._wasLand) this._pY = window.scrollY || 0;
     });
     window.addEventListener("scroll", this._onScroll, { passive: true, capture: true });
-    this._onRot = this._onRot || (() => this._kick(true));
+    // #102: a turn of the phone is drawn at once (not held back by the scroll guard) and checked again once the
+    // viewport has settled: real phones often report the new size only after the first resize event.
+    this._onRot = this._onRot || (() => {
+      const land = this._land();
+      if (land !== this._wasLand) {
+        this._rotAt = Date.now();
+        const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
+        if (host) {
+          host.classList.add("turning");
+          setTimeout(() => host.classList.remove("turning"), 1200); // never left hidden
+        }
+      }
+      this._kick(true);
+      clearTimeout(this._rotT);
+      this._rotT = setTimeout(() => this._land() !== this._wasLand && this._kick(true), 250);
+      clearTimeout(this._rotT2);
+      this._rotT2 = setTimeout(() => this._land() !== this._wasLand && this._kick(true), 700);
+    });
     window.addEventListener("resize", this._onRot);
+    if (!this._mq && window.matchMedia) this._mq = window.matchMedia("(orientation: landscape)");
+    if (this._mq && this._mq.addEventListener) this._mq.addEventListener("change", this._onRot);
     this._kick(true);
   }
 
@@ -12585,6 +12622,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     clearInterval(this._tick);
     this._tick = null;
     window.removeEventListener("resize", this._onRot);
+    if (this._mq && this._mq.removeEventListener) this._mq.removeEventListener("change", this._onRot);
+    clearTimeout(this._rotT);
+    clearTimeout(this._rotT2);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
     this._hideHdr(true);
     if (this._lay) this._lay.remove();
@@ -12636,6 +12676,16 @@ class DeviceFloorplanMobile extends HTMLElement {
     const rooms = [];
     const items = [];
     const seen = new Set();
+    // #102: a device's info (overlays it is in, what it shows) is kept while its states and the settings are the
+    // same; at most 30 s, so anything else it reads is never stale for long.
+    const ep = this._ep || {};
+    if (ep.b !== this._base || ep.e !== hass.entities || ep.ar !== hass.areas || ep.c !== this._config || ep.l !== hass.language) {
+      this._ep = { b: this._base, e: hass.entities, ar: hass.areas, c: this._config, l: hass.language };
+      this._ic = new Map();
+    }
+    const ic = this._ic;
+    const now = Date.now();
+    const watch = new Set(sens.map((s) => s.entity_id));
     for (const f of floors) {
       const order = Object.keys(f.a.areas || {});
       const byRoom = new Map(order.map((id) => [id, []]));
@@ -12645,6 +12695,16 @@ class DeviceFloorplanMobile extends HTMLElement {
         const key = item.id.startsWith("bond:") ? `${f.id}|${item.id}` : item.id;
         if (seen.has(key) && !item.x && !item.px) continue;
         seen.add(key);
+        const ents = [item.main_entity, ...(item.allEntities || item.entities || [])].filter(Boolean);
+        for (const e of ents) watch.add(e);
+        const refs = ents.map((e) => hass.states[e]);
+        const ck = `${f.id}|${item.id}`;
+        const hit = ic.get(ck);
+        if (hit && hit.a === f.a && now - hit.at < 30000 && hit.refs.length === refs.length && hit.refs.every((r, i) => r === refs[i])) {
+          items.push(hit.info);
+          if (hit.info.room) byRoom.get(hit.info.room).push(hit.info);
+          continue;
+        }
         const akind = h._applKind(item);
         const info = dfmInfo(hass, item, { comfort: h._dev(item.id).comfort === true, appl: !!akind });
         info.floor = f.id;
@@ -12673,6 +12733,7 @@ class DeviceFloorplanMobile extends HTMLElement {
         // #29: what the card shows in Lights is a light here too (a switch / plug used as a light).
         if (info.ovs.has("lights") && info.g !== "lights" && !h._applOf(item)) info.g = "lights";
         info.room = h._roomOf(item, f.a) || (item.area_id && byRoom.has(item.area_id) ? item.area_id : null);
+        ic.set(ck, { a: f.a, at: now, refs, info });
         items.push(info);
         if (info.room) byRoom.get(info.room).push(info);
       }
@@ -12698,7 +12759,13 @@ class DeviceFloorplanMobile extends HTMLElement {
     }
     // People: the main card's list, else every person.
     const ppl = this._peopleList();
+    const wx = Object.keys(hass.states).find((e) => e.startsWith("weather."));
+    if (wx) watch.add(wx);
+    if (hass.states["sun.sun"]) watch.add("sun.sun");
+    this._watch = watch;
     const people = ppl.map((p) => {
+      watch.add(p.entity);
+      for (const v of Object.values(p)) if (typeof v === "string" && /^[a-z_]+\.[a-z0-9_]+$/.test(v)) watch.add(v); // its room sensors etc.
       const st = hass.states[p.entity];
       let room = null;
       for (const f of floors) {
@@ -12802,19 +12869,30 @@ class DeviceFloorplanMobile extends HTMLElement {
     const l = this._config.layout;
     if (l === "landscape") return true;
     if (l === "portrait") return false;
-    return window.innerWidth > window.innerHeight && window.innerHeight <= 600;
+    // #102: the orientation from the media query (right at once on phones), a phone by its short side (true
+    // whichever way round the size is reported).
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const wide = this._mq ? this._mq.matches : w > h;
+    return wide && Math.min(w, h) <= 600;
   }
 
   _render() {
     if (!this._hass || !this.shadowRoot || !this.isConnected) return;
-    // #23: never while a finger is on the screen or the page is scrolling; right after.
-    if (this._ptr || Date.now() - (this._scrollAt || 0) < 450) {
+    // #23: never while a finger is on the screen or the page is scrolling; right after. #102: a turn of the
+    // phone is never held back (turning moves the page, which looks like scrolling).
+    const turning = this._land() !== this._wasLand;
+    if (!turning && (this._ptr || Date.now() - (this._scrollAt || 0) < 450)) {
       clearTimeout(this._t);
       this._t = setTimeout(() => this._render(), 300);
       return;
     }
     this._last = Date.now();
+    // #102: timing, to measure on a real phone: the card option "debug: true" or "?dfm_debug=1" in the address.
+    const dbg = this._config.debug === true || /[?&]dfm_debug=1/.test(location.search);
+    const t0 = dbg ? performance.now() : 0;
     const m = (this._m = this._model());
+    const t1 = dbg ? performance.now() : 0;
     const s = this._s;
     const root = this.shadowRoot;
     if (!root.querySelector("style#dfm")) root.innerHTML = `<style id="dfm">${DFM_CSS}</style><div class="dfm"></div>`;
@@ -12860,7 +12938,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
       this._scaleAll();
+      if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
+    if (dbg) console.info(`[device-floorplan-mobile] ${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms, draw ${(performance.now() - t1).toFixed(0)} ms, ${m.items.length} devices`);
   }
 
   /** #20: Home Assistant's top bar hidden on this dashboard, on phones, while the card is open (option). Only a
@@ -12918,7 +12998,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
@@ -13224,11 +13304,6 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       this._fmenu = !this._fmenu;
       return this._kick(true);
     }
-    if (a === "rp") {
-      const el = [...(this._plans || new Map()).values()].find((x) => x.isConnected && (x._dfmMode === "land" || x._dfmMode === "landroom"));
-      if (el && el._rpOpen) el._rpOpen(!(el._rp && el._rp.mode));
-      return this._kick(true);
-    }
     if (a === "step") return this._step(Number(v), t.dataset.z);
     if (a === "fstep") return this._step(Number(v), "floor");
     if (a === "more") return this._more(v);
@@ -13317,11 +13392,21 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const hd = this.shadowRoot && this.shadowRoot.querySelector(".hd.top");
     const h1 = hd && hd.querySelector(".h1");
     if (!h1 || !h1.clientWidth) return;
-    hd.classList.remove("tight"); // measured on every draw (the page redraw resets it), in the same frame: no flicker
+    // #102: measured only when the text or the space changed; otherwise the last result is put back (the redraw
+    // resets it) without measuring again.
+    const key = `${h1.textContent}|${hd.clientWidth}`;
+    const g = this._greetFit;
+    if (g && g.key === key) {
+      hd.style.setProperty("--dfm-greet", `${g.px}px`);
+      hd.classList.toggle("tight", g.tight);
+      return;
+    }
+    hd.classList.remove("tight"); // in the same frame: no flicker
     let px = 18;
     hd.style.setProperty("--dfm-greet", `${px}px`);
     while (h1.scrollWidth > h1.clientWidth + 1 && px > 13) hd.style.setProperty("--dfm-greet", `${--px}px`);
     if (h1.scrollWidth > h1.clientWidth + 1) hd.classList.add("tight");
+    this._greetFit = { key, px, tight: hd.classList.contains("tight") };
   },
 
   // ------------------------------------------------------------- shared pieces
@@ -14079,8 +14164,11 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const items = scope === "room" ? r.items : scope === "floor" ? m.items.filter((x) => x.floor === f.id) : m.items;
     const gone = this._hdrHidden ? "gone" : "";
     const menu = this._hdrOn ? `<button class="lmenu" data-a="menu" aria-label="${dfT("mob.menu")}"><ha-icon icon="mdi:menu"></ha-icon></button>` : "";
-    // #92-12: one pill naming where you are, ▾ lists the others (floors, or the floor's rooms).
-    const pick = (label, list, act) => (list.length > 1 ? `<div class="float sw pick">${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}<button class="fpill" data-a="fmenu"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "down" : "up"}"></ha-icon></button></div>` : "");
+    // #100: the title is the picker (▾ lists the floors, or the floor's rooms), in the top-left chip with ‹ back:
+    // one place to navigate (no second pill at the bottom).
+    const pick = (label, list, act) => (list.length > 1
+      ? `<button class="h1 tpick" data-a="fmenu" aria-expanded="${this._fmenu ? "true" : "false"}"><span>${cesc(label)}</span><ha-icon icon="mdi:chevron-${this._fmenu ? "up" : "down"}"></ha-icon></button>${this._fmenu ? `<div class="fmenu">${list.map(([v, n, on]) => `<button class="${on ? "on" : ""}" data-a="${act}" data-v="${cesc(v)}">${cesc(n)}</button>`).join("")}</div>` : ""}`
+      : `<div class="h1">${cesc(label)}</div>`);
     // #92-6: a one-time hint (gone after the first tap on the plan in landscape).
     const hint = scope !== "house" && !lsGet("dfm_hint_l") ? `<div class="float hint2">${dfT("mob.hint_land")}</div>` : "";
     let body = "";
@@ -14090,25 +14178,23 @@ Object.assign(DeviceFloorplanMobile.prototype, {
         <div class="float hint ${gone}">${dfT("mob.house_hint")}</div>`;
     } else if (scope === "floor") {
       body = `${this._slot(f.id, "live", "", "land", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}<div class="h1">${cesc(f.name)}</div><div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>
-        ${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}${hint}`;
+        <div class="float hdr chip ${gone}">${menu}<div>${multi ? `<button class="bk" data-a="back">‹ ${cesc(this._homeName())}</button>` : ""}${pick(f.name, m.floors.map((q) => [q.id, q.name, q.id === f.id]), "floor")}<div class="sub">${cesc(this._sum("live", items, true))}</div></div></div>${hint}`;
     } else {
       const rs = this._sortRooms(m.rooms.filter((q) => q.floor === f.id));
       body = `${this._slot(f.id, "live", r.id, "landroom", "lplan")}
-        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button><div class="h1">${cesc(r.name)}</div><div class="sub">${cesc(this._vals(r))}</div></div></div>
-        ${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}${hint}`;
+        <div class="float hdr chip ${gone}">${menu}<div><button class="bk" data-a="back">‹ ${cesc(f.name)}</button>${pick(r.name, rs.map((q) => [`${q.floor}|${q.id}`, q.name, q.id === r.id]), "room")}<div class="sub">${cesc(this._vals(r))}</div></div></div>${hint}`;
     }
     const zone = scope === "room" ? "room" : scope === "floor" ? "floor" : "";
     return `<div class="land"><div class="left full" ${zone ? `data-swipe="${zone}"` : ""}>${body}</div>${scope === "house" ? "" : this._railHtml(m, f)}</div>`;
   },
 
-  /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole, Home
-   *  Replay last; the mobile card's own element, so a state change never rebuilds it (its scroll stays). */
+  /** #93: the landscape overlay rail: the source card's overlays (its order), no background, labels whole (#101:
+   *  no Home Replay here, the plan's round Replay button is the one switch); the mobile card's own element, so a state change never rebuilds it (its scroll stays). */
   _railHtml(m, f) {
     const ovs = this._overlayList(f).filter((o) => o !== "plan");
     const cur = ovs.includes(this._lov) ? this._lov : ovs.includes("live") ? "live" : ovs[0];
     this._lov = cur;
-    return `<nav class="lrail" data-scroll="lrail">${ovs.map((o) => `<button class="lr ${o === cur ? "on" : ""}" data-a="lov" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "var(--dfm-acc)"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon><span>${cesc(this._ovLabel(o, f))}</span></button>`).join("")}<button class="lr rp" data-a="rp"><ha-icon icon="mdi:history"></ha-icon><span>${dfT("rp.name")}</span></button></nav>`;
+    return `<nav class="lrail" data-scroll="lrail">${ovs.map((o) => `<button class="lr ${o === cur ? "on" : ""}" data-a="lov" data-v="${cesc(o)}" style="--c:${DFM_OVC[o] || "var(--dfm-acc)"}"><ha-icon icon="${cesc(this._ovIcon(o, f))}"></ha-icon><span>${cesc(this._ovLabel(o, f))}</span></button>`).join("")}</nav>`;
   },
 
   /** #26: the House: all levels stacked on one footprint, one tilt for the whole building, sized to fit. */
@@ -14217,10 +14303,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .lr.on { color: var(--dfm-fg); }
 .lr.on ha-icon { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
 .lr:active ha-icon { background: color-mix(in srgb, var(--dfm-fg) 10%, transparent); }
-.lr.rp { margin-top: 6px; box-shadow: inset 0 1px 0 var(--dfm-div); border-radius: 0; padding-top: 10px; }
 /* #92-12: one place pill with its list */
-.float.sw.pick { display:flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; background: none; box-shadow: none; }
-.fpill { display:flex; align-items:center; gap: 6px; padding: 8px 12px 8px 16px; border-radius: 999px; background: color-mix(in srgb, var(--dfm-card) 85%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,.12); font-weight: 650; color: var(--dfm-fg); }
+.float.hdr .tpick { display:flex; align-items:center; gap: 2px; padding: 0; width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; color: var(--dfm-fg); font-weight: 700; line-height: 1.15; text-align: left; transition: font-size .3s; }
+.float.hdr .tpick ha-icon { --mdc-icon-size: 22px; color: var(--dfm-sub); flex: none; }
+.float.hdr .fmenu { margin: 6px 0 2px; }
 .fmenu { display:flex; flex-direction: column; min-width: 170px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-card) 94%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
 .fmenu button { text-align: left; padding: 9px 12px; border-radius: 10px; font-size: 14px; color: var(--dfm-fg); }
 .fmenu button.on { background: color-mix(in srgb, var(--dfm-acc) 14%, transparent); color: var(--dfm-acc); font-weight: 650; }
@@ -14413,9 +14499,14 @@ button.sw.on i { left: 21px; }
 .bd { flex: none; white-space: nowrap; }
 .float { position:absolute; z-index: 3; transition: opacity .5s; text-shadow: 0 1px 6px var(--dfm-bg), 0 0 2px var(--dfm-bg); }
 .float.gone { opacity: 0; pointer-events: none; }
+/* #102: while the phone turns, the old layout is not shown stretched (a very short fade). */
+.dfm { transition: opacity .12s; }
+.dfm.turning { opacity: 0; transition: none; }
 /* #92-11: in landscape the ‹ back stays; only the big title fades */
 .float.hdr.chip.gone { opacity: 1; pointer-events: auto; padding-bottom: 6px; }
-.float.hdr.chip.gone .h1, .float.hdr.chip.gone .sub { display: none; }
+/* #100: the title is the picker, so it stays; after a while it shrinks and only the sub line goes. */
+.float.hdr.chip.gone .h1 { font-size: 17px; }
+.float.hdr.chip.gone .sub { display: none; }
 .float.hdr { top: 10px; left: 16px; }
 /* #80: the title on a soft chip, readable on any plan */
 .float.hdr.chip { display:flex; align-items:flex-start; gap: 8px; padding: 6px 12px 7px; border-radius: 16px; background: color-mix(in srgb, var(--dfm-g1) 72%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,.12); text-shadow: none; max-width: 45%; }
@@ -14489,8 +14580,10 @@ if (!window.customCards.some((c) => c.type === "device-floorplan-mobile")) {
 
 /** Add dashboard → "Device Floorplan (mobile)": one panel view with the mobile card. */
 class DeviceFloorplanMobileStrategy extends HTMLElement {
-  static async generate() {
-    return { views: [{ title: dfT("mob.home"), path: "home", icon: "mdi:floor-plan", type: "panel", cards: [{ type: "custom:device-floorplan-mobile" }] }] };
+  static async generate(config = {}) {
+    // #98: the Editor's "Create a new mobile dashboard" stores the chosen Floorplan card as the strategy's source.
+    const card = { type: "custom:device-floorplan-mobile", ...(config.source ? { source: config.source } : {}) };
+    return { views: [{ title: dfT("mob.home"), path: "home", icon: "dfp:mobile", type: "panel", cards: [card] }] };
   }
 }
 if (!customElements.get("ll-strategy-dashboard-device-floorplan-mobile")) customElements.define("ll-strategy-dashboard-device-floorplan-mobile", DeviceFloorplanMobileStrategy);

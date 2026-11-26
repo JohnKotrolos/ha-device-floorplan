@@ -150,6 +150,76 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     }
   },
 
+  // ---------------------------------------------------------------- #98: ⋮ → Create a new (mobile) dashboard
+  /** The Floorplan cards on the user's dashboards, keyed as the mobile card's "Settings from" (same format). */
+  async _floorplanCards(dashboards) {
+    const out = [];
+    for (const bd of [{ url_path: null, title: "Overview" }, ...dashboards.filter((d) => d.url_path)]) {
+      const cfg = await this._hass.callWS({ type: "lovelace/config", ...(bd.url_path ? { url_path: bd.url_path } : {}) }).catch(() => null);
+      if (!cfg || !Array.isArray(cfg.views)) continue;
+      let n = 0;
+      cfg.views.forEach((v, vi) => {
+        const walk = (x) => {
+          if (!x || typeof x !== "object") return;
+          if (Array.isArray(x)) return x.forEach(walk);
+          if (x.type === "custom:device-floorplan-card") {
+            const id = x.card_id ? `id:${x.card_id}` : `n:${n}`;
+            n += 1;
+            const what = x.card_id || x.title || (Array.isArray(x.plans) ? x.plans.join(", ") : x.plan) || "Floorplan";
+            out.push({ key: `${bd.url_path || ""}|${id}`, label: `${bd.title || bd.url_path || "Overview"} › ${v.title || v.path || vi + 1} · ${what}` });
+            return;
+          }
+          for (const y of Object.values(x)) if (y && typeof y === "object") walk(y);
+        };
+        walk(v);
+      });
+    }
+    return out;
+  },
+
+  async _openNewDash(mobile) {
+    await this._flushSave();
+    const lang = String((this._hass && this._hass.language) || "en").slice(0, 2);
+    const name = mobile ? { el: "Κινητό", de: "Mobil" }[lang] || "Mobile" : "Floorplan";
+    this.s.menu = null;
+    this.s.dialog = { type: "newdash", mobile, name, icon: mobile ? "dfp:mobile" : "mdi:floor-plan", cards: null };
+    this._render();
+    const list = await this._hass.callWS({ type: "lovelace/dashboards/list" }).catch(() => []);
+    const d = this.s.dialog;
+    if (!d || d.type !== "newdash") return;
+    d.taken = new Set((list || []).map((x) => x.url_path));
+    d.cards = mobile ? await this._floorplanCards(list || []) : [];
+    this._render();
+  },
+
+  async _createDash() {
+    const d = this.s.dialog;
+    const root = this.shadowRoot;
+    const val = (id) => ((root.getElementById(id) || {}).value || "").trim();
+    const title = val("nd_name") || d.name;
+    const icon = val("nd_icon") || d.icon;
+    const source = d.mobile ? val("nd_src") : "";
+    const sidebar = !!(root.getElementById("nd_side") || {}).checked;
+    const slug = title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || (d.mobile ? "mobile" : "floorplan");
+    let urlPath = `floorplan-${slug}`.replace(/^floorplan-floorplan$/, "home-floorplan"); // HA wants a "-" in the address
+    for (let n = 2; d.taken && d.taken.has(urlPath); n++) urlPath = `floorplan-${slug}-${n}`;
+    const ids = this.plans.map((p) => p.id);
+    const card = { type: "custom:device-floorplan-card", ...(ids.length > 1 ? { plans: ids } : { plan: ids[0] }) };
+    const config = d.mobile
+      ? { strategy: { type: "custom:device-floorplan-mobile", ...(source ? { source } : {}) } }
+      : { views: [{ title, path: "floorplan", type: "panel", cards: [card] }] };
+    Object.assign(d, { busy: true, err: null });
+    this._render();
+    try {
+      await this._hass.callWS({ type: "lovelace/dashboards/create", url_path: urlPath, title, icon, mode: "storage", show_in_sidebar: sidebar, require_admin: false });
+      await this._hass.callWS({ type: "lovelace/config/save", url_path: urlPath, config });
+      this.s.dialog = { type: "newdone", mobile: d.mobile, title, path: `/${urlPath}/${d.mobile ? "home" : "floorplan"}` };
+    } catch (err) {
+      Object.assign(d, { busy: false, err: errText(err) });
+    }
+    this._render();
+  },
+
   // ---------------------------------------------------------------- export / import
   _planRows() {
     const plan = this._plan();

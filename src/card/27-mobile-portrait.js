@@ -12,11 +12,21 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     const hd = this.shadowRoot && this.shadowRoot.querySelector(".hd.top");
     const h1 = hd && hd.querySelector(".h1");
     if (!h1 || !h1.clientWidth) return;
-    hd.classList.remove("tight"); // measured on every draw (the page redraw resets it), in the same frame: no flicker
+    // #102: measured only when the text or the space changed; otherwise the last result is put back (the redraw
+    // resets it) without measuring again.
+    const key = `${h1.textContent}|${hd.clientWidth}`;
+    const g = this._greetFit;
+    if (g && g.key === key) {
+      hd.style.setProperty("--dfm-greet", `${g.px}px`);
+      hd.classList.toggle("tight", g.tight);
+      return;
+    }
+    hd.classList.remove("tight"); // in the same frame: no flicker
     let px = 18;
     hd.style.setProperty("--dfm-greet", `${px}px`);
     while (h1.scrollWidth > h1.clientWidth + 1 && px > 13) hd.style.setProperty("--dfm-greet", `${--px}px`);
     if (h1.scrollWidth > h1.clientWidth + 1) hd.classList.add("tight");
+    this._greetFit = { key, px, tight: hd.classList.contains("tight") };
   },
 
   // ------------------------------------------------------------- shared pieces

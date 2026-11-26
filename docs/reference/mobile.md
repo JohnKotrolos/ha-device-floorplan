@@ -8,7 +8,8 @@ New in 0.13.9.13 (dev builds), reworked in 0.13.9.14–0.13.9.16. The look and t
 
 ## Add it
 
-- **A dashboard of its own**: Settings → Dashboards → **Add dashboard** → **Device Floorplan (mobile)**. If your Home Assistant does not list it, add a new dashboard from scratch, open its raw configuration and use:
+- **The easy way**: in the Floorplan Editor, **⋮** → **Create a new mobile dashboard…**. Everything is filled in (name *Mobile*, the icon `dfp:mobile`, the Floorplan card whose settings it uses): press **Create** and it is in your sidebar. Then, in the Home Assistant app on your phone, choose it as the dashboard the app opens with (Settings → Companion app). **⋮** → **Create a new dashboard…** does the same for a desktop dashboard with all your floorplans.
+- **A dashboard of its own, by hand**: Settings → Dashboards → **Add dashboard** → **Device Floorplan (mobile)**; as its icon use `dfp:mobile`. If your Home Assistant does not list it, add a new dashboard from scratch, open its raw configuration and use:
   ```yaml
   strategy:
     type: custom:device-floorplan-mobile

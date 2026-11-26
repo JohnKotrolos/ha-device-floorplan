@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.19";
+const VERSION = "0.13.9.20";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -241,6 +241,8 @@ const SVG = {
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>',
   dash: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
   ha: '<svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
+  newdash: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v6M9 12h6"/></svg>',
+  phone: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M6.5 10H11V2.5M13 13h4.5"/></svg>',
 };
 
 /** Signed URLs for plan images (they are served only to logged-in users). */
@@ -1957,6 +1959,7 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         ${this.plans.length ? `<button data-act="guide" role="menuitem">${SVG.eye}${this.s.guide ? "Hide" : "Show"} step-by-step guide</button>` : ""}
         ${this.plans.length && this.setupDone ? `<button data-act="resetsetup" role="menuitem">${SVG.skip}Choose devices again…</button>` : ""}
         ${this.plans.length ? `<button data-act="aidlg" role="menuitem">${SVG.info}AI assistants: ${this.aiShare ? "on" : "off"}…</button>` : ""}
+        ${this.plans.length ? `<hr><button data-act="newdash" role="menuitem">${SVG.newdash}Create a new dashboard…</button><button data-act="newmob" role="menuitem">${SVG.phone}Create a new mobile dashboard…</button>` : ""}
         <hr><button disabled role="menuitem" style="font-size:12px">Device Floorplan v${VERSION}</button></div>`;
     }
     const p = this.plans.find((x) => x.id === m.id);
@@ -4718,6 +4721,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
     if (dlg.type === "ready") return wrap(this._readyHtml(), 580);
     if (dlg.type === "added") return wrap(this._addedHtml(), 520);
     if (dlg.type === "adddash") return wrap(this._addDashHtml(), 560);
+    if (dlg.type === "newdash") return wrap(this._newDashHtml(), 520);
+    if (dlg.type === "newdone") {
+      return wrap(`<h2 class="okttl">${SVG.okcircle}“${esc(dlg.title)}” is ready</h2>
+        <p>${dlg.mobile ? "Your mobile dashboard is in the sidebar. It shows your floorplans, rooms and devices, made for the phone." : "Your new dashboard is in the sidebar, with all your floorplans."} It updates by itself when you change things here.</p>
+        ${dlg.mobile ? `<p style="font-size:13px;opacity:.8">Tip: in the Home Assistant app on your phone, open Settings → Companion app and choose this dashboard as the one the app opens with.</p>` : ""}
+        <div class="acts"><button class="btn" data-act="closedlg">Close</button><button class="btn primary" data-act="opendash" data-path="${esc(dlg.path)}">Open dashboard</button></div>`, 520);
+    }
     if (dlg.type === "preview") {
       return `<div class="modal" data-act="modalbg"><div class="dialog" role="dialog" aria-modal="true" style="max-width:1000px;width:100%"><h2 class="okttl">Live view · ${esc(p.name)} <span class="live"><i></i>LIVE</span></h2>
         <p>This is your plan, live. Try it: tap a sensor or a light to open its details and controls. This is the default style; you can adjust what the card shows and how it looks in the card's settings.</p>
@@ -4783,6 +4793,24 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       <p>The ${esc(this._plan().name)} plan is now on your dashboard, in ${d.viewNew ? "a new view" : "the view"} <b>“${esc(d.view)}”</b>.${d.newDash ? ` A new dashboard <b>“${esc(d.title)}”</b> was added to your sidebar.` : ""}</p>
       <p>It updates by itself: when you add, move or remove devices here, the dashboard follows.</p>
       <div class="acts"><button class="btn" data-act="closedlg">Close</button><button class="btn primary" data-act="opendash" data-path="${esc(d.path)}">Open dashboard</button></div>`;
+  },
+
+  /** #98: the window behind ⋮ → Create a new (mobile) dashboard: everything pre-filled. */
+  _newDashHtml() {
+    const d = this.s.dialog;
+    const row = (lab, inner) => `<label style="display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px"><span style="opacity:.8">${lab}</span>${inner}</label>`;
+    const inp = (id, v) => `<input id="${id}" value="${esc(v)}" style="padding:8px 10px;border-radius:8px;border:1px solid var(--df-line, #ccc);font:inherit;background:transparent;color:inherit">`;
+    const src = d.cards == null
+      ? `<span style="opacity:.7">Looking for your Floorplan cards…</span>`
+      : `<select id="nd_src" style="padding:8px 10px;border-radius:8px;font:inherit"><option value="">${d.cards.length ? "The first Floorplan card found" : "The plan's own settings"}</option>${d.cards.map((c) => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join("")}</select>`;
+    return `<h2>${d.mobile ? "Create a new mobile dashboard" : "Create a new dashboard"}</h2>
+      <p style="margin-top:0">${d.mobile ? "A dashboard made for the phone, built from your floorplans. The floors come from the Floorplan card you pick below: its look, rooms and overlays." : "A new dashboard with one Floorplan card showing all your floorplans."}</p>
+      ${row("Name", inp("nd_name", d.name))}
+      ${row(`Icon <ha-icon icon="${esc(d.icon)}" style="--mdc-icon-size:18px;vertical-align:middle"></ha-icon>`, inp("nd_icon", d.icon))}
+      ${d.mobile ? row("Settings from", src) : ""}
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin:12px 0"><input type="checkbox" id="nd_side" checked> Show in sidebar</label>
+      ${d.err ? `<p style="color:var(--df-err, #c62828)">${esc(d.err)}</p>` : ""}
+      <div class="acts"><button class="btn" data-act="closedlg">Cancel</button><button class="btn primary" data-act="donewdash" ${d.busy || (d.mobile && d.cards == null) ? "disabled" : ""}>${d.busy ? "Creating…" : "Create"}</button></div>`;
   },
 
   _addDashHtml() {
@@ -5697,6 +5725,13 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       case "dlgback":
         s.dialog = s.dialog && s.dialog.from ? s.dialog.from : null;
         this._render();
+        break;
+      case "newdash":
+      case "newmob":
+        await this._openNewDash(act === "newmob");
+        break;
+      case "donewdash":
+        await this._createDash();
         break;
       case "doadddash":
         await this._addToDashboard();
@@ -8261,6 +8296,76 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       d.err = errText(err);
       this._render();
     }
+  },
+
+  // ---------------------------------------------------------------- #98: ⋮ → Create a new (mobile) dashboard
+  /** The Floorplan cards on the user's dashboards, keyed as the mobile card's "Settings from" (same format). */
+  async _floorplanCards(dashboards) {
+    const out = [];
+    for (const bd of [{ url_path: null, title: "Overview" }, ...dashboards.filter((d) => d.url_path)]) {
+      const cfg = await this._hass.callWS({ type: "lovelace/config", ...(bd.url_path ? { url_path: bd.url_path } : {}) }).catch(() => null);
+      if (!cfg || !Array.isArray(cfg.views)) continue;
+      let n = 0;
+      cfg.views.forEach((v, vi) => {
+        const walk = (x) => {
+          if (!x || typeof x !== "object") return;
+          if (Array.isArray(x)) return x.forEach(walk);
+          if (x.type === "custom:device-floorplan-card") {
+            const id = x.card_id ? `id:${x.card_id}` : `n:${n}`;
+            n += 1;
+            const what = x.card_id || x.title || (Array.isArray(x.plans) ? x.plans.join(", ") : x.plan) || "Floorplan";
+            out.push({ key: `${bd.url_path || ""}|${id}`, label: `${bd.title || bd.url_path || "Overview"} › ${v.title || v.path || vi + 1} · ${what}` });
+            return;
+          }
+          for (const y of Object.values(x)) if (y && typeof y === "object") walk(y);
+        };
+        walk(v);
+      });
+    }
+    return out;
+  },
+
+  async _openNewDash(mobile) {
+    await this._flushSave();
+    const lang = String((this._hass && this._hass.language) || "en").slice(0, 2);
+    const name = mobile ? { el: "Κινητό", de: "Mobil" }[lang] || "Mobile" : "Floorplan";
+    this.s.menu = null;
+    this.s.dialog = { type: "newdash", mobile, name, icon: mobile ? "dfp:mobile" : "mdi:floor-plan", cards: null };
+    this._render();
+    const list = await this._hass.callWS({ type: "lovelace/dashboards/list" }).catch(() => []);
+    const d = this.s.dialog;
+    if (!d || d.type !== "newdash") return;
+    d.taken = new Set((list || []).map((x) => x.url_path));
+    d.cards = mobile ? await this._floorplanCards(list || []) : [];
+    this._render();
+  },
+
+  async _createDash() {
+    const d = this.s.dialog;
+    const root = this.shadowRoot;
+    const val = (id) => ((root.getElementById(id) || {}).value || "").trim();
+    const title = val("nd_name") || d.name;
+    const icon = val("nd_icon") || d.icon;
+    const source = d.mobile ? val("nd_src") : "";
+    const sidebar = !!(root.getElementById("nd_side") || {}).checked;
+    const slug = title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || (d.mobile ? "mobile" : "floorplan");
+    let urlPath = `floorplan-${slug}`.replace(/^floorplan-floorplan$/, "home-floorplan"); // HA wants a "-" in the address
+    for (let n = 2; d.taken && d.taken.has(urlPath); n++) urlPath = `floorplan-${slug}-${n}`;
+    const ids = this.plans.map((p) => p.id);
+    const card = { type: "custom:device-floorplan-card", ...(ids.length > 1 ? { plans: ids } : { plan: ids[0] }) };
+    const config = d.mobile
+      ? { strategy: { type: "custom:device-floorplan-mobile", ...(source ? { source } : {}) } }
+      : { views: [{ title, path: "floorplan", type: "panel", cards: [card] }] };
+    Object.assign(d, { busy: true, err: null });
+    this._render();
+    try {
+      await this._hass.callWS({ type: "lovelace/dashboards/create", url_path: urlPath, title, icon, mode: "storage", show_in_sidebar: sidebar, require_admin: false });
+      await this._hass.callWS({ type: "lovelace/config/save", url_path: urlPath, config });
+      this.s.dialog = { type: "newdone", mobile: d.mobile, title, path: `/${urlPath}/${d.mobile ? "home" : "floorplan"}` };
+    } catch (err) {
+      Object.assign(d, { busy: false, err: errText(err) });
+    }
+    this._render();
   },
 
   // ---------------------------------------------------------------- export / import

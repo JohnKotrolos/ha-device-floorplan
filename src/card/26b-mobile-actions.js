@@ -252,11 +252,6 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       this._fmenu = !this._fmenu;
       return this._kick(true);
     }
-    if (a === "rp") {
-      const el = [...(this._plans || new Map()).values()].find((x) => x.isConnected && (x._dfmMode === "land" || x._dfmMode === "landroom"));
-      if (el && el._rpOpen) el._rpOpen(!(el._rp && el._rp.mode));
-      return this._kick(true);
-    }
     if (a === "step") return this._step(Number(v), t.dataset.z);
     if (a === "fstep") return this._step(Number(v), "floor");
     if (a === "more") return this._more(v);
