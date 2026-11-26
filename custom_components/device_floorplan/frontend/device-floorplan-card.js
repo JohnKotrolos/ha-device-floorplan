@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.20";
+const CARD_VERSION = "0.13.9.21";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -5618,7 +5618,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     rp.mode = on;
     rp.menu = false;
     if (this._rpPop) this._rpPop();
-    if (!this._dockShown) this._setLayer(this._overlay, "replay", on, false);
+    // #105: "replay_global" (the mobile card): Replay is one mode for every overlay, not a layer per overlay.
+    if (!this._dockShown && !this._config.replay_global) this._setLayer(this._overlay, "replay", on, false);
     if (on) this._rpLoad();
     this._update(true);
   },
@@ -6379,7 +6380,13 @@ Object.assign(DeviceFloorplanCard.prototype, {
       this._rp.mode = false; // #101: Energy can't be replayed: back to Now, never a silent replay of Live
       this._rpLive(false);
     }
+    // #105: in Replay another overlay is replayed at the same time (its history loaded after the redraw).
+    const rpKeep = this._rp && this._rp.mode && !RP_SKIP.has(ov);
     this._overlay = ov;
+    if (rpKeep) {
+      const seek = () => this._rp && this._rp.t != null && this._rpSeek(this._rp.t);
+      setTimeout(() => Promise.resolve(this._rp.loading).catch(() => {}).then(() => this._rpLoad()).then(seek), 0);
+    }
     this._popup = null;
     this._menu = false;
     this._update(true);
@@ -6611,7 +6618,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && this._layerOn(ov, "replay", false) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
@@ -12552,7 +12559,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     this._hass = hass;
     if (!prev) this._loadBase();
     // #102: only the plans on screen follow Home Assistant (a cached one gets it again when it is shown).
-    for (const el of (this._plans || new Map()).values()) if (el.isConnected) el.hass = hass;
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) this._feed(el);
     // #102: no redraw when nothing the card shows has changed (the minute tick still refreshes everything).
     if (prev && this._watch && prev.entities === hass.entities && prev.areas === hass.areas && prev.language === hass.language && prev.themes === hass.themes) {
       let same = true;
@@ -12565,6 +12572,21 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (same) return;
     }
     this._kick();
+  }
+
+  /** #103: Home Assistant's state for a plan. The Home page's small plan (only a way to pick a room) follows at
+   *  most every 5 s, always ending on the latest state; every other plan at once. force: now (a tap, a new page). */
+  _feed(el, force = false) {
+    const hass = this._hass;
+    if (!hass || el.hass === hass) return;
+    clearTimeout(el._dfmFeedT);
+    const wait = el._dfmMode === "mini" && !force ? 5000 - (Date.now() - (el._dfmFedAt || 0)) : 0;
+    if (wait > 0) {
+      el._dfmFeedT = setTimeout(() => this._feed(el, true), wait);
+      return;
+    }
+    el._dfmFedAt = Date.now();
+    el.hass = hass;
   }
 
   getCardSize() {
@@ -12594,6 +12616,9 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (!this._wasLand && Date.now() - (this._rotAt || 0) > 1500 && this._land() === this._wasLand) this._pY = window.scrollY || 0;
     });
     window.addEventListener("scroll", this._onScroll, { passive: true, capture: true });
+    this._onUp = this._onUp || (() => (this._ptr = null)); // #104: the finger is up wherever the event ends
+    window.addEventListener("pointerup", this._onUp, true);
+    window.addEventListener("pointercancel", this._onUp, true);
     // #102: a turn of the phone is drawn at once (not held back by the scroll guard) and checked again once the
     // viewport has settled: real phones often report the new size only after the first resize event.
     this._onRot = this._onRot || (() => {
@@ -12626,6 +12651,8 @@ class DeviceFloorplanMobile extends HTMLElement {
     clearTimeout(this._rotT);
     clearTimeout(this._rotT2);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
+    window.removeEventListener("pointerup", this._onUp, true);
+    window.removeEventListener("pointercancel", this._onUp, true);
     this._hideHdr(true);
     if (this._lay) this._lay.remove();
     clearTimeout(this._t);
@@ -12882,7 +12909,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #23: never while a finger is on the screen or the page is scrolling; right after. #102: a turn of the
     // phone is never held back (turning moves the page, which looks like scrolling).
     const turning = this._land() !== this._wasLand;
-    if (!turning && (this._ptr || Date.now() - (this._scrollAt || 0) < 450)) {
+    // A finger counts for at most 2 s: a lost pointerup (the plan's own drag code) never freezes the card (#104).
+    const finger = this._ptr && Date.now() - (this._ptrAt || 0) < 2000;
+    if (!turning && (finger || Date.now() - (this._scrollAt || 0) < 450)) {
       clearTimeout(this._t);
       this._t = setTimeout(() => this._render(), 300);
       return;
@@ -12940,7 +12969,23 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._scaleAll();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
-    if (dbg) console.info(`[device-floorplan-mobile] ${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms, draw ${(performance.now() - t1).toFixed(0)} ms, ${m.items.length} devices`);
+    if (dbg) this._dbg(`${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms · draw ${(performance.now() - t1).toFixed(0)} ms · ${m.items.length} devices`);
+  }
+
+  /** #102 / #106: timing on the screen itself (a phone has no console at hand) and in the console; last 4 lines. */
+  _dbg(line) {
+    if (!(this._config.debug === true || /[?&]dfm_debug=1/.test(location.search))) return;
+    console.info(`[device-floorplan-mobile] ${line}`);
+    const t = new Date();
+    this._dbgL = [...(this._dbgL || []).slice(-3), `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")} ${line}`];
+    let box = this.shadowRoot && this.shadowRoot.querySelector("#dfmdbg");
+    if (!box && this.shadowRoot) {
+      box = document.createElement("pre");
+      box.id = "dfmdbg";
+      box.style.cssText = "position:fixed;left:6px;bottom:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
+      this.shadowRoot.appendChild(box);
+    }
+    if (box) box.textContent = this._dbgL.join("\n");
   }
 
   /** #20: Home Assistant's top bar hidden on this dashboard, on phones, while the card is open (option). Only a
@@ -12998,7 +13043,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, replay_now: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
@@ -13012,8 +13057,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     el._dfmMode = mode;
     el._dfmFloor = plan;
     el._fitHost = land;
-    if (el.parentNode !== slot) slot.appendChild(el);
-    if (this._hass) el.hass = this._hass;
+    const fresh = el.parentNode !== slot;
+    if (fresh) slot.appendChild(el);
+    if (this._hass) this._feed(el, fresh); // #103: a plan just shown is up to date at once
     // Landscape: the overlay picked on the mobile card's rail (#93).
     const want = land ? this._lov || ov : ov;
     if (el.dfSetOverlay && el._dfmOv !== want) el.dfSetOverlay(want);
@@ -13102,6 +13148,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   /** One-finger swipe anywhere on a swipe area (#28): next / previous room or floor. */
   _pdown(e) {
     this._ptr = true;
+    this._ptrAt = Date.now();
     this._touched();
     const path = e.composedPath();
     // #79 / #83: the card's overlay rail, Home Replay's bar and its popups never swipe floors or rooms.
@@ -13185,6 +13232,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   },
 
   _touched() {
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) this._feed(el, true); // #103: a tap: all up to date
     if (!this._land()) return;
     const was = this._hdrHidden;
     this._hdrShow = Date.now();
@@ -13296,9 +13344,17 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       return;
     }
     if (a === "lov") {
+      // #104: the tapped overlay is shown as chosen at once; the plan's own redraw (the heavy part) comes right
+      // after that is on the screen.
       this._lov = v;
-      for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
-      return this._kick(true);
+      for (const b of this.shadowRoot.querySelectorAll(".lrail .lr")) b.classList.toggle("on", b.dataset.v === v);
+      requestAnimationFrame(() => setTimeout(() => {
+        const t0 = performance.now();
+        for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
+        this._dbg(`plan → ${v}: ${(performance.now() - t0).toFixed(0)} ms`);
+        this._kick(true);
+      }, 0));
+      return;
     }
     if (a === "fmenu") {
       this._fmenu = !this._fmenu;
@@ -14581,11 +14637,44 @@ if (!window.customCards.some((c) => c.type === "device-floorplan-mobile")) {
 /** Add dashboard → "Device Floorplan (mobile)": one panel view with the mobile card. */
 class DeviceFloorplanMobileStrategy extends HTMLElement {
   static async generate(config = {}) {
-    // #98: the Editor's "Create a new mobile dashboard" stores the chosen Floorplan card as the strategy's source.
-    const card = { type: "custom:device-floorplan-mobile", ...(config.source ? { source: config.source } : {}) };
+    // #98 / #106: the dashboard's settings (Edit dashboard, or the Editor's "Create a new mobile dashboard") are
+    // the card's settings.
+    const card = { ...(config || {}), type: "custom:device-floorplan-mobile" };
     return { views: [{ title: dfT("mob.home"), path: "home", icon: "dfp:mobile", type: "panel", cards: [card] }] };
   }
 }
+/** #106: Edit dashboard → the mobile card's settings (the same form as its card editor), as Dwains does. */
+class DeviceFloorplanMobileStrategyEditor extends HTMLElement {
+  set hass(h) {
+    this._hass = h;
+    if (this._form) this._form.hass = h;
+    else this._build();
+  }
+
+  setConfig(config) {
+    this._cfg = { ...(config || {}) };
+    if (this._form) this._form.data = this._cfg;
+    else this._build();
+  }
+
+  async _build() {
+    if (this._busy || !this._hass || !this._cfg) return;
+    this._busy = true;
+    const f = await DeviceFloorplanMobile.getConfigForm();
+    const form = document.createElement("ha-form");
+    Object.assign(form, { hass: this._hass, schema: f.schema, data: this._cfg, computeLabel: f.computeLabel, computeHelper: f.computeHelper });
+    form.addEventListener("value-changed", (e) => {
+      e.stopPropagation();
+      this._cfg = { ...e.detail.value, type: this._cfg.type || "custom:device-floorplan-mobile" };
+      form.data = this._cfg;
+      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._cfg }, bubbles: true, composed: true }));
+    });
+    this.appendChild(form);
+    this._form = form;
+  }
+}
+if (!customElements.get("device-floorplan-mobile-strategy-editor")) customElements.define("device-floorplan-mobile-strategy-editor", DeviceFloorplanMobileStrategyEditor);
+DeviceFloorplanMobileStrategy.getConfigElement = async () => document.createElement("device-floorplan-mobile-strategy-editor");
 if (!customElements.get("ll-strategy-dashboard-device-floorplan-mobile")) customElements.define("ll-strategy-dashboard-device-floorplan-mobile", DeviceFloorplanMobileStrategy);
 window.customStrategies = window.customStrategies || [];
 if (!window.customStrategies.some((c) => c.type === "device-floorplan-mobile")) {

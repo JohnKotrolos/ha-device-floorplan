@@ -16,6 +16,8 @@ New in 0.13.9.13 (dev builds), reworked in 0.13.9.14–0.13.9.16. The look and t
   ```
 - **Or as a card** (best in a *Panel* view): **Add card** → **Device Floorplan (mobile)**.
 
+**Settings**: on the mobile dashboard, **Edit dashboard** opens them (Settings from, Layout, Room order, Home sections, Household, Hide the top bar); on the card, its card editor. `debug: true` (raw configuration) shows how long each step takes, on the screen and in the browser console.
+
 **Floors**: the plans you gave a **level** in the Floorplan Editor (plans without a level are views and stay out); to choose others, list them in `plans`. **People**: everyone in Home Assistant; where they are comes from your Floorplan card's people settings.
 
 It takes its people settings, room names, look and **overlay settings** from the first Floorplan card on your dashboards, so it shows exactly what your main card shows: a device you hid from an overlay there is hidden here too, and the room groups follow the categories you gave your devices in the Floorplan Editor. The mobile card has no overlay settings of its own: change them once in the main card. Turn **Use the settings of my Floorplan card** off to use the defaults.

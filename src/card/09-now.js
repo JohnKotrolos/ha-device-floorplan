@@ -353,7 +353,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
     rp.mode = on;
     rp.menu = false;
     if (this._rpPop) this._rpPop();
-    if (!this._dockShown) this._setLayer(this._overlay, "replay", on, false);
+    // #105: "replay_global" (the mobile card): Replay is one mode for every overlay, not a layer per overlay.
+    if (!this._dockShown && !this._config.replay_global) this._setLayer(this._overlay, "replay", on, false);
     if (on) this._rpLoad();
     this._update(true);
   },

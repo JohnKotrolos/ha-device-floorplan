@@ -340,11 +340,44 @@ if (!window.customCards.some((c) => c.type === "device-floorplan-mobile")) {
 /** Add dashboard → "Device Floorplan (mobile)": one panel view with the mobile card. */
 class DeviceFloorplanMobileStrategy extends HTMLElement {
   static async generate(config = {}) {
-    // #98: the Editor's "Create a new mobile dashboard" stores the chosen Floorplan card as the strategy's source.
-    const card = { type: "custom:device-floorplan-mobile", ...(config.source ? { source: config.source } : {}) };
+    // #98 / #106: the dashboard's settings (Edit dashboard, or the Editor's "Create a new mobile dashboard") are
+    // the card's settings.
+    const card = { ...(config || {}), type: "custom:device-floorplan-mobile" };
     return { views: [{ title: dfT("mob.home"), path: "home", icon: "dfp:mobile", type: "panel", cards: [card] }] };
   }
 }
+/** #106: Edit dashboard → the mobile card's settings (the same form as its card editor), as Dwains does. */
+class DeviceFloorplanMobileStrategyEditor extends HTMLElement {
+  set hass(h) {
+    this._hass = h;
+    if (this._form) this._form.hass = h;
+    else this._build();
+  }
+
+  setConfig(config) {
+    this._cfg = { ...(config || {}) };
+    if (this._form) this._form.data = this._cfg;
+    else this._build();
+  }
+
+  async _build() {
+    if (this._busy || !this._hass || !this._cfg) return;
+    this._busy = true;
+    const f = await DeviceFloorplanMobile.getConfigForm();
+    const form = document.createElement("ha-form");
+    Object.assign(form, { hass: this._hass, schema: f.schema, data: this._cfg, computeLabel: f.computeLabel, computeHelper: f.computeHelper });
+    form.addEventListener("value-changed", (e) => {
+      e.stopPropagation();
+      this._cfg = { ...e.detail.value, type: this._cfg.type || "custom:device-floorplan-mobile" };
+      form.data = this._cfg;
+      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._cfg }, bubbles: true, composed: true }));
+    });
+    this.appendChild(form);
+    this._form = form;
+  }
+}
+if (!customElements.get("device-floorplan-mobile-strategy-editor")) customElements.define("device-floorplan-mobile-strategy-editor", DeviceFloorplanMobileStrategyEditor);
+DeviceFloorplanMobileStrategy.getConfigElement = async () => document.createElement("device-floorplan-mobile-strategy-editor");
 if (!customElements.get("ll-strategy-dashboard-device-floorplan-mobile")) customElements.define("ll-strategy-dashboard-device-floorplan-mobile", DeviceFloorplanMobileStrategy);
 window.customStrategies = window.customStrategies || [];
 if (!window.customStrategies.some((c) => c.type === "device-floorplan-mobile")) {

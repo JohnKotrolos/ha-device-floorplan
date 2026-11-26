@@ -50,6 +50,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   /** One-finger swipe anywhere on a swipe area (#28): next / previous room or floor. */
   _pdown(e) {
     this._ptr = true;
+    this._ptrAt = Date.now();
     this._touched();
     const path = e.composedPath();
     // #79 / #83: the card's overlay rail, Home Replay's bar and its popups never swipe floors or rooms.
@@ -133,6 +134,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   },
 
   _touched() {
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) this._feed(el, true); // #103: a tap: all up to date
     if (!this._land()) return;
     const was = this._hdrHidden;
     this._hdrShow = Date.now();
@@ -244,9 +246,17 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       return;
     }
     if (a === "lov") {
+      // #104: the tapped overlay is shown as chosen at once; the plan's own redraw (the heavy part) comes right
+      // after that is on the screen.
       this._lov = v;
-      for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
-      return this._kick(true);
+      for (const b of this.shadowRoot.querySelectorAll(".lrail .lr")) b.classList.toggle("on", b.dataset.v === v);
+      requestAnimationFrame(() => setTimeout(() => {
+        const t0 = performance.now();
+        for (const el of (this._plans || new Map()).values()) if (el.isConnected && (el._dfmMode === "land" || el._dfmMode === "landroom") && el.dfSetOverlay) el.dfSetOverlay(v);
+        this._dbg(`plan → ${v}: ${(performance.now() - t0).toFixed(0)} ms`);
+        this._kick(true);
+      }, 0));
+      return;
     }
     if (a === "fmenu") {
       this._fmenu = !this._fmenu;

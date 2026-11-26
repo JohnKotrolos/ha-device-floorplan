@@ -275,7 +275,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     this._hass = hass;
     if (!prev) this._loadBase();
     // #102: only the plans on screen follow Home Assistant (a cached one gets it again when it is shown).
-    for (const el of (this._plans || new Map()).values()) if (el.isConnected) el.hass = hass;
+    for (const el of (this._plans || new Map()).values()) if (el.isConnected) this._feed(el);
     // #102: no redraw when nothing the card shows has changed (the minute tick still refreshes everything).
     if (prev && this._watch && prev.entities === hass.entities && prev.areas === hass.areas && prev.language === hass.language && prev.themes === hass.themes) {
       let same = true;
@@ -288,6 +288,21 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (same) return;
     }
     this._kick();
+  }
+
+  /** #103: Home Assistant's state for a plan. The Home page's small plan (only a way to pick a room) follows at
+   *  most every 5 s, always ending on the latest state; every other plan at once. force: now (a tap, a new page). */
+  _feed(el, force = false) {
+    const hass = this._hass;
+    if (!hass || el.hass === hass) return;
+    clearTimeout(el._dfmFeedT);
+    const wait = el._dfmMode === "mini" && !force ? 5000 - (Date.now() - (el._dfmFedAt || 0)) : 0;
+    if (wait > 0) {
+      el._dfmFeedT = setTimeout(() => this._feed(el, true), wait);
+      return;
+    }
+    el._dfmFedAt = Date.now();
+    el.hass = hass;
   }
 
   getCardSize() {
@@ -317,6 +332,9 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (!this._wasLand && Date.now() - (this._rotAt || 0) > 1500 && this._land() === this._wasLand) this._pY = window.scrollY || 0;
     });
     window.addEventListener("scroll", this._onScroll, { passive: true, capture: true });
+    this._onUp = this._onUp || (() => (this._ptr = null)); // #104: the finger is up wherever the event ends
+    window.addEventListener("pointerup", this._onUp, true);
+    window.addEventListener("pointercancel", this._onUp, true);
     // #102: a turn of the phone is drawn at once (not held back by the scroll guard) and checked again once the
     // viewport has settled: real phones often report the new size only after the first resize event.
     this._onRot = this._onRot || (() => {
@@ -349,6 +367,8 @@ class DeviceFloorplanMobile extends HTMLElement {
     clearTimeout(this._rotT);
     clearTimeout(this._rotT2);
     window.removeEventListener("scroll", this._onScroll, { capture: true });
+    window.removeEventListener("pointerup", this._onUp, true);
+    window.removeEventListener("pointercancel", this._onUp, true);
     this._hideHdr(true);
     if (this._lay) this._lay.remove();
     clearTimeout(this._t);
@@ -605,7 +625,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     // #23: never while a finger is on the screen or the page is scrolling; right after. #102: a turn of the
     // phone is never held back (turning moves the page, which looks like scrolling).
     const turning = this._land() !== this._wasLand;
-    if (!turning && (this._ptr || Date.now() - (this._scrollAt || 0) < 450)) {
+    // A finger counts for at most 2 s: a lost pointerup (the plan's own drag code) never freezes the card (#104).
+    const finger = this._ptr && Date.now() - (this._ptrAt || 0) < 2000;
+    if (!turning && (finger || Date.now() - (this._scrollAt || 0) < 450)) {
       clearTimeout(this._t);
       this._t = setTimeout(() => this._render(), 300);
       return;
@@ -663,7 +685,23 @@ class DeviceFloorplanMobile extends HTMLElement {
       this._scaleAll();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
-    if (dbg) console.info(`[device-floorplan-mobile] ${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms, draw ${(performance.now() - t1).toFixed(0)} ms, ${m.items.length} devices`);
+    if (dbg) this._dbg(`${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms · draw ${(performance.now() - t1).toFixed(0)} ms · ${m.items.length} devices`);
+  }
+
+  /** #102 / #106: timing on the screen itself (a phone has no console at hand) and in the console; last 4 lines. */
+  _dbg(line) {
+    if (!(this._config.debug === true || /[?&]dfm_debug=1/.test(location.search))) return;
+    console.info(`[device-floorplan-mobile] ${line}`);
+    const t = new Date();
+    this._dbgL = [...(this._dbgL || []).slice(-3), `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")} ${line}`];
+    let box = this.shadowRoot && this.shadowRoot.querySelector("#dfmdbg");
+    if (!box && this.shadowRoot) {
+      box = document.createElement("pre");
+      box.id = "dfmdbg";
+      box.style.cssText = "position:fixed;left:6px;bottom:6px;z-index:20;margin:0;padding:6px 8px;max-width:92vw;white-space:pre-wrap;font:11px/1.35 monospace;color:#fff;background:rgba(0,0,0,.72);border-radius:8px;pointer-events:none";
+      this.shadowRoot.appendChild(box);
+    }
+    if (box) box.textContent = this._dbgL.join("\n");
   }
 
   /** #20: Home Assistant's top bar hidden on this dashboard, on phones, while the card is open (option). Only a
@@ -721,7 +759,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       // card's settings, nor one of its plans another. #83: landscape = the card with its overlay rail and Replay.
       ...b, plans: undefined, card_id: `dfm-${mode}`, type: "custom:device-floorplan-card", plan,
       buttons: { position: "hidden" }, layers_button: full ? "top-right" : "hidden",
-      replay: full || land ? undefined : false, replay_button: false, replay_now: false, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
+      replay: full || land ? undefined : false, replay_button: false, replay_now: false, replay_global: true, hide_admin_hint: true, remember_floor: false, default_overlay: ov,
       people_row: false, frame: { mode: "custom", t: 0, r: 0, b: 0, l: 0 },
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(mode), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
@@ -735,8 +773,9 @@ class DeviceFloorplanMobile extends HTMLElement {
     el._dfmMode = mode;
     el._dfmFloor = plan;
     el._fitHost = land;
-    if (el.parentNode !== slot) slot.appendChild(el);
-    if (this._hass) el.hass = this._hass;
+    const fresh = el.parentNode !== slot;
+    if (fresh) slot.appendChild(el);
+    if (this._hass) this._feed(el, fresh); // #103: a plan just shown is up to date at once
     // Landscape: the overlay picked on the mobile card's rail (#93).
     const want = land ? this._lov || ov : ov;
     if (el.dfSetOverlay && el._dfmOv !== want) el.dfSetOverlay(want);
