@@ -91,6 +91,7 @@ h2 .scope { font-size: 12px; font-weight: 500; color: var(--dfm-sub); margin-lef
 .adot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
 .adot.a0 { background: #4caf50; } .adot.a1 { background: var(--dfm-amber); } .adot.a2 { background: var(--dfm-red); }
 .cut { position: relative; margin: 6px -14px 0; }
+.cut .plan:empty { height: 33vh; background: color-mix(in srgb, var(--dfm-sub) 8%, transparent); } /* #110: until the plan is in */
 .cut .plan { --dfc-fit-h: 33vh; margin: 0; --dfc-focus-dim: var(--dfm-g2); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 45%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--dfm-fg); opacity: .7; }
 .nav.l { left: 8px; } .nav.r { right: 8px; }

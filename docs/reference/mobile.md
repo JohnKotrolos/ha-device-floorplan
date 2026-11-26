@@ -47,6 +47,7 @@ Turn the phone sideways. The plan fills the screen; the overlays are on the righ
 - **Top left, beside the plan** (the Floorplan card's floor-rail look): ☰ (Home Assistant's menu, when its top bar is hidden), one button per floor by its level (2, 1, 0…), and **⌂ Home**: the building, all levels stacked (when there are several levels). Swipe on the plan for the next floor.
 - **The plan**: the whole floor. Tap a device to use it. Tap an empty spot of a room to **choose** it: the room is outlined and its label on the plan shows its name and values; tap the room again or outside any room to clear it.
 - **Right side**: the overlays (they set what the plan shows) and Home Replay on the plan's round button.
+- **Under the floors**: the tools of the overlay you are in, as round buttons, so the plan keeps the whole height: Lights: All off, All on and your scenes; Network: Zigbee, Wi-Fi, Bluetooth and Matter (tap to show or hide, several at once; Zigbee to start with); Cleaning: Start and your actions. **ⓘ** opens the overlay's legend and its slider.
 
 Turning the phone keeps the place: a room page becomes its floor with that room chosen; a chosen room becomes its room page when you turn back; a floor stays that floor; Home stays Home. The room view itself is the portrait room page.
 

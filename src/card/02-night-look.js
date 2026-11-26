@@ -750,6 +750,20 @@ const CARD_CSS = `
 :host { display:block; --dfc-size: 34px; --dfc-accent: var(--primary-color, #03a9f4); }
 * { box-sizing: border-box; }
 ha-card { position:relative; overflow:hidden; height:100%; display:flex; flex-direction:column; }
+/* #111: "tools: side" (the mobile card in landscape): the overlay's controls as one icon column in the strip left of
+   the plan (under the floors), its legends in a popover; nothing under the plan. */
+ha-card.tsd { overflow: visible; }
+.tside { position:absolute; left: var(--dfc-tools-left, -48px); top: var(--dfc-tools-top, 120px); width:36px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:4px; padding:3px 0; border-radius:18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow:0 2px 10px rgba(0,0,0,.2); z-index:6; max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow-y:auto; scrollbar-width:none; }
+.tside::-webkit-scrollbar { display:none; }
+.tside .bar { display: contents; }
+ha-card.tsd .tside button { width:30px; height:30px; min-height:0; border-radius:50%; border:1px solid var(--divider-color, rgba(0,0,0,.12)); background: var(--card-background-color, #fff); color: var(--primary-text-color); font-size:0; padding:0; margin:0; display:flex; align-items:center; justify-content:center; gap:0; --mdc-icon-size:18px; flex:none; position:relative; cursor:pointer; box-shadow:none; }
+ha-card.tsd .tside button.on { background: var(--dfc-accent, var(--primary-color, #03a9f4)); border-color: var(--dfc-accent, var(--primary-color, #03a9f4)); color:#fff; }
+.tside button.on ha-icon { color:#fff !important; }
+.tside button.tg:not(.on) { color: var(--secondary-text-color); }
+.tside button.ok { color:#43a047; cursor:default; }
+.tside .obadge, .tside .odot { position:absolute; top:-3px; right:-3px; font-size:10px; }
+.tinfo { position:absolute; left: 2px; top: var(--dfc-tools-top, 120px); z-index:7; max-width: min(80%, 620px); max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow:auto; box-sizing:border-box; padding:10px 12px; border-radius:14px; background: var(--card-background-color, #fff); box-shadow: 0 6px 24px rgba(0,0,0,.22); }
+.tinfo .heatleg, .tinfo .netleg, .tinfo .leg { margin:0; flex-wrap:wrap; }
 ha-card.dock-top { flex-direction: column-reverse; }
 ha-card.dock-left { flex-direction: row-reverse; }
 ha-card.dock-right { flex-direction: row; }

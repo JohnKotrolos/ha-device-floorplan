@@ -57,10 +57,12 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _pdown(e) {
     this._ptr = true;
     this._ptrAt = Date.now();
+    this._tapAt = performance.now(); // #110: timing from the finger
     this._touched();
     const path = e.composedPath();
     // #79 / #83: the card's overlay rail, Home Replay's bar and its popups never swipe floors or rooms.
-    const ctl = path.some((n) => n && n.classList && ["dockrow", "dock", "rprail", "rpbar", "rptrack", "layers", "pop", "lmenu", "ovbar"].some((c) => n.classList.contains(c)));
+    // #112: nor any control: a slider, a legend, the side tools and their popover, the navigation.
+    const ctl = path.some((n) => n && ((n.classList && ["dockrow", "dock", "rprail", "rpbar", "rptrack", "layers", "pop", "lmenu", "ovbar", "heatleg", "bar", "tside", "tinfo", "lnav", "lrail"].some((c) => n.classList.contains(c))) || ["INPUT", "SELECT", "TEXTAREA"].includes(n.tagName)));
     const z = ctl ? null : path.find((n) => n && n.dataset && n.dataset.swipe);
     this._sw = z ? { x: e.clientX, y: e.clientY, t: Date.now(), zone: z.dataset.swipe } : null;
   },

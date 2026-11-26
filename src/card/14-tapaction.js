@@ -124,6 +124,22 @@ Object.assign(DeviceFloorplanCard.prototype, {
       this._fopen = false;
       return this._update(true);
     }
+    if (t.closest("[data-tinfo]")) {
+      this._tinfo = !this._tinfo; // #111: the legends of the side tools
+      return this._update(true);
+    }
+    const scn = t.closest("[data-sconn]");
+    if (scn) {
+      // #113: side tools: a connection on / off, starting from what is shown; at least one stays.
+      const cur = new Set(this._netShow());
+      const v = scn.dataset.sconn;
+      if (cur.has(v)) {
+        if (cur.size > 1) cur.delete(v);
+      } else cur.add(v);
+      this._net = { ...this._net, conns: CONN_ORDER.filter((c) => cur.has(c)) };
+      this._saveNet();
+      return this._update(true);
+    }
     const cn = t.closest("[data-conn]");
     if (cn) {
       const v = cn.dataset.conn;

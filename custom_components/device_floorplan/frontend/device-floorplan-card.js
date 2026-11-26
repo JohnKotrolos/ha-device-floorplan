@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.23";
+const CARD_VERSION = "0.13.9.24";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -1330,6 +1330,20 @@ const CARD_CSS = `
 :host { display:block; --dfc-size: 34px; --dfc-accent: var(--primary-color, #03a9f4); }
 * { box-sizing: border-box; }
 ha-card { position:relative; overflow:hidden; height:100%; display:flex; flex-direction:column; }
+/* #111: "tools: side" (the mobile card in landscape): the overlay's controls as one icon column in the strip left of
+   the plan (under the floors), its legends in a popover; nothing under the plan. */
+ha-card.tsd { overflow: visible; }
+.tside { position:absolute; left: var(--dfc-tools-left, -48px); top: var(--dfc-tools-top, 120px); width:36px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; gap:4px; padding:3px 0; border-radius:18px; background: color-mix(in srgb, var(--secondary-background-color, #eee) 92%, transparent); box-shadow:0 2px 10px rgba(0,0,0,.2); z-index:6; max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow-y:auto; scrollbar-width:none; }
+.tside::-webkit-scrollbar { display:none; }
+.tside .bar { display: contents; }
+ha-card.tsd .tside button { width:30px; height:30px; min-height:0; border-radius:50%; border:1px solid var(--divider-color, rgba(0,0,0,.12)); background: var(--card-background-color, #fff); color: var(--primary-text-color); font-size:0; padding:0; margin:0; display:flex; align-items:center; justify-content:center; gap:0; --mdc-icon-size:18px; flex:none; position:relative; cursor:pointer; box-shadow:none; }
+ha-card.tsd .tside button.on { background: var(--dfc-accent, var(--primary-color, #03a9f4)); border-color: var(--dfc-accent, var(--primary-color, #03a9f4)); color:#fff; }
+.tside button.on ha-icon { color:#fff !important; }
+.tside button.tg:not(.on) { color: var(--secondary-text-color); }
+.tside button.ok { color:#43a047; cursor:default; }
+.tside .obadge, .tside .odot { position:absolute; top:-3px; right:-3px; font-size:10px; }
+.tinfo { position:absolute; left: 2px; top: var(--dfc-tools-top, 120px); z-index:7; max-width: min(80%, 620px); max-height: calc(100% - var(--dfc-tools-top, 120px) - 6px); overflow:auto; box-sizing:border-box; padding:10px 12px; border-radius:14px; background: var(--card-background-color, #fff); box-shadow: 0 6px 24px rgba(0,0,0,.22); }
+.tinfo .heatleg, .tinfo .netleg, .tinfo .leg { margin:0; flex-wrap:wrap; }
 ha-card.dock-top { flex-direction: column-reverse; }
 ha-card.dock-left { flex-direction: row-reverse; }
 ha-card.dock-right { flex-direction: row; }
@@ -6378,6 +6392,39 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
+  /** What an overlay adds under the plan (scenes, actions, legends, Replay). #111: with "tools: side" (the mobile
+   *  card in landscape) the controls become one icon column beside the plan and the legends open from its ⓘ, so
+   *  the plan keeps the whole height; only the Replay bar stays under it. */
+  _belowHtml(ov, specs, dockShown, layersInBar) {
+    const scenes = ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : "";
+    const acts = this._ovActsHtml(ov);
+    const rp = !dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : "";
+    const secOk = ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all"));
+    const legends = () => `${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}`;
+    if (this._config.tools !== "side") {
+      return `${scenes}${acts}${legends()}${rp}${secOk ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}`;
+    }
+    // #113: Network: the four connections as toggles (several at once); the legend in ⓘ.
+    let net = "";
+    let info = legends();
+    if (ov === "network") {
+      const shown = this._netShow();
+      net = ["zigbee", "network", "bluetooth", "matter"].map((cn) => `<button class="tg ${shown.includes(cn) ? "on" : ""}" data-sconn="${cn}" aria-pressed="${shown.includes(cn)}"><ha-icon icon="${CONNS[cn].icon}"></ha-icon>${cesc(CONNS[cn].label)}</button>`).join("");
+      const was = this._net.legend;
+      this._net.legend = true;
+      try {
+        info += this._legendHtml(specs, false);
+      } finally {
+        this._net.legend = was;
+      }
+    }
+    const sec = secOk ? `<button class="ok" disabled><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</button>` : "";
+    const hasInfo = /\S/.test(info.replace(/<[^>]*>/g, ""));
+    const tools = `${scenes}${acts}${net}${sec}${hasInfo ? `<button class="ti ${this._tinfo ? "on" : ""}" data-tinfo="1" aria-expanded="${!!this._tinfo}"><ha-icon icon="mdi:information-outline"></ha-icon>${dfT("net.legend")}</button>` : ""}`;
+    const pop = hasInfo && this._tinfo ? `<div class="tinfo">${info}</div>` : "";
+    return `${/<button/.test(tools) ? `<div class="tside">${tools}</div>${pop}` : ""}${rp}`;
+  },
+
   /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
   dfOutlineRoom(id, txt = "") {
     if ((this._olRoom || null) === (id || null) && (this._olTxt || "") === txt) return;
@@ -6628,7 +6675,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
     const boxCls = `${this._rpT() != null ? "rpon" : ""} ${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
     const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
-    setShadow(this, `${style}<ha-card class="ov-${cesc(ov || "")} dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    setShadow(this, `${style}<ha-card class="ov-${cesc(ov || "")} dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""} ${c.tools === "side" ? "tsd" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
@@ -6637,11 +6684,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${this._olRoomSvg(a)}${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${this._belowHtml(ov, specs, dockShown, layersInBar)}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
       requestAnimationFrame(() => this._rpBub()); // again once the rail has its final height
+    }
+    // #111: the side tools are icons only: their names as tooltips / for screen readers.
+    for (const b of this.shadowRoot.querySelectorAll(".tside button")) {
+      const t = b.textContent.trim();
+      if (t) {
+        b.title = t;
+        b.setAttribute("aria-label", t);
+      }
     }
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;
@@ -7951,6 +8006,22 @@ Object.assign(DeviceFloorplanCard.prototype, {
     if (t.closest("[data-menu]")) {
       this._menu = !this._menu;
       this._fopen = false;
+      return this._update(true);
+    }
+    if (t.closest("[data-tinfo]")) {
+      this._tinfo = !this._tinfo; // #111: the legends of the side tools
+      return this._update(true);
+    }
+    const scn = t.closest("[data-sconn]");
+    if (scn) {
+      // #113: side tools: a connection on / off, starting from what is shown; at least one stays.
+      const cur = new Set(this._netShow());
+      const v = scn.dataset.sconn;
+      if (cur.has(v)) {
+        if (cur.size > 1) cur.delete(v);
+      } else cur.add(v);
+      this._net = { ...this._net, conns: CONN_ORDER.filter((c) => cur.has(c)) };
+      this._saveNet();
       return this._update(true);
     }
     const cn = t.closest("[data-conn]");
@@ -12646,6 +12717,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       const land = this._land();
       if (land !== this._wasLand) {
         this._rotAt = Date.now();
+        this._tapAt = performance.now(); // #110
         const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
         if (host) {
           host.classList.add("turning");
@@ -12940,9 +13012,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     this._last = Date.now();
     // #102: timing, to measure on a real phone: the card option "debug: true" or "?dfm_debug=1" in the address.
     const dbg = this._config.debug === true || /[?&]dfm_debug=1/.test(location.search);
-    const t0 = dbg ? performance.now() : 0;
     const m = (this._m = this._model());
-    const t1 = dbg ? performance.now() : 0;
     const s = this._s;
     const root = this.shadowRoot;
     if (!root.querySelector("style#dfm")) root.innerHTML = `<style id="dfm">${DFM_CSS}</style><div class="dfm"></div>`;
@@ -12974,7 +13044,24 @@ class DeviceFloorplanMobile extends HTMLElement {
       el.hass = this._hass;
       el.stateObj = this._hass.states[el.dataset.ent];
     }
-    for (const slot of root.querySelectorAll("[data-slot]")) this._mount(slot);
+    // #110: the page first; a plan that is not there yet goes in right after the page is on the screen.
+    const pend = [];
+    for (const slot of root.querySelectorAll("[data-slot]")) {
+      if (slot.firstElementChild) this._mount(slot);
+      else pend.push(slot);
+    }
+    if (pend.length) {
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        for (const slot of pend) if (slot.isConnected && !slot.firstElementChild) this._mount(slot);
+        this._scaleAll();
+        this._toolsTop();
+      };
+      requestAnimationFrame(() => setTimeout(go, 0)); // after the page is painted
+      setTimeout(go, 80); // never later than this (a hidden tab has no frames)
+    }
     this._renderLayer(!land && this._useLayer() ? this._layerHtml : "");
     const top = this._hdrOn ? 0 : Math.max(0, Math.round(this.getBoundingClientRect().top + (window.scrollY || 0)));
     if (top !== this._top) {
@@ -12988,9 +13075,47 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
       this._scaleAll();
+      this._toolsTop();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
-    if (dbg) this._dbg(`${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms · draw ${(performance.now() - t1).toFixed(0)} ms · ${m.items.length} devices`);
+    if (dbg && this._tapAt) this._timeTap(land ? `landscape ${s.page}` : `portrait ${s.page}`);
+  }
+
+  /** #110: timing as felt, from the finger (tap, swipe, turn): when the page is on the screen and when its plan is
+   *  ready (its picture loaded and drawn). */
+  _timeTap(what) {
+    const t0 = this._tapAt;
+    this._tapAt = 0;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this._dbg(`${what}: page shown ${(performance.now() - t0).toFixed(0)} ms`);
+      const until = performance.now() + 20000;
+      const check = () => {
+        const els = [...(this._plans || new Map()).values()].filter((el) => el.isConnected);
+        const ready = els.length && els.every((el) => {
+          const img = el.shadowRoot && el.shadowRoot.querySelector("img.plan");
+          return img && img.complete && img.naturalWidth > 0;
+        });
+        if (ready) requestAnimationFrame(() => this._dbg(`${what}: plan ready ${(performance.now() - t0).toFixed(0)} ms`));
+        else if (performance.now() < until) setTimeout(check, 50);
+      };
+      check();
+    }));
+  }
+
+  /** #111: the side tools of the landscape plan start under the floor capsule. */
+  _toolsTop() {
+    if (!this._wasLand || !this.shadowRoot) return;
+    const nav = this.shadowRoot.querySelector(".lnav");
+    for (const el of (this._plans || new Map()).values()) {
+      if (!el.isConnected || el._dfmMode !== "land" || !nav) continue;
+      const card = (el.shadowRoot && el.shadowRoot.querySelector("ha-card")) || el;
+      const n = nav.getBoundingClientRect();
+      const r = card.getBoundingClientRect();
+      const top = Math.round(n.bottom - r.top + 10);
+      const left = Math.round(n.left - r.left);
+      if (el.style.getPropertyValue("--dfc-tools-top") !== `${top}px`) el.style.setProperty("--dfc-tools-top", `${top}px`);
+      if (el.style.getPropertyValue("--dfc-tools-left") !== `${left}px`) el.style.setProperty("--dfc-tools-left", `${left}px`); // under the floors, exactly
+    }
   }
 
   /** #102 / #106: timing on the screen itself (a phone has no console at hand) and in the console; last 4 lines. */
@@ -13043,7 +13168,8 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   /** A plan (the normal card) for a slot: kept between redraws, so it never reloads or blinks. */
   _mount(slot) {
-    const [plan, ov, focus, mode] = slot.dataset.slot.split("|");
+    const [plan, ov, mode] = slot.dataset.slot.split("|");
+    const focus = slot.dataset.focus || "";
     const key = slot.dataset.slot;
     this._plans = this._plans || new Map();
     let el = this._plans.get(key);
@@ -13069,6 +13195,9 @@ class DeviceFloorplanMobile extends HTMLElement {
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
       ...(["mini", "floor", "room"].includes(mode) ? { room_values: true } : {}),
+      // #111 / #113: landscape: the overlay's controls beside the plan (nothing under it); Network shows Zigbee
+      // until other connections are switched on (unless the Floorplan card chose its own).
+      ...(land ? { tools: "side", network: { ...(b.network || {}), connections: Array.isArray((b.network || {}).connections) && b.network.connections.length ? b.network.connections : ["zigbee"] } } : {}),
     };
     const sig = JSON.stringify(cfg);
     if (el._dfmCfg !== sig) {
@@ -13110,7 +13239,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (!w) continue;
       const ff = el._config && el._config.focus_area && el._a && el._focusFrame ? el._focusFrame(el._a) : null;
       if (ff) w /= Math.max(0.05, (100 + ff.l + ff.r) / 100);
-      const k = Math.max(0.45, Math.min(1, w / 900)).toFixed(2);
+      const k = Math.max(el._dfmMode === "land" ? 0.85 : 0.45, Math.min(1, w / 900)).toFixed(2); // #114: finger-sized in landscape
       if (el.style.getPropertyValue("--dfc-ui") !== k) el.style.setProperty("--dfc-ui", k);
       const kr = Math.max(0.75, Number(k)).toFixed(2); // #95: room names keep at least 3/4 of their size
       if (el.style.getPropertyValue("--dfc-ui-room") !== kr) el.style.setProperty("--dfc-ui-room", kr);
@@ -13118,7 +13247,8 @@ class DeviceFloorplanMobile extends HTMLElement {
   }
 
   _slot(plan, ov, focus = "", mode = "mini", cls = "") {
-    return `<div class="plan ${cls}" data-slot="${cesc([plan, ov, focus, mode].join("|"))}"></div>`;
+    // #110: the room is not part of the slot's name: the next room reuses the same plan (only its focus moves).
+    return `<div class="plan ${cls}" data-slot="${cesc([plan, ov, mode].join("|"))}" data-focus="${cesc(focus)}"></div>`;
   }
 }
 // Mobile card: navigation, gestures (swipe, plan taps) and the actions of its buttons (#86).
@@ -13180,10 +13310,12 @@ Object.assign(DeviceFloorplanMobile.prototype, {
   _pdown(e) {
     this._ptr = true;
     this._ptrAt = Date.now();
+    this._tapAt = performance.now(); // #110: timing from the finger
     this._touched();
     const path = e.composedPath();
     // #79 / #83: the card's overlay rail, Home Replay's bar and its popups never swipe floors or rooms.
-    const ctl = path.some((n) => n && n.classList && ["dockrow", "dock", "rprail", "rpbar", "rptrack", "layers", "pop", "lmenu", "ovbar"].some((c) => n.classList.contains(c)));
+    // #112: nor any control: a slider, a legend, the side tools and their popover, the navigation.
+    const ctl = path.some((n) => n && ((n.classList && ["dockrow", "dock", "rprail", "rpbar", "rptrack", "layers", "pop", "lmenu", "ovbar", "heatleg", "bar", "tside", "tinfo", "lnav", "lrail"].some((c) => n.classList.contains(c))) || ["INPUT", "SELECT", "TEXTAREA"].includes(n.tagName)));
     const z = ctl ? null : path.find((n) => n && n.dataset && n.dataset.swipe);
     this._sw = z ? { x: e.clientX, y: e.clientY, t: Date.now(), zone: z.dataset.swipe } : null;
   },
@@ -14416,6 +14548,7 @@ h2 .scope { font-size: 12px; font-weight: 500; color: var(--dfm-sub); margin-lef
 .adot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
 .adot.a0 { background: #4caf50; } .adot.a1 { background: var(--dfm-amber); } .adot.a2 { background: var(--dfm-red); }
 .cut { position: relative; margin: 6px -14px 0; }
+.cut .plan:empty { height: 33vh; background: color-mix(in srgb, var(--dfm-sub) 8%, transparent); } /* #110: until the plan is in */
 .cut .plan { --dfc-fit-h: 33vh; margin: 0; --dfc-focus-dim: var(--dfm-g2); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 4%, #000 92%, transparent); }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--dfm-card) 45%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--dfm-fg); opacity: .7; }
 .nav.l { left: 8px; } .nav.r { right: 8px; }

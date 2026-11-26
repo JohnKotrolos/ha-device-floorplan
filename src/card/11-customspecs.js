@@ -202,6 +202,39 @@ Object.assign(DeviceFloorplanCard.prototype, {
   },
 
   /** 0.13.9.13: show an overlay (the mobile card's tabs). */
+  /** What an overlay adds under the plan (scenes, actions, legends, Replay). #111: with "tools: side" (the mobile
+   *  card in landscape) the controls become one icon column beside the plan and the legends open from its ⓘ, so
+   *  the plan keeps the whole height; only the Replay bar stays under it. */
+  _belowHtml(ov, specs, dockShown, layersInBar) {
+    const scenes = ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : "";
+    const acts = this._ovActsHtml(ov);
+    const rp = !dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : "";
+    const secOk = ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all"));
+    const legends = () => `${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}`;
+    if (this._config.tools !== "side") {
+      return `${scenes}${acts}${legends()}${rp}${secOk ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}`;
+    }
+    // #113: Network: the four connections as toggles (several at once); the legend in ⓘ.
+    let net = "";
+    let info = legends();
+    if (ov === "network") {
+      const shown = this._netShow();
+      net = ["zigbee", "network", "bluetooth", "matter"].map((cn) => `<button class="tg ${shown.includes(cn) ? "on" : ""}" data-sconn="${cn}" aria-pressed="${shown.includes(cn)}"><ha-icon icon="${CONNS[cn].icon}"></ha-icon>${cesc(CONNS[cn].label)}</button>`).join("");
+      const was = this._net.legend;
+      this._net.legend = true;
+      try {
+        info += this._legendHtml(specs, false);
+      } finally {
+        this._net.legend = was;
+      }
+    }
+    const sec = secOk ? `<button class="ok" disabled><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</button>` : "";
+    const hasInfo = /\S/.test(info.replace(/<[^>]*>/g, ""));
+    const tools = `${scenes}${acts}${net}${sec}${hasInfo ? `<button class="ti ${this._tinfo ? "on" : ""}" data-tinfo="1" aria-expanded="${!!this._tinfo}"><ha-icon icon="mdi:information-outline"></ha-icon>${dfT("net.legend")}</button>` : ""}`;
+    const pop = hasInfo && this._tinfo ? `<div class="tinfo">${info}</div>` : "";
+    return `${/<button/.test(tools) ? `<div class="tside">${tools}</div>${pop}` : ""}${rp}`;
+  },
+
   /** #107: one room outlined on the plan (the mobile card's chosen room); null clears it. */
   dfOutlineRoom(id, txt = "") {
     if ((this._olRoom || null) === (id || null) && (this._olTxt || "") === txt) return;
@@ -452,7 +485,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const nOn = this._ns.f > 0 && (this._night().overlays || []).includes(ov);
     const boxCls = `${this._rpT() != null ? "rpon" : ""} ${nOn && this._ns.f >= 0.5 ? "nt" : ""} ${nOn && this._ns.f >= 0.5 && this._night().dim_quiet !== false ? "nq" : ""}`;
     const floatCls = dockShown && btn.space && btn.space !== "reserve" ? `float ${btn.space === "float_icons" ? "float-icons" : ""}` : "";
-    setShadow(this, `${style}<ha-card class="ov-${cesc(ov || "")} dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
+    setShadow(this, `${style}<ha-card class="ov-${cesc(ov || "")} dock-${pos} ${floatCls} ${dockShown && btn.rail ? "srail" : ""} ${this._narrow ? "narrow" : ""} ${c.tools === "side" ? "tsd" : ""}" style="--dfc-size:${Math.round((Number(look.size) || 34) * scale)}px;${chipVars}${roomVars}">
       <div class="main">${title}${admin}
         <div class="wrap ${names}"><div class="fr ${fr.crop ? "crop" : ""}" style="--fratio:${fr.ratio}"><div class="box ${boxCls}" style="--ratio:${ratio};${fr.style}">
           ${this._img ? `<img class="plan" src="${cesc(this._img)}" alt="${cesc(a.plan_name || "")}" draggable="false">` : ""}
@@ -461,11 +494,19 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._freshHtml(a)}${this._eFillHtml(a)}${this._eFlowHtml(a)}${this._robotHtml()}<svg class="lines"></svg>${this._winHtml()}
           ${this._olRoomSvg(a)}${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
-        ${ov === "lights" && !this._rpOn() ? this._sceneBarHtml(specs) : ""}${this._ovActsHtml(ov)}${this._heat ? this._heatLegendHtml() : ""}${this._cleanLegendHtml()}${this._eLegendHtml()}${!dockShown && !RP_SKIP.has(ov) && this._config.replay !== false && (this._config.replay_global ? !!(this._rp && this._rp.mode) : this._layerOn(ov, "replay", false)) ? this._rpHtml() : ""}${ov === "security" && !specs.some((sp) => sp.kind !== "camera") && !this._layerOn("security", "all", this._layerDefault("security", "all")) ? `<div class="heatleg secok"><span class="cl"><ha-icon icon="mdi:shield-check-outline"></ha-icon>${dfT("sec.all_secure")}</span></div>` : ""}${ov === "network" ? this._legendHtml(specs, layersInBar && !dockShown) : ""}
+        ${this._belowHtml(ov, specs, dockShown, layersInBar)}
       </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
       requestAnimationFrame(() => this._rpBub()); // again once the rail has its final height
+    }
+    // #111: the side tools are icons only: their names as tooltips / for screen readers.
+    for (const b of this.shadowRoot.querySelectorAll(".tside button")) {
+      const t = b.textContent.trim();
+      if (t) {
+        b.title = t;
+        b.setAttribute("aria-label", t);
+      }
     }
     for (const el of this.shadowRoot.querySelectorAll("[data-ent]")) {
       el.hass = this._hass;

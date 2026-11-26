@@ -341,6 +341,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       const land = this._land();
       if (land !== this._wasLand) {
         this._rotAt = Date.now();
+        this._tapAt = performance.now(); // #110
         const host = this.shadowRoot && this.shadowRoot.querySelector("div.dfm");
         if (host) {
           host.classList.add("turning");
@@ -635,9 +636,7 @@ class DeviceFloorplanMobile extends HTMLElement {
     this._last = Date.now();
     // #102: timing, to measure on a real phone: the card option "debug: true" or "?dfm_debug=1" in the address.
     const dbg = this._config.debug === true || /[?&]dfm_debug=1/.test(location.search);
-    const t0 = dbg ? performance.now() : 0;
     const m = (this._m = this._model());
-    const t1 = dbg ? performance.now() : 0;
     const s = this._s;
     const root = this.shadowRoot;
     if (!root.querySelector("style#dfm")) root.innerHTML = `<style id="dfm">${DFM_CSS}</style><div class="dfm"></div>`;
@@ -669,7 +668,24 @@ class DeviceFloorplanMobile extends HTMLElement {
       el.hass = this._hass;
       el.stateObj = this._hass.states[el.dataset.ent];
     }
-    for (const slot of root.querySelectorAll("[data-slot]")) this._mount(slot);
+    // #110: the page first; a plan that is not there yet goes in right after the page is on the screen.
+    const pend = [];
+    for (const slot of root.querySelectorAll("[data-slot]")) {
+      if (slot.firstElementChild) this._mount(slot);
+      else pend.push(slot);
+    }
+    if (pend.length) {
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        for (const slot of pend) if (slot.isConnected && !slot.firstElementChild) this._mount(slot);
+        this._scaleAll();
+        this._toolsTop();
+      };
+      requestAnimationFrame(() => setTimeout(go, 0)); // after the page is painted
+      setTimeout(go, 80); // never later than this (a hidden tab has no frames)
+    }
     this._renderLayer(!land && this._useLayer() ? this._layerHtml : "");
     const top = this._hdrOn ? 0 : Math.max(0, Math.round(this.getBoundingClientRect().top + (window.scrollY || 0)));
     if (top !== this._top) {
@@ -683,9 +699,47 @@ class DeviceFloorplanMobile extends HTMLElement {
     if (turned && !land) requestAnimationFrame(() => window.scrollTo(0, this._pY || 0));
     requestAnimationFrame(() => {
       this._scaleAll();
+      this._toolsTop();
       if (host.classList.contains("turning")) requestAnimationFrame(() => host.classList.remove("turning")); // #102
     });
-    if (dbg) this._dbg(`${land ? "landscape" : "portrait"} ${s.page}: model ${(t1 - t0).toFixed(0)} ms · draw ${(performance.now() - t1).toFixed(0)} ms · ${m.items.length} devices`);
+    if (dbg && this._tapAt) this._timeTap(land ? `landscape ${s.page}` : `portrait ${s.page}`);
+  }
+
+  /** #110: timing as felt, from the finger (tap, swipe, turn): when the page is on the screen and when its plan is
+   *  ready (its picture loaded and drawn). */
+  _timeTap(what) {
+    const t0 = this._tapAt;
+    this._tapAt = 0;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this._dbg(`${what}: page shown ${(performance.now() - t0).toFixed(0)} ms`);
+      const until = performance.now() + 20000;
+      const check = () => {
+        const els = [...(this._plans || new Map()).values()].filter((el) => el.isConnected);
+        const ready = els.length && els.every((el) => {
+          const img = el.shadowRoot && el.shadowRoot.querySelector("img.plan");
+          return img && img.complete && img.naturalWidth > 0;
+        });
+        if (ready) requestAnimationFrame(() => this._dbg(`${what}: plan ready ${(performance.now() - t0).toFixed(0)} ms`));
+        else if (performance.now() < until) setTimeout(check, 50);
+      };
+      check();
+    }));
+  }
+
+  /** #111: the side tools of the landscape plan start under the floor capsule. */
+  _toolsTop() {
+    if (!this._wasLand || !this.shadowRoot) return;
+    const nav = this.shadowRoot.querySelector(".lnav");
+    for (const el of (this._plans || new Map()).values()) {
+      if (!el.isConnected || el._dfmMode !== "land" || !nav) continue;
+      const card = (el.shadowRoot && el.shadowRoot.querySelector("ha-card")) || el;
+      const n = nav.getBoundingClientRect();
+      const r = card.getBoundingClientRect();
+      const top = Math.round(n.bottom - r.top + 10);
+      const left = Math.round(n.left - r.left);
+      if (el.style.getPropertyValue("--dfc-tools-top") !== `${top}px`) el.style.setProperty("--dfc-tools-top", `${top}px`);
+      if (el.style.getPropertyValue("--dfc-tools-left") !== `${left}px`) el.style.setProperty("--dfc-tools-left", `${left}px`); // under the floors, exactly
+    }
   }
 
   /** #102 / #106: timing on the screen itself (a phone has no console at hand) and in the console; last 4 lines. */
@@ -738,7 +792,8 @@ class DeviceFloorplanMobile extends HTMLElement {
 
   /** A plan (the normal card) for a slot: kept between redraws, so it never reloads or blinks. */
   _mount(slot) {
-    const [plan, ov, focus, mode] = slot.dataset.slot.split("|");
+    const [plan, ov, mode] = slot.dataset.slot.split("|");
+    const focus = slot.dataset.focus || "";
     const key = slot.dataset.slot;
     this._plans = this._plans || new Map();
     let el = this._plans.get(key);
@@ -764,6 +819,9 @@ class DeviceFloorplanMobile extends HTMLElement {
       ...(focus ? { focus_area: focus, focus_aspect: this._bandAspect(), rooms: { ...(b.rooms || {}), show_in: [] } } : {}),
       // #41: portrait plans are Live with one temperature · humidity chip per room.
       ...(["mini", "floor", "room"].includes(mode) ? { room_values: true } : {}),
+      // #111 / #113: landscape: the overlay's controls beside the plan (nothing under it); Network shows Zigbee
+      // until other connections are switched on (unless the Floorplan card chose its own).
+      ...(land ? { tools: "side", network: { ...(b.network || {}), connections: Array.isArray((b.network || {}).connections) && b.network.connections.length ? b.network.connections : ["zigbee"] } } : {}),
     };
     const sig = JSON.stringify(cfg);
     if (el._dfmCfg !== sig) {
@@ -805,7 +863,7 @@ class DeviceFloorplanMobile extends HTMLElement {
       if (!w) continue;
       const ff = el._config && el._config.focus_area && el._a && el._focusFrame ? el._focusFrame(el._a) : null;
       if (ff) w /= Math.max(0.05, (100 + ff.l + ff.r) / 100);
-      const k = Math.max(0.45, Math.min(1, w / 900)).toFixed(2);
+      const k = Math.max(el._dfmMode === "land" ? 0.85 : 0.45, Math.min(1, w / 900)).toFixed(2); // #114: finger-sized in landscape
       if (el.style.getPropertyValue("--dfc-ui") !== k) el.style.setProperty("--dfc-ui", k);
       const kr = Math.max(0.75, Number(k)).toFixed(2); // #95: room names keep at least 3/4 of their size
       if (el.style.getPropertyValue("--dfc-ui-room") !== kr) el.style.setProperty("--dfc-ui-room", kr);
@@ -813,6 +871,7 @@ class DeviceFloorplanMobile extends HTMLElement {
   }
 
   _slot(plan, ov, focus = "", mode = "mini", cls = "") {
-    return `<div class="plan ${cls}" data-slot="${cesc([plan, ov, focus, mode].join("|"))}"></div>`;
+    // #110: the room is not part of the slot's name: the next room reuses the same plan (only its focus moves).
+    return `<div class="plan ${cls}" data-slot="${cesc([plan, ov, mode].join("|"))}" data-focus="${cesc(focus)}"></div>`;
   }
 }
