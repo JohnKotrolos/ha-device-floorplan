@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.26";
+const VERSION = "0.13.9.27";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {

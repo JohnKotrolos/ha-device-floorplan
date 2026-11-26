@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.13.9.26";
+const CARD_VERSION = "0.13.9.27";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.13.9", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -12786,7 +12786,11 @@ class DeviceFloorplanMobile extends HTMLElement {
   _model() {
     const hass = this._hass;
     // #30: the plans that are floors (a level set in the Floorplan Editor), unless the card names its plans.
-    const want = Array.isArray(this._config.plans) && this._config.plans.length ? this._config.plans : null;
+    // #121: the card's own plans; else, when a Floorplan card was picked in "Settings from", the plans that card
+    // shows (any plan, a view too); else every plan with a level.
+    const b0 = this._config.source ? this._base || {} : {};
+    const want = Array.isArray(this._config.plans) && this._config.plans.length ? this._config.plans
+      : Array.isArray(b0.plans) && b0.plans.length ? b0.plans : b0.plan ? [b0.plan] : null;
     const all = planSensors(hass);
     const leveled = all.filter((x) => Number.isFinite(x.attributes.level));
     const sens = want ? all.filter((x) => want.includes(x.attributes.plan_id)) : leveled.length ? leveled : all;
