@@ -286,6 +286,16 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         else delete p.tint;
       });
     }
+    if (act === "devappl") {
+      const id = this.s.sel;
+      this._ws("devices/options", { device_id: id, appliance: t.value || null })
+        .then((r) => {
+          this.deviceOpts = r.device_opts || this.deviceOpts;
+          this._render();
+        })
+        .catch((err) => this._saveError(err));
+      return;
+    }
     if (act === "devcat") {
       // 0.12.1: the device's category (all floors); for a light / plug / fan on this plan also what it is on the card.
       const id = this.s.sel;

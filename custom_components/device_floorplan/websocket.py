@@ -270,13 +270,14 @@ def ws_main_entity(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None
         vol.Optional("only_main"): cv.boolean,
         vol.Optional("part"): vol.Any(None, vol.In(("own", "part"))),
         vol.Optional("category"): vol.Any(None, cv.string),
+        vol.Optional("appliance"): vol.Any(None, vol.In(("washer", "dryer", "dishwasher", "oven", "fridge", "coffee", "air_purifier", "dehumidifier", "printer", "other"))),  # 0.13.9.18: appliance type
     }
 )
 @callback
 def ws_device_opts(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     if (data := _data(hass, connection, msg)) is None:
         return
-    changes = {k: msg[k] for k in ("only_main", "part", "category") if k in msg}
+    changes = {k: msg[k] for k in ("only_main", "part", "category", "appliance") if k in msg}
     data.set_device_opts(msg["device_id"], changes)
     connection.send_result(msg["id"], {"device_opts": data.device_opts})
 

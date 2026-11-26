@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.17";
+const VERSION = "0.13.9.18";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -44,6 +44,8 @@ const CONN = {
 const CONN_ORDER = ["zigbee", "network", "bluetooth", "matter", "zwave", "other"];
 
 /** 0.12.1: the one category list (Floorplan Editor, card), in its agreed order. */
+// 0.13.9.18: appliance types (Floorplan Editor → Appliance type).
+const APPL_KINDS = { washer: "Washing machine", dryer: "Dryer", dishwasher: "Dishwasher", oven: "Oven", fridge: "Fridge", coffee: "Coffee machine", air_purifier: "Air purifier", dehumidifier: "Dehumidifier", printer: "3D printer", other: "Other appliance" };
 const GROUPS = {
   lights: ["Lights", "mdi:lightbulb-outline"],
   plugs_switches: ["Switches & plugs", "mdi:power-socket-eu"],
@@ -3229,6 +3231,12 @@ Object.assign(DeviceFloorplanPanel.prototype, {
       const cur = own || fromAs || "";
       const auto = d.category_auto || d.group || "other";
       actsAs = `<label class="fl">Category<select data-act="devcat"><option value="">${esc((GROUPS[auto] || GROUPS.other)[0])} (automatic)</option>${Object.entries(GROUPS).map(([k, [l]]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">Where it is listed${switchy ? ", and what it is on the card: Lights glow and are in Lights; Switches & plugs and Climate (a fan) show their icon while on" : ""}.</div>`;
+      // 0.13.9.18: an appliance's type (its icon, words and details on the cards; the mobile card's Appliances).
+      if ((cur || auto) === "appliances" || (this.deviceOpts[d.id] || {}).appliance) {
+        const ap = (this.deviceOpts[d.id] || {}).appliance || "";
+        const guess = this._applType(d.id);
+        actsAs += `<label class="fl">Appliance type<select data-act="devappl"><option value="">${guess ? `${esc(APPL_KINDS[guess] || guess)} (recognised)` : "Not set"}</option>${Object.entries(APPL_KINDS).map(([k, l]) => `<option value="${k}" ${ap === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div style="font-size:12px;color:var(--df-sec)">Its icon, words ("Washing", "Brewing", "Printing") and details on the cards. Bond its plug, door or status sensors with it for the details.</div>`;
+      }
     }
     const moreBtn = `<button class="link morebtn ${more ? "open" : ""}" data-act="more" aria-expanded="${more}">More options ${SVG.down}</button>`;
     const moreBox = more ? `<div class="more">${skipBtn}${skipInt}</div>` : "";
@@ -5208,6 +5216,16 @@ Object.assign(DeviceFloorplanPanel.prototype, {
         else if (t.checked) p.tint = (this.shadowRoot.querySelector('[data-act="pictint"]') || {}).value || "#9aa4ae";
         else delete p.tint;
       });
+    }
+    if (act === "devappl") {
+      const id = this.s.sel;
+      this._ws("devices/options", { device_id: id, appliance: t.value || null })
+        .then((r) => {
+          this.deviceOpts = r.device_opts || this.deviceOpts;
+          this._render();
+        })
+        .catch((err) => this._saveError(err));
+      return;
     }
     if (act === "devcat") {
       // 0.12.1: the device's category (all floors); for a light / plug / fan on this plan also what it is on the card.

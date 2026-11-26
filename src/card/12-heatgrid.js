@@ -260,7 +260,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const nw = ages && (a.now || {})[id];
       const c = ages && ((a.cleaned || {})[id] || {}).t;
       const pw = ew && ew[id] > 0 ? `<small class="rage epw">${cesc(this._eFmt(ew[id]))}</small>` : "";
-      const vv = rv && rv[id] && (!fa || fa === id) ? `<small class="rage rv">${cesc(rv[id])}</small>` : "";
+      const vv = rv && rv[id] && (!fa || fa === id) ? `<small class="rage rv">${rv[id].air != null ? `<i class="adot a${rv[id].air}"></i>` : ""}${cesc(rv[id].t)}</small>` : "";
       if (!names && !c && !nw && !pw && !vv) return "";
       const name = (r.names && r.names[id]) || room.name;
       const icon = names && r.style === "pill_icon" ? `<ha-icon icon="${cesc(room.icon || "mdi:texture-box")}"></ha-icon>` : "";
@@ -268,7 +268,9 @@ Object.assign(DeviceFloorplanCard.prototype, {
       // Being cleaned now: progress instead of the age (it counts as cleaned when the run ends).
       const age = nw ? `<small class="rage now">${cesc(nw.pct != null ? `${dfT("clean.cleaning_l")} · ${nw.pct}%` : dfT("clean.cleaning_l"))}</small>` : c ? `<small class="rage">${cesc(this._ageTxt(c))}</small>` : "";
       const tap = this._overlay === "cleaning" && Object.keys(a.robots || {}).length ? ` data-croom="${cesc(id)}"` : "";
-      return `<div class="room ${cls}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}${vv}</div>`;
+      // #82: with values, two lines centred on the room; near the plan's edge the label stays inside it.
+      const two = vv && names ? ` rvw${room.x < 12 ? " el" : room.x > 88 ? " er" : ""}` : "";
+      return `<div class="room ${cls}${two}${tap ? " ctap" : ""}${names ? "" : " solo"}"${tap} style="left:${room.x}%;top:${room.y}%;font-size:${size}px;${nudge(room)}" title="${cesc(name)}">${icon}${names ? cesc(name) : ""}${age}${pw}${vv}</div>`;
     }).join("");
   },
 
@@ -304,8 +306,8 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const p = [];
       if (r.t.length) p.push(`${Math.round(avg(r.t) * 10) / 10}°`);
       if (r.h.length) p.push(`${Math.round(avg(r.h))}%`);
-      if (r.air.length) p.push(dfT(["mob.air_good", "mob.air_mod", "mob.air_poor"][Math.max(...r.air)]));
-      if (p.length) out[id] = p.join(" · ");
+      // #82: air as its coloured dot only (short labels stay inside the room)
+      if (p.length || r.air.length) out[id] = { t: p.join(" · "), air: r.air.length ? Math.max(...r.air) : null };
     }
     return out;
   },

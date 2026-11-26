@@ -5,7 +5,7 @@
  */
 
 const WS = "device_floorplan";
-const VERSION = "0.13.9.17";
+const VERSION = "0.13.9.18";
 
 /** Colour temperature (K) → rgb (Tanner Helland approximation), for light colours (#112). */
 function kelvinRgb(k) {
@@ -44,6 +44,8 @@ const CONN = {
 const CONN_ORDER = ["zigbee", "network", "bluetooth", "matter", "zwave", "other"];
 
 /** 0.12.1: the one category list (Floorplan Editor, card), in its agreed order. */
+// 0.13.9.18: appliance types (Floorplan Editor → Appliance type).
+const APPL_KINDS = { washer: "Washing machine", dryer: "Dryer", dishwasher: "Dishwasher", oven: "Oven", fridge: "Fridge", coffee: "Coffee machine", air_purifier: "Air purifier", dehumidifier: "Dehumidifier", printer: "3D printer", other: "Other appliance" };
 const GROUPS = {
   lights: ["Lights", "mdi:lightbulb-outline"],
   plugs_switches: ["Switches & plugs", "mdi:power-socket-eu"],

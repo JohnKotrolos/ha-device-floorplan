@@ -165,6 +165,9 @@ function guessOpenAs(eid, hass, name, chosen) {
 // 0.7.4: appliances (washer, dryer, dishwasher). Colour by what the machine is doing:
 // water = aqua, heat = champagne, finished = green, attention = orange, error = red.
 const APPL_TYPES = ["washer", "dryer", "dishwasher"];
+// 0.13.9.18: every appliance type (Floorplan Editor → Appliance type); the first three have drums / cycles.
+const APPL_KINDS = ["washer", "dryer", "dishwasher", "oven", "fridge", "coffee", "air_purifier", "dehumidifier", "printer", "other"];
+const APPL_ICON = { washer: "mdi:washing-machine", dryer: "mdi:tumble-dryer", dishwasher: "mdi:dishwasher", oven: "mdi:stove", fridge: "mdi:fridge-outline", coffee: "mdi:coffee-maker-outline", air_purifier: "mdi:air-purifier", dehumidifier: "mdi:air-humidifier", printer: "mdi:printer-3d", other: "mdi:washing-machine" };
 const APPL_COL = { water: "79,209,197", spin: "79,209,197", heat: "242,196,141", run: null, done: "76,175,80", attention: "251,140,0", error: "229,57,53" };
 function applGuess(text) {
   const t = String(text || "").toLowerCase();
@@ -765,7 +768,14 @@ ha-card.dock-right { flex-direction: row; }
 @media (prefers-reduced-motion: reduce) { .obar.alert { animation:none; } }
 .box svg.focus { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; fill: var(--dfc-focus-dim, var(--primary-background-color, #f2f2f2)); fill-opacity:.6; }
 .box .m, .box .chip, .box .room, .box .applbl, .box .rdock, .box .epin, .box .gdev { scale: var(--dfc-ui, 1); }
-.room .rv { font-weight: 600; }
+.room .rv { font-weight: 600; display:inline-flex; align-items:center; gap: 3px; }
+.room.rvw { flex-direction: column; gap: 0; line-height: 1.15; text-align: center; }
+.room.rvw .rv { font-size: .85em; }
+.room.rvw.el { transform: translate(-12%, -50%); }
+.room.rvw.er { transform: translate(-88%, -50%); }
+.room .adot { width: 7px; height: 7px; border-radius: 50%; display:inline-block; background: #43a047; }
+.room .adot.a1 { background: #f9a825; }
+.room .adot.a2 { background: #e53935; }
 .box svg.pulse { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .box svg.taps { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
 .box svg.taps .ptap, .box svg.taps .atap { pointer-events: all; cursor:pointer; }

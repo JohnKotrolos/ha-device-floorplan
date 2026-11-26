@@ -812,6 +812,12 @@ class FloorplanData:
                 opts["category"] = str(changes["category"])[:40]
             else:
                 opts.pop("category", None)
+        if "appliance" in changes:
+            # 0.13.9.18: the appliance type picked in the Floorplan Editor (washer, coffee machine, 3D printer…).
+            if changes["appliance"] in ("washer", "dryer", "dishwasher", "oven", "fridge", "coffee", "air_purifier", "dehumidifier", "printer", "other"):
+                opts["appliance"] = changes["appliance"]
+            else:
+                opts.pop("appliance", None)
         if "part" in changes:
             if changes["part"] in ("own", "part"):
                 opts["part"] = changes["part"]

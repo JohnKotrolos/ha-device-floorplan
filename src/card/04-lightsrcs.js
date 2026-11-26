@@ -90,11 +90,26 @@ Object.assign(DeviceFloorplanCard.prototype, {
   /** 0.7.4: an appliance with a drum or line drawn in the Editor: its type and readings (null = not one). */
   _applOf(item) {
     if (!item || item.phantom || !item.light || !["drum", "line"].includes(item.light.type)) return null;
-    const hass = this._hass;
+    return this._applModel(item);
+  },
+
+  /** 0.13.9.18: the appliance type set in the Floorplan Editor (the device's or a bond member's), else null. */
+  _applKind(item) {
+    if (!item) return null;
     const devs = (this._a && this._a.devices) || {};
+    if (APPL_KINDS.includes(item.appliance)) return item.appliance;
+    const m = (item.members || []).map((x) => (devs[x] || {}).appliance).find((v) => APPL_KINDS.includes(v));
+    if (m) return m;
+    return APPL_TYPES.includes(item.as) ? item.as : (item.members || []).map((x) => (devs[x] || {}).as).find((v) => APPL_TYPES.includes(v)) || null;
+  },
+
+  /** 0.13.9.18: any appliance (type set, category Appliances or a drum / line): its type and readings. */
+  _applModel(item) {
+    if (!item || item.phantom) return null;
+    const hass = this._hass;
     const ents = [...new Set([...(item.bond ? item.entities || [] : [...(item.allEntities || item.entities || []), item.main_entity]), ...(item.allEntities || [])])].filter((e) => e && hass.states[e]);
-    const as = APPL_TYPES.includes(item.as) ? item.as : ((item.members || []).map((m) => (devs[m] || {}).as).find((v) => APPL_TYPES.includes(v)));
-    const type = as || applGuess(`${item.name} ${ents.join(" ")}`) || (item.light.type === "line" ? "dishwasher" : "washer");
+    const drum = item.light && ["drum", "line"].includes(item.light.type);
+    const type = this._applKind(item) || applGuess(`${item.name} ${ents.join(" ")}`) || (drum ? (item.light.type === "line" ? "dishwasher" : "washer") : "other");
     const dc = (e) => (hass.states[e].attributes || {}).device_class;
     const status = ents.find((e) => domainOf(e) === "sensor" && !num(hass.states[e].state) && dc(e) !== "timestamp" && /(run_state|operation_state|current_status|program_phase|program_progress_status|machine_state|status|_state)$/.test(e))
       || ents.find((e) => domainOf(e) === "sensor" && /run_state|operation_state|current_status/.test(e));
@@ -105,7 +120,10 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const plug = ents.find((e) => domainOf(e) === "switch");
     // 0.8.2: a progress sensor in % (Midea, SmartThings washers and dryers since HA 2026.11).
     const progress = ents.find((e) => domainOf(e) === "sensor" && /progress/.test(e) && (hass.states[e].attributes || {}).unit_of_measurement === "%");
-    return { item, type, status, remaining, running, power, door, plug, progress, ents };
+    // 0.13.9.18: the program / cycle (a select or a text sensor named so) and an energy meter, for the details.
+    const program = ents.find((e) => ["select", "sensor"].includes(domainOf(e)) && !num(hass.states[e].state) && /program|cycle|mode_select|selected_program|course/.test(e));
+    const energy = ents.find((e) => domainOf(e) === "sensor" && dc(e) === "energy");
+    return { item, type, status, remaining, running, power, door, plug, progress, program, energy, ents };
   },
 
   /** Current state of an appliance: phase, colour, label and the rows for its panel. */
@@ -122,6 +140,12 @@ Object.assign(DeviceFloorplanCard.prototype, {
     }
     const unav = (ap.status ? deadStatus : true) && (deadPlug || (!ap.running && !ap.power));
     if (unav && !(ap.status && !deadStatus)) phase = "unavailable";
+    // 0.13.9.18: an appliance with no status / running / power reading (a coffee machine on a switch, a purifier):
+    // its own on / off says it.
+    if (!ap.status && !ap.running && !ap.power) {
+      const own = S(ap.plug) || S(ap.item.main_entity);
+      phase = !own || !live(own) ? "unavailable" : ["on", "running", "printing", "heating", "cleaning", "brewing"].includes(own.state) ? "run" : "idle";
+    }
     phase = phase || "idle";
     const key = ap.item.id;
     // Finished: a cycle that was running and stopped keeps a check until the door opens or you tap "Unloaded".
@@ -184,7 +208,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const pretty = (t) => String(t).replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
     const said = (s) => (this._hass.formatEntityState ? this._hass.formatEntityState(s) : pretty(s.state)); // 0.14 L1: HA's own translated state
     const word = phase === "unavailable" ? dfT("appl.unavailable") : phase === "done" ? dfT("appl.finished") : phase === "attention" ? (ap.door && S(ap.door) && S(ap.door).state === "on" ? dfT("appl.door_open") : dfT("appl.paused")) : phase === "error" ? dfT("appl.error") : phase === "idle" ? dfT("appl.idle")
-      : ap.status && !deadStatus ? said(S(ap.status)) : ap.type === "dryer" ? dfT("appl.drying") : dfT("appl.running");
+      : ap.status && !deadStatus ? said(S(ap.status)) : ap.type === "dryer" ? dfT("appl.drying") : ["coffee", "printer", "oven"].includes(ap.type) ? dfT(`appl.run_${ap.type}`) : dfT("appl.running");
     const w = ap.power && live(S(ap.power)) ? `${Math.round(Number(S(ap.power).state))} W` : "";
     const col = APPL_COL[phase] || (phase === "run" ? (ap.type === "dryer" ? APPL_COL.heat : APPL_COL.water) : null);
     return { phase, col, word, time, tshort, w, active, chg: this._applChg[key] || 0, doneLeft: phase === "done" ? doneLeft : 0 };
