@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.1 · Security hardening
+
+A fix release from the Home Assistant review for the HACS default list. Nothing to change on your side.
+
+- **Card settings are checked before use.** `buttons.position` and `buttons.bar` accept only their known values (`top` / `bottom` / `left` / `right` / `hidden`, and `theme` / `dark` / `clear` / `contrast`). Anything else falls back to the default instead of reaching the page.
+- **Covers popup:** the position reported by a cover integration is shown only when it is a number.
+
 ## 0.14.0 · Ho-Ho-Home in Your Pocket (Rudolph Found Every Room)
 
 Santa came early this year: over a hundred gifts since 0.13.0. The big one is a dashboard made for your phone. There are Christmas lights and trees for the plan, and a floorplan that AI assistants and automations can finally read.

@@ -98,14 +98,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // 0.8.2: the Side Rail: full height at the card's left / right edge, plain icon buttons, dark by default.
     const rail = b.position === "rail_left" || b.position === "rail_right";
     return {
-      position: rail ? b.position.slice(5) : b.position || (dock === "hidden" ? "hidden" : "bottom"),
+      // 0.14.1: only known values reach the markup (class names); anything else falls back to the default.
+      position: rail ? b.position.slice(5) : ["top", "bottom", "left", "right", "hidden"].includes(b.position) ? b.position : dock === "hidden" ? "hidden" : "bottom",
       rail,
       style: b.style || (dock === "icons" ? "icons" : "labels"),
       space: rail ? "reserve" : b.space || "reserve",
       // 0.8.2: the bar (background) and the buttons are separate; old "sidebar" / "plain" shapes map onto them.
       shape: rail ? "rail" : BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
       // 0.9.1: "contrast" = the opposite of the theme (dark on a light theme, light on a dark one); the rail's default.
-      bar: rail ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear", "contrast"].includes(b.bar) ? b.bar : "theme",
+      bar: rail ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? (["theme", "clear", "contrast"].includes(b.bar) ? b.bar : "dark") : ["dark", "clear", "contrast"].includes(b.bar) ? b.bar : "theme",
       auto: b.auto_status === true,
       size: ["s", "l"].includes(b.size) ? b.size : "m",
       actions: b.actions || {},

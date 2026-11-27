@@ -18,7 +18,7 @@
  * (card_id + overlay, every screen) or a link with ?overlay=<name>[&card=<card_id>].
  */
 
-const CARD_VERSION = "0.14.0";
+const CARD_VERSION = "0.14.1";
 // 0.13.2: one tip per version for admins, closed per Home Assistant user (follows them across devices).
 // A version without a tip: set it to null. "go" opens the Floorplan Editor.
 const RELEASE_TIP = { v: "0.14", get text() { return dfT("tip.text"); }, get go() { return dfT("tip.go"); } };
@@ -3506,14 +3506,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
     // 0.8.2: the Side Rail: full height at the card's left / right edge, plain icon buttons, dark by default.
     const rail = b.position === "rail_left" || b.position === "rail_right";
     return {
-      position: rail ? b.position.slice(5) : b.position || (dock === "hidden" ? "hidden" : "bottom"),
+      // 0.14.1: only known values reach the markup (class names); anything else falls back to the default.
+      position: rail ? b.position.slice(5) : ["top", "bottom", "left", "right", "hidden"].includes(b.position) ? b.position : dock === "hidden" ? "hidden" : "bottom",
       rail,
       style: b.style || (dock === "icons" ? "icons" : "labels"),
       space: rail ? "reserve" : b.space || "reserve",
       // 0.8.2: the bar (background) and the buttons are separate; old "sidebar" / "plain" shapes map onto them.
       shape: rail ? "rail" : BAR_SHAPES.includes(b.shape) ? b.shape : "pill",
       // 0.9.1: "contrast" = the opposite of the theme (dark on a light theme, light on a dark one); the rail's default.
-      bar: rail ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? b.bar || "dark" : ["dark", "clear", "contrast"].includes(b.bar) ? b.bar : "theme",
+      bar: rail ? (["theme", "dark"].includes(b.bar) ? b.bar : "contrast") : b.space === "float_icons" || b.shape === "plain" ? "clear" : b.shape === "sidebar" ? (["theme", "clear", "contrast"].includes(b.bar) ? b.bar : "dark") : ["dark", "clear", "contrast"].includes(b.bar) ? b.bar : "theme",
       auto: b.auto_status === true,
       size: ["s", "l"].includes(b.size) ? b.size : "m",
       actions: b.actions || {},
@@ -9117,7 +9118,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
         const f = Number(st.attributes.supported_features || 0);
         const pos = st.attributes.current_position;
         const slider = f & 4 && pos != null ? `<input type="range" min="0" max="100" step="5" value="${Number(pos)}" data-covpos="${cesc(e)}" aria-label="${dfT("cover.position")}">` : "";
-        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null ? ` · ${pos}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="${dfT("cover.open")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="${dfT("cover.stop")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="${dfT("cover.close")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
+        return `<div class="cov"><span class="nm">${cesc(entName(this._hass, e))}<small>${cesc(this._fmt(e))}${pos != null && Number.isFinite(Number(pos)) ? ` · ${Number(pos)}%` : ""}</small></span>${slider}<button data-cov="${cesc(e)}" data-cmd="open" aria-label="${dfT("cover.open")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="stop" aria-label="${dfT("cover.stop")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="${cesc(e)}" data-cmd="close" aria-label="${dfT("cover.close")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>`;
       };
       const cents = p.ents || s.ents.filter((e) => domainOf(e) === "cover");
       return `<div class="pop"><div class="popin" role="dialog" aria-label="${cesc(s.name)}"><h3>${cesc(s.name)}${close}</h3><div>${cents.map(row).join("")}</div>${cents.length > 1 ? `<div class="covall">${dfT("cover.all")}<button data-cov="__all" data-cmd="open" aria-label="${dfT("cover.open_all")}"><ha-icon icon="mdi:arrow-up"></ha-icon></button><button data-cov="__all" data-cmd="stop" aria-label="${dfT("cover.stop_all")}"><ha-icon icon="mdi:stop"></ha-icon></button><button data-cov="__all" data-cmd="close" aria-label="${dfT("cover.close_all")}"><ha-icon icon="mdi:arrow-down"></ha-icon></button></div>` : ""}</div></div>`;
