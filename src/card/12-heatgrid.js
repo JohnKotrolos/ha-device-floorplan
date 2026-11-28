@@ -550,6 +550,8 @@ ${reset}
     const raw = this._raw || {};
     // #120: a plan inside another card (the mobile card) has no settings of its own to add to or dismiss in.
     if (this._config.embedded) return "";
+    // 0.14.2: asked only in the Card Editor, which saves the answer the Home Assistant way (config-changed).
+    if (!this._onNewOv) return "";
     if (!this._hass || !this._hass.user || !this._hass.user.is_admin || !Array.isArray(raw.overlays) || !raw.overlays.length) return "";
     const seen = new Set([...raw.overlays, ...(raw.dismissed_overlays || [])].map((o) => (o === "electricity" ? "energy" : o)));
     const o = NEW_OVERLAYS.find((x) => !seen.has(x) && (x !== "energy" || (this._eData && this._eData.devs.length)));
@@ -557,19 +559,11 @@ ${reset}
     return `<div class="newov"><ha-icon icon="${OVERLAYS[o].icon}"></ha-icon><span>✨ ${dfT("newov.text", { o: `<b>${cesc(OVERLAYS[o].label)}</b>` })}${o === "energy" ? dfT("newov.energy") : ""}</span><button data-newov="${o}" data-add="1">${dfT("newov.add")}</button><button data-newov="${o}">${dfT("newov.not_now")}</button></div>`;
   },
 
-  async _newOvAnswer(o, add) {
+  _newOvAnswer(o, add) {
     const raw = { ...(this._raw || {}) };
     if (add) raw.overlays = [...(raw.overlays || []), o];
     else raw.dismissed_overlays = [...new Set([...(raw.dismissed_overlays || []), o])];
-    // test12: the save finds this card in the dashboard by its config (it was only set by Edit markers, so the
-    // banner never saved). When it still can't save (YAML dashboard, card not found), say so.
-    this._penOrig = this._raw;
-    try {
-      await this._saveToDashboard(raw);
-    } catch (_e) {
-      this._toast(add ? dfT("newov.save_add", { o: OVERLAYS[o].label }) : dfT("newov.save_later"));
-    }
-    this.setConfig(raw);
+    this._onNewOv(raw);
     if (add) this._overlay = o;
     this._update(true);
   },

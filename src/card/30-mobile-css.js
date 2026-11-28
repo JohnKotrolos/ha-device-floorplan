@@ -117,8 +117,8 @@ section { margin: 14px 0 4px; }
 h2 { display:flex; align-items:center; gap:8px; font-size: 15px; font-weight: 650; margin: 0 0 8px; }
 h2 .gt { margin-left: auto; width: 30px; height: 30px; border-radius: 50%; display:flex; align-items:center; justify-content:center; background: var(--dfm-card); color: var(--dfm-sub); }
 h2 .gt ha-icon { --mdc-icon-size: 18px; color: inherit; }
-.gridw { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.gridw > * { width: auto !important; }
+.gridw { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gridw > * { width: auto !important; min-width: 0; }
 h2 > ha-icon { --mdc-icon-size: 20px; color: var(--dfm-sub); }
 h2 .all, h3 .all { margin-left:auto; font-size: 13px; color: var(--dfm-acc); font-weight:500; }
 .gs { margin-left:auto; font-size: 13px; color: var(--dfm-sub); font-weight: 500; }
@@ -292,6 +292,9 @@ button.sw.on i { left: 21px; }
 .apt.att .api { color: var(--dfm-amber); }
 .apt b { font-size: 14px; }
 .apt small { color: var(--dfm-sub); font-size: 12px; line-height: 1.3; }
+/* 0.14.2: a long name never widens a tile: at most 2 lines, then … (also names without spaces). */
+.apt b, .apt small { max-width: 100%; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.rt b, .pt b, .cam b { min-width: 0; overflow-wrap: anywhere; }
 .apt.run small { color: #26a69a; }
 .apbig { margin: 6px auto 4px; width: 132px; height: 132px; border-radius: 28px; display:flex; align-items:center; justify-content:center; position: relative; background: color-mix(in srgb, var(--dfm-sub) 10%, transparent); --mdc-icon-size: 64px; color: var(--dfm-sub); overflow: hidden; }
 .apbig img { width: 100%; height: 100%; object-fit: contain; }

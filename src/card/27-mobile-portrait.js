@@ -483,13 +483,56 @@ Object.assign(DeviceFloorplanMobile.prototype, {
 
   /** 0.13.9.18 Appliances: what it is doing, in one line (running: word · time left; idle: when it last ran). */
   _applLine(x, st) {
-    const ap = x.ap;
-    if (st.active) return [st.word, st.time].filter(Boolean).join(" · ");
+    this._lr = this._lr || {};
+    const id = x.item.id;
+    if (st.active) {
+      this._lr[id] = { run: true };
+      return [st.word, st.time].filter(Boolean).join(" · ");
+    }
     if (st.phase === "idle") {
-      const src = [ap.running, ap.status, ap.plug, ap.power, x.item.main_entity].map((e) => e && this._hass.states[e]).find((q) => q && live(q));
-      return src ? dfT("mob.last_run", { t: this._ago(src.last_changed) }) : st.word;
+      const t = this._lastRun(x);
+      return t ? dfT("mob.last_run", { t: this._ago(new Date(t).toISOString()) }) : st.word;
     }
     return st.word;
+  },
+
+  /** 0.14.2: when the appliance last finished, from Home Assistant's history (survives restarts; the entities'
+   *  last_changed is reset by every restart). Asked once per appliance, then kept; seen stopping → now.
+   *  Nothing found (not recorded, no run in 7 days, only a power reading) → null: the tile just says Idle. */
+  _lastRun(x) {
+    const ap = x.ap;
+    const id = x.item.id;
+    const c = this._lr[id];
+    if (c && c.run) return (this._lr[id] = { t: Date.now() }).t; // it was running while we watched
+    if (c) return c.t || null;
+    const src = ap.running ? [ap.running, (v) => v === "on"]
+      : ap.status ? [ap.status, (v) => ["water", "spin", "heat", "run", "attention"].includes(applPhase(v))]
+      : ap.plug || x.item.main_entity ? [ap.plug || x.item.main_entity, (v) => ["on", "running", "printing", "heating", "cleaning", "brewing", "mowing", "drying", "washing"].includes(v)]
+      : null;
+    this._lr[id] = { t: null };
+    if (!src || !this._hass) return null;
+    const [eid, isOn] = src;
+    this._hass
+      .callWS({ type: "history/history_during_period", start_time: new Date(Date.now() - 7 * 86400000).toISOString(), entity_ids: [eid], minimal_response: true, no_attributes: true, significant_changes_only: false })
+      .then((r) => {
+        let on = false;
+        let t = null;
+        for (const h of (r && r[eid]) || []) {
+          const v = h.s ?? h.state;
+          const at = h.lu != null ? h.lu * 1000 : Date.parse(h.last_updated || h.last_changed);
+          if (v === "unavailable" || v === "unknown") continue; // a restart in between is not a stop
+          const now = isOn(v);
+          if (on && !now && Number.isFinite(at)) t = at;
+          on = now;
+        }
+        const cur = this._lr[id];
+        if (cur && !cur.run && cur.t == null && t) {
+          this._lr[id] = { t };
+          this._kick(true);
+        }
+      })
+      .catch(() => {});
+    return null;
   },
 
   _applPct(x, st) {

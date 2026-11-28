@@ -511,7 +511,15 @@ Object.assign(DeviceFloorplanCard.prototype, {
   _winPos(key) {
     if (this._winDrag && this._winDrag.key === key) return this._winDrag;
     const sp = this._specs && this._specs.get(key);
-    const w = sp && sp.item && this._dev(sp.item.id).win;
+    if (!sp || !sp.item) return null;
+    const id = sp.item.id;
+    if (!this._onWinMove) {
+      this._winLoad();
+      const st = this._winSt && this._winSt[id];
+      if (st === 0) return null;
+      if (st && Number.isFinite(st.x) && Number.isFinite(st.y)) return st;
+    }
+    const w = this._dev(id).win;
     return w && Number.isFinite(w.x) && Number.isFinite(w.y) ? w : null;
   },
 
@@ -581,25 +589,42 @@ Object.assign(DeviceFloorplanCard.prototype, {
     window.addEventListener("pointercancel", up);
   },
 
-  async _winSave(id, pos) {
-    if (this._onWinMove) return this._onWinMove(id, pos);
-    const raw = { ...(this._raw || {}) };
-    const devs = { ...(raw.devices || {}) };
-    const d = { ...(devs[id] || {}) };
-    if (pos) d.win = pos;
-    else delete d.win;
-    if (Object.keys(d).length) devs[id] = d;
-    else delete devs[id];
-    raw.devices = devs;
-    if (!Object.keys(devs).length) delete raw.devices;
-    this._penOrig = this._raw;
-    this.setConfig(raw); // it stays at once; saved to the dashboard below
-    this._update(true);
-    try {
-      await this._saveToDashboard(raw);
-    } catch (err) {
-      this._toast(err && err.message === "yaml" ? dfT("save.cam_yaml") : dfT("save.cam_failed"));
+  /** 0.14.2: a window moved on the dashboard is kept in Device Floorplan's own storage (per card), never in the
+   *  dashboard. In the Card Editor it goes into the card's settings, saved the Home Assistant way. */
+  _winSave(id, pos) {
+    if (this._onWinMove) {
+      this._winStore(id, undefined); // the editor's choice replaces one made on the dashboard
+      return this._onWinMove(id, pos);
     }
+    this._winStore(id, pos || 0); // 0 = back at its automatic spot
+    this._update(true);
+  },
+
+  /** Stored windows of this card: { device id: {x, y} | 0 }. */
+  _winLoad() {
+    if (this._winSt || this._winLoading || !this._hass) return;
+    this._winLoading = true;
+    this._hass
+      .callWS({ type: "device_floorplan/card_state/get" })
+      .then((r) => {
+        this._winSt = (r && r.card_state && r.card_state[`win_${this._lsKey()}`]) || {};
+        this._update(true);
+      })
+      .catch(() => {
+        this._winSt = {}; // older backend: the card's own settings only
+      });
+  },
+
+  _winStore(id, v) {
+    const cur = { ...(this._winSt || {}) };
+    if (v === undefined) {
+      if (!(id in cur)) return;
+      delete cur[id];
+    } else cur[id] = v;
+    this._winSt = cur;
+    this._hass
+      .callWS({ type: "device_floorplan/card_state/set", key: `win_${this._lsKey()}`, value: Object.keys(cur).length ? cur : null })
+      .catch(() => this._toast(dfT("save.cam_failed")));
   },
 
   /** 0.11: the device's camera entity, if it has one. */

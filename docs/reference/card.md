@@ -165,10 +165,7 @@ Open the dashboard's edit mode and edit the card. It has two parts:
 
 ### Edit markers
 
-The **Card Editor window** shows the card with all its settings beside it. Two ways in:
-
-- **✎ Edit markers** in the overlay button bar, while the dashboard is in edit mode (panel and masonry dashboards). Changes are saved to the dashboard right away.
-- **Edit card** in Home Assistant: the card's editor opens the same window. On *sections* dashboards Home Assistant doesn't let you click inside cards in edit mode, so this is the way in there. Press **Done**, then **Save** in the card editor.
+The **Card Editor window** shows the card with all its settings beside it. Open it from Home Assistant: **Edit dashboard** → **Edit** on the card → **Open the Card Editor**. Press **Done**, then **Save** in the card editor: Home Assistant saves the dashboard (the card itself never writes your dashboard).
 
 **Pick an overlay** with the buttons under the plan; the chips at the top of a marker's settings switch it too.
 

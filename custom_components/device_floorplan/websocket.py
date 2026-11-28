@@ -403,6 +403,26 @@ def ws_overlay_subscribe(hass: HomeAssistant, connection, msg) -> None:
     connection.send_result(msg["id"])
 
 
+def _clean_windows(value: dict | None) -> dict | None:
+    """Camera window spots: {device id: {"x": %, "y": %} or 0 (back at its automatic spot)}."""
+    if not value:
+        return None
+    out: dict[str, Any] = {}
+    for dev_id, pos in list(value.items())[:200]:
+        if not isinstance(dev_id, str) or len(dev_id) > 120:
+            continue
+        if pos == 0:
+            out[dev_id] = 0
+        elif isinstance(pos, dict):
+            try:
+                x, y = float(pos["x"]), float(pos["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if 0 <= x <= 100 and 0 <= y <= 100:
+                out[dev_id] = {"x": round(x, 1), "y": round(y, 1)}
+    return out or None
+
+
 # 0.11: card state shared by all screens (appliance done / unloaded).
 @websocket_api.websocket_command({vol.Required("type"): "device_floorplan/card_state/get"})
 @callback
@@ -423,10 +443,17 @@ def ws_card_state_get(hass: HomeAssistant, connection, msg: dict[str, Any]) -> N
 def ws_card_state_set(hass: HomeAssistant, connection, msg: dict[str, Any]) -> None:
     if (data := _data(hass, connection, msg)) is None:
         return
-    if not msg["key"].startswith("appl_"):
+    key, value = msg["key"], msg["value"]
+    if key.startswith("win_"):
+        # 0.14.2: camera windows moved on a dashboard (admins only); kept here, never in the dashboard config.
+        if not connection.user.is_admin:
+            connection.send_error(msg["id"], "unauthorized", "Admins only")
+            return
+        value = _clean_windows(value)
+    elif not key.startswith("appl_"):
         connection.send_error(msg["id"], "invalid_key", "Unknown card state")
         return
-    data.set_card_state(msg["key"], msg["value"])
+    data.set_card_state(key, value)
     connection.send_result(msg["id"], {"ok": True})
 
 

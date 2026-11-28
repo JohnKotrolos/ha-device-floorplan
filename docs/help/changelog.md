@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.2 · The dashboard is yours
+
+From the Home Assistant review for the HACS default list, plus two fixes on the mobile card.
+
+- **The card never writes your dashboard.** Only Home Assistant's own card editor saves dashboards now.
+  - **Camera windows** you drag on the dashboard are kept by Device Floorplan itself (per card). Positions saved before stay where they are.
+  - **The old "Edit markers" button** on the live card is gone. Edit markers the Home Assistant way: Edit dashboard → Edit on the card → Open the Card Editor → Save.
+  - **"New overlay: add it?"** is now asked in the Card Editor, and saved with the card.
+- **Mobile card · Appliances:** "Last run" comes from Home Assistant's history, so a restart no longer resets it. When there's nothing to go on, the tile says Idle.
+- **Mobile card · tiles:** a long name no longer widens a tile: it wraps to two lines at most, then "…".
+
 ## 0.14.1 · Security hardening
 
 A fix release from the Home Assistant review for the HACS default list. Nothing to change on your side.

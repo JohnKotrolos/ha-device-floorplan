@@ -872,6 +872,11 @@ Object.assign(DeviceFloorplanCardEditor.prototype, {
     };
     card._onOv = () => render(sel);
     card._onWinMove = (id, pos) => this._saveDev(id, { win: pos });
+    card._onNewOv = (raw) => {
+      const c = { ...this._config, overlays: raw.overlays };
+      if (raw.dismissed_overlays) c.dismissed_overlays = raw.dismissed_overlays;
+      this._set(c);
+    };
     card._pickHide = (id) => {
       if (!id) return;
       const ov = card._overlay;

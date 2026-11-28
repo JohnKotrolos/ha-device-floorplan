@@ -40,12 +40,6 @@ Object.assign(DeviceFloorplanCard.prototype, {
     return this._pick && s.item && this._selId === s.item.id ? `<span class="xb" data-xb="1" title="${dfT("edit.hide_here")}">✕</span>` : "";
   },
 
-  _penHtml() {
-    const m = this._penMode();
-    if (m === "pen") return `<button class="pen" data-pen="1" title="${dfT("edit.pen_title")}"><ha-icon icon="mdi:pencil"></ha-icon>${dfT("edit.markers")}</button>`;
-    return "";
-  },
-
   _onClick(e) {
     const t = e.target;
     // 0.11.1: the click that ends a camera window drag does nothing (wherever it lands after a redraw).
@@ -62,10 +56,6 @@ Object.assign(DeviceFloorplanCard.prototype, {
       const b = t.closest("[data-appldone],[data-iopen],[data-itg],[data-press],[data-mi]");
       if (b) this._toast(dfT("toast.preview_not_run", { b: b.textContent.trim().slice(0, 40) }));
       return;
-    }
-    if (t.closest("[data-pen]")) {
-      e.stopPropagation();
-      return this._openPen();
     }
     // 0.10: robot panel buttons, "Clean this room", tap on a room in Cleaning.
     const rc = t.closest("[data-rbcmd]");

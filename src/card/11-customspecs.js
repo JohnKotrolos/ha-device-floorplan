@@ -474,7 +474,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
     const chev = (d) => `<button class="chev ${d}" data-chev="${d === "s" ? -1 : 1}" aria-label="${d === "s" ? dfT("bar.scroll_back") : dfT("bar.more")}"><ha-icon icon="mdi:chevron-${vertical ? (d === "s" ? "up" : "down") : d === "s" ? "left" : "right"}"></ha-icon></button>`;
     const barBg = btn.bar === "contrast" ? (this._hass.themes && this._hass.themes.darkMode ? "light" : "dark") : btn.bar;
     const dockHtml = dockShown
-      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="${dfT("bar.overlays")}" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}${this._penMode() === "pen" ? this._penHtml() : ""}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
+      ? `<div class="dockrow ${rpRail ? "rpm" : ""} ${touch ? "share" : ""} ${btn.rail ? `rail-${barBg}` : ""}">${touch ? slot(atStart) : ""}<div class="ovbar ${barBg} ${rpRail ? "rpmode" : ""} sh-${btn.shape} sz-${btn.size} ${vertical ? "vert" : ""}" ${rpRail && this._railBox ? `style="${vertical ? `width:${this._railBox.w}px` : `height:${this._railBox.h}px`}"` : ""}>${rpRail ? this._rpRail(vertical) : `${chev("s")}<nav class="dock ${btn.style === "icons" ? "icons" : ""}" aria-label="${dfT("bar.overlays")}" ${vertical ? 'aria-orientation="vertical"' : ""}>${barHtml}</nav>${chev("e")}`}</div>${layersInBar ? `<span class="lslot lbar">${lg()}</span>` : ""}${touch ? slot(!atStart) : ""}</div>`
       : "";
     const title = c.title ? `<div class="hdr">${cesc(c.title)}</div>` : "";
     let emptyMsg = "";
@@ -495,7 +495,7 @@ Object.assign(DeviceFloorplanCard.prototype, {
           ${this._olRoomSvg(a)}${specs.map((s) => (s.type === "chip" ? this._chipHtml(s) : s.type === "robot" ? this._robotMarker(s) : this._markerHtml(s))).join("")}${this._ghosts.map((g) => `<div class="gdev" data-ghost="1" style="left:${g.x}%;top:${g.y}%" aria-label="${cesc(`${g.name} · ${g.floor}`)}"><ha-icon icon="${cesc(g.icon)}"></ha-icon></div>`).join("")}${people.plan}${emptyMsg}${lCorner ? "" : this._rpPill()}
         </div>${lCorner ? `<div class="lcorner ${cornerPos}">${this._rpPill()}${lg()}</div>` : ""}${notes ? `<div class="notes">${notes}</div>` : ""}</div></div>${people.row}
         ${this._belowHtml(ov, specs, dockShown, layersInBar)}
-      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${dockShown && this._penMode() === "pen" ? "" : this._penHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
+      </div>${dockHtml}${layersOn && this._menu ? this._layersMenu(a) : ""}${multi && !lgShown() ? `<div class="fcorner"><span class="fwrap">${this._floorHtml(floors)}</span></div>` : ""}${this._popupHtml()}${rpRail && vertical ? '<div class="rpbub" hidden></div>' : ""}</ha-card>`);
     if (rpRail && vertical) {
       this._rpBub();
       requestAnimationFrame(() => this._rpBub()); // again once the rail has its final height
