@@ -69,6 +69,29 @@ Object.assign(DeviceFloorplanMobile.prototype, {
     return this._rtf.format(-Math.floor(sec / d), u);
   },
 
+  /** 0.14.2: true when a time is just Home Assistant's last restart, not a real change: a restart stamps most
+   *  entities with the same moment. Found from the states themselves: the busiest minute, when it holds at
+   *  least a quarter of all entities. Worked out once a minute. */
+  _atBoot(ts) {
+    const t = Date.parse(ts);
+    if (!Number.isFinite(t) || !this._hass) return false;
+    const now = Date.now();
+    if (!this._boot || now - this._boot.at > 60000) {
+      const all = Object.values(this._hass.states).map((q) => Date.parse(q.last_changed)).filter(Number.isFinite).sort((a, b) => a - b);
+      let best = 0;
+      let from = 0;
+      for (let i = 0, j = 0; j < all.length; j++) {
+        while (all[j] - all[i] > 60000) i++;
+        if (j - i + 1 > best) {
+          best = j - i + 1;
+          from = all[i];
+        }
+      }
+      this._boot = { at: now, from: best >= 20 && best >= all.length / 4 ? from : null };
+    }
+    return this._boot.from != null && t >= this._boot.from && t <= this._boot.from + 60000;
+  },
+
   /** #67: the icon of a row: the device's own, the entity's own, else by what it is and its state (open / closed …). */
   _iconOf(x) {
     const own = ((this._base || {}).devices || {})[x.item.id];
@@ -147,7 +170,7 @@ Object.assign(DeviceFloorplanMobile.prototype, {
       if (p) return `${x.air.length ? this._airDot(x.airR) : ""}${cesc(p)}`;
     }
     const t = cesc(this._stateTxt(x));
-    const ago = x.st && !x.offline && DFM_AGO.has(x.lk) ? this._ago(x.st.last_changed) : "";
+    const ago = x.st && !x.offline && DFM_AGO.has(x.lk) && !this._atBoot(x.st.last_changed) ? this._ago(x.st.last_changed) : "";
     return ago ? `${t} · <span class="ago">${cesc(ago)}</span>` : t;
   },
 

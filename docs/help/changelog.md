@@ -9,6 +9,7 @@ From the Home Assistant review for the HACS default list, plus two fixes on the 
   - **The old "Edit markers" button** on the live card is gone. Edit markers the Home Assistant way: Edit dashboard → Edit on the card → Open the Card Editor → Save.
   - **"New overlay: add it?"** is now asked in the Card Editor, and saved with the card.
 - **Mobile card · Appliances:** "Last run" comes from Home Assistant's history, so a restart no longer resets it. When there's nothing to go on, the tile says Idle.
+- **Mobile card · rows:** after a Home Assistant restart, devices no longer all say "· 5 minutes ago": a time that is only the restart is left out, and real changes show their age as before.
 - **Mobile card · tiles:** a long name no longer widens a tile: it wraps to two lines at most, then "…".
 
 ## 0.14.1 · Security hardening
